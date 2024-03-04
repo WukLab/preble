@@ -6,7 +6,8 @@ import threading
 import urllib.request
 from io import BytesIO
 from json import dumps
-
+import aiohttp
+import asyncio
 import requests
 
 
@@ -87,6 +88,33 @@ class HttpResponse:
     def status_code(self):
         return self.resp.status
 
+class AsyncHttpResponse:
+    def __init__(self, resp):
+        self.resp = resp
+
+    async def json(self):
+        return await self.resp.json()
+
+    @property
+    def status_code(self):
+        return self.resp.status
+
+async def async_http_request(url, json=None, stream=False, auth_token=None):
+    """An asynchronous version of http_request using aiohttp."""
+    headers = {"Content-Type": "application/json"}
+    if auth_token is not None:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
+    async with aiohttp.ClientSession() as session:
+        if stream:
+            # For streaming, aiohttp supports async for with response.content.iter_any()
+            # However, handling streaming properly requires more context on how the streamed data will be used.
+            # This is a basic non-streaming implementation.
+            async with session.post(url, json=json, headers=headers) as resp:
+                return AsyncHttpResponse(resp)
+        else:
+            async with session.post(url, json=json, headers=headers) as resp:
+                return AsyncHttpResponse(resp)
 
 def http_request(url, json=None, stream=False, auth_token=None, verify=None):
     """A faster version of requests.post with low-level urllib API."""
@@ -109,6 +137,8 @@ def http_request(url, json=None, stream=False, auth_token=None, verify=None):
             data = bytes(dumps(json), encoding="utf-8")
         resp = urllib.request.urlopen(req, data=data, cafile=verify)
         return HttpResponse(resp)
+
+# Add Async http request
 
 
 def encode_image_base64(image_path):
