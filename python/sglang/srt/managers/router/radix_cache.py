@@ -49,8 +49,17 @@ class RadixCache:
         last_node = [self.root_node]
         self._match_prefix_helper(self.root_node, key, value, last_node)
         if value:
-            value = torch.concat(value)
+            if isinstance(value[0], torch.Tensor):
+                value = torch.concat(value)
+            else:
+                concatenated_value = []
+                for v in value:
+                    concatenated_value.extend(v)  # Assuming each element in value is a list itself
+                value = concatenated_value
         return value, last_node[0]
+
+    def match_prefix_return_str(self, key):
+        return "".join(self.match_prefix(key)[0])
 
     def insert(self, key, value=None):
         if self.disable:
@@ -206,13 +215,13 @@ if __name__ == "__main__":
     tree = RadixCache(disable=False)
 
     tree.insert("Hello")
-    tree.insert("Hello")
+    tree.insert("Hello There")
     tree.insert("Hello_L.A.!")
     # tree.insert("Hello_world! Happy")
     # tree.insert("I love you!")
     tree.pretty_print()
 
-    # print(tree.match_prefix("I love you! aha"))
+    print(tree.match_prefix_return_str("Hello T"))
 
     # def evict_callback(x):
     #    print("evict", x)
