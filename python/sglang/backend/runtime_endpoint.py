@@ -200,3 +200,6 @@ class RuntimeEndpoint(BaseBackend):
         if s.images_:
             assert len(s.images_) == 1, "Only support one image."
             data["image_data"] = s.images_[0][1]
+
+class AsyncRuntimeEndpoint(BaseBackend):
+    pass

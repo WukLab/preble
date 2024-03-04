@@ -385,9 +385,11 @@ async def v1_chat_completions(raw_request: Request):
     return response
 
 
-def launch_server(server_args, pipe_finish_writer):
+def launch_server(server_args: ServerArgs, pipe_finish_writer):
     global tokenizer_manager
     global chat_template_name
+    if server_args.cuda_devices:
+       os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in server_args.cuda_devices)
 
     # disable disk cache if needed
     if server_args.disable_disk_cache:
@@ -554,6 +556,7 @@ class Runtime:
         log_level: str = "error",
         port: Optional[int] = None,
         additional_ports: Optional[Union[List[int], int]] = None,
+        cuda_devices: Optional[List[int]] = None,
     ):
         host = "127.0.0.1"
         port, additional_ports = handle_port_init(port, additional_ports, tp_size)
@@ -574,6 +577,7 @@ class Runtime:
             schedule_heuristic=schedule_heuristic,
             random_seed=random_seed,
             log_level=log_level,
+            cuda_devices=cuda_devices,
         )
 
         self.url = self.server_args.url()
@@ -583,6 +587,7 @@ class Runtime:
 
         self.pid = None
         pipe_reader, pipe_writer = mp.Pipe(duplex=False)
+
         proc = mp.Process(target=launch_server, args=(self.server_args, pipe_writer))
         proc.start()
         pipe_writer.close()
@@ -646,6 +651,24 @@ class Runtime:
                         if cur:
                             yield cur
                         pos += len(cur)
+    
+    async def add_request_await(
+        self,
+        prompt: str,
+        sampling_params,
+    ) -> None:
+        json_data = {
+            "text": prompt,
+            "sampling_params": sampling_params,
+            "stream": True,
+        }
+
+        pos = 0
+
+        timeout = aiohttp.ClientTimeout(total=3 * 3600)
+        async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+            async with session.post(self.generate_url, json=json_data) as response:
+                data = await response.text()
 
     def __del__(self):
         self.shutdown()
