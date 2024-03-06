@@ -660,15 +660,12 @@ class Runtime:
         json_data = {
             "text": prompt,
             "sampling_params": sampling_params,
-            "stream": True,
+            "stream": False,
         }
-
-        pos = 0
-
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
         async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
             async with session.post(self.generate_url, json=json_data) as response:
-                data = await response.text()
+                return await response.json()
 
     def __del__(self):
         self.shutdown()
