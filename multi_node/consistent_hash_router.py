@@ -1,14 +1,14 @@
-import hashlib
-from sglang.srt.managers.router.radix_cache import RadixCache
-import bisect
-import random
 from uhashring import HashRing
+from sglang.srt.managers.router.radix_cache import RadixCache
+import random
+
 
 class SimpleHash:
     def __init__(self, num_nodes=2):
         self.num_nodes = num_nodes
         self.hash_ring = HashRing(nodes=list(range(num_nodes)))
         self.node_allocations = {node: [] for node in range(num_nodes)}
+
     def _hash(self, key):
         return hash(key)
 
@@ -16,6 +16,7 @@ class SimpleHash:
         node = self.hash_ring.get_node(key)
         self.node_allocations[node].append(key)
         return node
+
 
 class ConsistentHashingWithRadixCache:
     def __init__(self, num_nodes=2):

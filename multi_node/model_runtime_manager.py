@@ -1,0 +1,139 @@
+import requests
+from data_parallel_request_cache import (
+    DataParallelRuntimeSelectionPolicy,
+    ConsistentHashingWithRadixCache,
+)
+from data_parallel_request_cache import DataParallelRequestRouter
+import aiohttp
+import uuid
+from dataclasses import dataclass
+from sglang.srt.server import Runtime as SGLangServer
+from typing import List
+
+@dataclass
+class EndpointRuntimeInterface:
+    def __post_init__(self):
+        self.runtime_id = str(uuid.uuid4())
+        assert self.url is not None
+        self._generate_url = f"{self.url}/generate"
+
+    @property
+    def generate_url(self):
+        return self._generate_url
+
+    @generate_url.setter
+    def generate_url(self, url):
+        self._generate_url = url
+
+    
+    @property
+    def flush_cache_url(self):
+        return f"{self.url}/flush_cache"
+
+    def shutdown(self):
+        pass
+
+class URLRuntime(EndpointRuntimeInterface):
+    def __init__(self, url, gpu):
+        super().__init__()
+        self.url = url
+        self.gpu = gpu
+
+class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
+    def __init__(self, gpu, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.gpu = gpu
+
+
+def random_uuid_string():
+    return str(uuid.uuid4())
+
+
+class ModelDetails:
+    """
+    Supports Data Parallel Model Allocation
+    """
+
+    def __init__(
+        self, model_path, gpus, runtime_selection_policy=DataParallelRuntimeSelectionPolicy.RANDOM
+    ) -> None:
+        self.model_path = model_path
+        self.weights = []
+        self.runtimes: List[EndpointRuntimeInterface] = []
+        self.request_router: DataParallelRequestRouter = DataParallelRequestRouter(
+            runtime_selection_policy, total_nodes=len(gpus)
+        )
+        self.consistent_radix_hash = ConsistentHashingWithRadixCache(
+            num_nodes=len(gpus)
+        )
+        self.gpus = set(gpus)
+
+    # TODO Load runtimes in parallel to reduce cold start time
+        # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
+    def load_runtimes(self, model_path, gpus, urls=[]):
+        def load_runtime(index, gpu):
+            runtime: EndpointRuntimeInterface
+            if len(urls) > 0:
+                runtime = EndpointRuntimeInterface(
+                    url=urls[index], 
+                    gpu=gpu
+                )
+            else:
+                runtime = ExtendedSGLangRuntime(
+                    model_path=model_path,
+                    cuda_devices=[gpu],
+                    context_length=1024,
+                    mem_fraction_static=0.8,
+                    gpu=gpu,
+                )
+            self.runtimes.append(runtime)
+            self.gpus.add(gpu)
+
+        # parallelizae loading for each gpu
+        for index, gpu in enumerate(gpus):
+            load_runtime(index, gpu)
+
+    def select_runtime_with_identifiers(self, text, sampling_params) -> EndpointRuntimeInterface:
+        experiment_id = sampling_params.get("experiment_id", random_uuid_string())
+        request_id = sampling_params.get("request_id", random_uuid_string())
+        runtime_id = self.request_router.select_runtime(text, experiment_id, request_id)
+        return self.runtimes[runtime_id]
+
+    def generate_request(self, text, sampling_params):
+        runtime: EndpointRuntimeInterface = (
+            self.select_runtime_with_identifiers(text, sampling_params)
+        )
+        return requests.post(
+            runtime.generate_url,
+            json={
+                "text": text,
+                "sampling_params": sampling_params,
+            },
+            timeout=60,
+        )
+
+    async def async_generate_request(self, text, sampling_params):
+        runtime: EndpointRuntimeInterface = (
+            self.select_runtime_with_identifiers(text, sampling_params)
+        )
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                runtime.generate_url,
+                json={
+                    "text": text,
+                    "sampling_params": sampling_params,
+                },
+                timeout=60,
+            ) as response:
+                return await response.json()
+
+    async def add_request(self, text, sampling_params):
+        # async request
+        return await self.select_runtime(text).add_request_await(text, sampling_params)
+
+    def update_runtime_selection_policy(self, runtime_selection_policy):
+        self.request_router.update_runtime_selection_policy(runtime_selection_policy)
+
+    def clear_kv_cache(self):
+        for runtime in self.runtimes:
+            requests.get(runtime.flush_cache_url)

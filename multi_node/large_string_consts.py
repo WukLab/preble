@@ -1,4 +1,5 @@
 import random
+
 Workload = """Solve a question answering task with interleaving Thought, Action, Observation steps. Thought can reason about the current situation, and Action can be three types: 
 (1) Search[entity], which searches the exact entity on Wikipedia and returns the first paragraph if it exists. If not, it will return some similar entities to search.
 (2) Lookup[keyword], which returns the next sentence containing keyword in the current passage.
@@ -135,16 +136,19 @@ Thought 3: Leonid Levin is a mathematician and computer scientist. So Pavel Urys
 Action 3: Finish[yes]
 """
 
+
 def get_workload1():
     # Return workload 1 with a randoms string at the end
-    random_string = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=100))
+    random_string = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=100))
     return Workload + random_string
+
 
 def get_workload2():
     # Return workload 1 with a randoms string at the end
-    random_string = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=100))
+    random_string = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=100))
     return Workload + random_string
 
+
 def get_workload(i):
-    random_string = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=100))
+    random_string = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=100))
     return f"Workload {i} " + Workload + random_string
