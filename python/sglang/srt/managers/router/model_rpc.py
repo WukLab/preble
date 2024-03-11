@@ -371,12 +371,14 @@ class ModelRpcServer(rpyc.Service):
                 f"#remaining_req: {len(self.forward_queue) - len(can_run_list)}. "
                 f"#running_req: {running_req}. "
                 f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%."
+                f"hit_tokens: {hit_tokens}."
             )
             logger.debug(
                 f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
                 f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
                 f"ff_cache_hit_rate: {100.0 * self.jump_forward_cache.get_cache_hit_rate():.2f}%. "
                 f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
+                f"hit_tokens: {hit_tokens}."
             )
 
         new_batch = Batch.init_new(

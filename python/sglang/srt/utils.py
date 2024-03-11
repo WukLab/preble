@@ -12,9 +12,10 @@ import numpy as np
 import requests
 import torch
 import torch.distributed as dist
-
+import logging
 is_show_cost_time = False
 
+log = logging.getLogger(__name__)
 
 def mark_cost_time(func_name):
     def inner_func(func):
@@ -123,7 +124,7 @@ def handle_port_init(
     # first check on server port
     if not check_port(port):
         new_port = alloc_usable_network_port(1, used_list=[port])[0]
-        print(f"WARNING: Port {port} is not available. Use {new_port} instead.")
+        log.info(f"WARNING: Port {port} is not available. Use {new_port} instead.")
         port = new_port
 
     # then we check on additional ports
