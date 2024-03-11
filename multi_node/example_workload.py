@@ -2,7 +2,7 @@
 import os
 import time
 import asyncio
-from large_string_consts import get_workload
+from sglang.multi_node.tests.benchmark_workload_gen import get_workload
 import os
 import concurrent.futures
 import time
