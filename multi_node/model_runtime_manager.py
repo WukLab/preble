@@ -9,6 +9,11 @@ import uuid
 from dataclasses import dataclass
 from sglang.srt.server import Runtime as SGLangServer
 from typing import List
+from concurrent.futures import ThreadPoolExecutor
+import json
+import asyncio
+import numpy as np
+import time
 
 @dataclass
 class EndpointRuntimeInterface:
@@ -94,8 +99,8 @@ class ModelDetails:
             load_runtime(index, gpu)
 
     def select_runtime_with_identifiers(self, text, sampling_params) -> EndpointRuntimeInterface:
-        experiment_id = sampling_params.get("experiment_id", random_uuid_string())
-        request_id = sampling_params.get("request_id", random_uuid_string())
+        experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
+        request_id = sampling_params.pop("request_id", random_uuid_string())
         runtime_id = self.request_router.select_runtime(text, experiment_id, request_id)
         return self.runtimes[runtime_id]
 
@@ -103,37 +108,86 @@ class ModelDetails:
         runtime: EndpointRuntimeInterface = (
             self.select_runtime_with_identifiers(text, sampling_params)
         )
-        return requests.post(
+        start_time = time.time()
+        output =  requests.post(
             runtime.generate_url,
             json={
                 "text": text,
                 "sampling_params": sampling_params,
             },
-            timeout=60,
-        )
+            timeout=60 * 10,
+        ).json()
+        output["request_latency"] = time.time() - start_time
+        return output
 
-    async def async_generate_request(self, text, sampling_params):
-        runtime: EndpointRuntimeInterface = (
-            self.select_runtime_with_identifiers(text, sampling_params)
-        )
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                runtime.generate_url,
-                json={
-                    "text": text,
-                    "sampling_params": sampling_params,
-                },
-                timeout=60,
-            ) as response:
-                return await response.json()
+    def generate_batch_request(self, batch_kwargs, sampling_params, num_threads):
+        with ThreadPoolExecutor(num_threads) as executor:
+            futures = []
+            for arguments in batch_kwargs:
+                futures.append(
+                    executor.submit(
+                        self.generate_request, arguments, sampling_params
+                    )
+                )
+            rets = [f.result() for f in futures]
+            return rets
 
-    async def add_request(self, text, sampling_params):
-        # async request
-        return await self.select_runtime(text).add_request_await(text, sampling_params)
-
-    def update_runtime_selection_policy(self, runtime_selection_policy):
+    def update_runtime_selection_policy(self, runtime_selection_policy, custom_runtime_selector=None):
         self.request_router.update_runtime_selection_policy(runtime_selection_policy)
+        self.request_router.custom_selector = custom_runtime_selector
 
     def clear_kv_cache(self):
         for runtime in self.runtimes:
             requests.get(runtime.flush_cache_url)
+
+    async def async_generate_batch_request_per_sec(
+        self,
+        requests: List[str],
+        sampling_params,
+        request_rate: float,
+    ) -> None:
+        async def get_request(
+            input_requests,
+            request_rate: float,
+        ):
+            input_requests = iter(input_requests)
+            for request in input_requests:
+                yield request
+                if request_rate == float("inf"):
+                    continue
+                interval = np.random.exponential(1.0 / request_rate)
+                await asyncio.sleep(interval)
+
+        tasks: List[asyncio.Task] = []
+        async for request in get_request(requests, request_rate):
+            task = asyncio.create_task(self.async_send_request(request, sampling_params))
+            tasks.append(task)
+        await asyncio.gather(*tasks)
+
+    async def async_send_request(
+        self, text, sampling_params
+    ) -> None:
+        runtime: EndpointRuntimeInterface = (
+            self.select_runtime_with_identifiers(text, sampling_params)
+        )
+        timeout = aiohttp.ClientTimeout(total=3 * 3600)
+        start_time = time.time()
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            while True:
+                async with session.post(runtime.generate_url,
+                    json={
+                        "text": text,
+                        "sampling_params": sampling_params,
+                    },) as response:
+                    chunks = []
+                    async for chunk, _ in response.content.iter_chunks():
+                        chunks.append(chunk)
+                output = b"".join(chunks).decode("utf-8")
+                output = json.loads(output)
+
+                # Re-send the request if it failed.
+                if "error" not in output:
+                    break
+        output["request_latency"] = time.time() - start_time
+        return output
+
