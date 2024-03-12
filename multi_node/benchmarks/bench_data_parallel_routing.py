@@ -2,11 +2,12 @@ import warnings
 
 import sys
 import os
+import pandas as pd
 
 # Add the parent directory of the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from gpu_stats_profiling import Monitor
-
+import json
 import unittest
 import time
 import numpy as np
@@ -68,21 +69,23 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
     num_prefixed_shared = int(num_requests * (1 - distribution_of_non_shared))
     num_non_shared = int(num_requests * distribution_of_non_shared)
     prompts = []
-    for _ in range(num_prefixed_shared):
-        workload_num = random.randint(1, num_workloads)
-        prompts.append(get_react_workload(f"Workload {workload_num}"))
+    for i in range(num_prefixed_shared):
+        workload_num = i % num_workloads
+        prompts.append(get_react_workload(f"Workload {workload_num} "))
     random_workload = generate_random_workload()
-
+    print(len(prompts))
     for _ in range(num_non_shared):
         prompts.append(random.choice(random_workload))
     random.shuffle(prompts)
-
+    # Save prompts to json dict
+    
     class Oracle(CustomRuntimeSelector):
         def runtime_selector(self, text: str):
             num_nodes = self.num_nodes
             for i in range(num_workloads):
-                if text.startswith(f"Workload {i}"):
+                if text.startswith(f"Workload {i} "):
                     return i % num_nodes
+                
             return random.randint(0, num_nodes - 1)
 
     loader = MultiNodeLoader(available_cuda_nodes=[0, 1])
@@ -92,6 +95,9 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
 
     def load_and_run_benchmark(policy):
         random.seed(10)
+        logging.debug(
+            f"=====STARTING Policy {policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS====="
+        )
 
         model_details = loader.load_model(
             model_name, gpus=[0, 1], urls=[]
@@ -109,7 +115,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
             {
                 "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
                 "temperature": 0,
-                "max_new_tokens": 16
+                "max_new_tokens": 1
             },
             256,
         )
@@ -128,6 +134,10 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {policy}) Overall Request Latency: {average_request_latency}, STD: {std_request_latency}, P90: {average_p90}"
         )
 
+        df = pd.DataFrame(model_details.request_router.model_selection_stats)
+        df.drop("text", axis=1, inplace=True)
+        counts = df['selected_runtime'].value_counts().to_dict()
+        print(policy, counts)
 
         loader.unload_model(model_details)
         torch.cuda.empty_cache() 
@@ -138,26 +148,24 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="experiment_larger_model_13b.log")
+    logging.basicConfig(level=logging.DEBUG, filename="example.log")
+    logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
     start_date = datetime.datetime.utcnow()
     start_time = time.time()
     logging.debug(f"Starting Experiment at {start_date}")
-    model_name = "lmsys/vicuna-13b-v1.5"
+    model_name = "mistralai/Mistral-7B-v0.1"
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
-        # [2, 0, 1024],
-        # [200, 0, 1024],
-        # [2, 0.2, 1024],
-        [10, 0.2, 1024],
-        [100, 0.2, 1024],
-        [200, 0.2, 1024],
-        [2, 0.8, 1024],
-        [10, 0.8, 1024],
-        [100, 0.8, 1024],
-        [200, 0.8, 1024],
+        [200, 0.2, 4096],
+        # [10, 0.2, 1024],
+        # [100, 0.2, 1024],
+        # [200, 0.2, 1024],
+        # [200, 0.8, 1024]
     ]
-    for config in configurations_to_test + configurations_to_test:
+    for config in configurations_to_test:
         test_oracle_random_basic(*config, model_name=model_name)
     logging.debug(f"Total Experiment Time: {time.time() - start_time}")
+
+# 100 random workloads -> 4096 * 0.8 = 3276 shared workloads. 4096 * 0.2 = 812 random workloads 
