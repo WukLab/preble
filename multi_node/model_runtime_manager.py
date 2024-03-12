@@ -119,7 +119,7 @@ class ModelDetails:
         ).json()
         output["request_latency"] = time.time() - start_time
         return output
-
+    
     def generate_batch_request(self, batch_kwargs, sampling_params, num_threads):
         with ThreadPoolExecutor(num_threads) as executor:
             futures = []
@@ -145,7 +145,7 @@ class ModelDetails:
         requests: List[str],
         sampling_params,
         request_rate: float,
-    ) -> None:
+    ):
         async def get_request(
             input_requests,
             request_rate: float,
@@ -162,11 +162,12 @@ class ModelDetails:
         async for request in get_request(requests, request_rate):
             task = asyncio.create_task(self.async_send_request(request, sampling_params))
             tasks.append(task)
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
+        return results
 
     async def async_send_request(
         self, text, sampling_params
-    ) -> None:
+    ): 
         runtime: EndpointRuntimeInterface = (
             self.select_runtime_with_identifiers(text, sampling_params)
         )

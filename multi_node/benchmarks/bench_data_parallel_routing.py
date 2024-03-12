@@ -65,7 +65,7 @@ class BenchBasicOracleVSRandom(unittest.TestCase):
         pass
 
 
-def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requests, model_name="mistralai/Mistral-7B-v0.1"):
+def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requests, rps=0.0, model_name="mistralai/Mistral-7B-v0.1"):
     num_prefixed_shared = int(num_requests * (1 - distribution_of_non_shared))
     num_non_shared = int(num_requests * distribution_of_non_shared)
     prompts = []
@@ -100,7 +100,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         )
 
         model_details = loader.load_model(
-            model_name, gpus=[0, 1], urls=[]
+            model_name, gpus=[0], urls=[]
         )
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
             model_details.update_runtime_selection_policy(
@@ -110,15 +110,26 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         else:
             model_details.update_runtime_selection_policy(policy)
         tic_benchmark = time.time()
-        results = model_details.generate_batch_request(
-            prompts,
-            {
-                "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
-                "temperature": 0,
-                "max_new_tokens": 1
-            },
-            256,
-        )
+        if rps > 0.0:
+            results = model_details.generate_batch_request(
+                prompts,
+                {
+                    "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
+                    "temperature": 0,
+                    "max_new_tokens": 1
+                },
+                256,
+            )
+        else:
+            results = asyncio.run(model_details.async_generate_batch_request_per_sec(
+                prompts,
+                {
+                    "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
+                    "temperature": 0,
+                    "max_new_tokens": 1
+                },
+                rps,
+            ))
         latency = time.time() - tic_benchmark
         # Each result as a request_latency as a dict. Compute avg, p90 statistics
         request_latencies = [result["request_latency"] for result in results]
@@ -158,10 +169,10 @@ if __name__ == "__main__":
     model_name = "mistralai/Mistral-7B-v0.1"
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
-        [200, 0.2, 4096],
-        # [10, 0.2, 1024],
+        # [200, 0.2, 4096],
+        # [10, 0.2, 1024, 5],
         # [100, 0.2, 1024],
-        # [200, 0.2, 1024],
+        [200, 0.2, 4096, 5],
         # [200, 0.8, 1024]
     ]
     for config in configurations_to_test:
