@@ -83,7 +83,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         def runtime_selector(self, text: str):
             num_nodes = self.num_nodes
             for i in range(num_workloads):
-                if text.startswith(f"Workload {i}"):
+                if text.startswith(f"Workload {i} "):
                     return i % num_nodes
                 
             return random.randint(0, num_nodes - 1)
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     model_name = "mistralai/Mistral-7B-v0.1"
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
-        [10, 0.2, 2048],
+        [200, 0.2, 4096],
         # [10, 0.2, 1024],
         # [100, 0.2, 1024],
         # [200, 0.2, 1024],
@@ -167,3 +167,5 @@ if __name__ == "__main__":
     for config in configurations_to_test:
         test_oracle_random_basic(*config, model_name=model_name)
     logging.debug(f"Total Experiment Time: {time.time() - start_time}")
+
+# 100 random workloads -> 4096 * 0.8 = 3276 shared workloads. 4096 * 0.2 = 812 random workloads 
