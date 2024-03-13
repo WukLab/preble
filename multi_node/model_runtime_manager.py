@@ -159,14 +159,16 @@ class ModelDetails:
                 await asyncio.sleep(interval)
 
         tasks: List[asyncio.Task] = []
+        id = 0
         async for request in get_request(requests, request_rate):
-            task = asyncio.create_task(self.async_send_request(request, sampling_params))
+            task = asyncio.create_task(self.async_send_request(id, request, sampling_params))
             tasks.append(task)
+            id += 1
         results = await asyncio.gather(*tasks)
         return results
 
     async def async_send_request(
-        self, text, sampling_params
+        self, id, text, sampling_params
     ): 
         runtime: EndpointRuntimeInterface = (
             self.select_runtime_with_identifiers(text, sampling_params)
@@ -190,5 +192,6 @@ class ModelDetails:
                 if "error" not in output:
                     break
         output["request_latency"] = time.time() - start_time
+        # print(f"{id} finishes")
         return output
 
