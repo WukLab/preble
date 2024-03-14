@@ -3,7 +3,6 @@ from consistent_hash_router import ConsistentHashingWithRadixCache
 import random
 from enum import Enum, auto
 from typing import List, Optional
-from collections import Callable
 from dataclasses import dataclass
 random.seed(10)
 

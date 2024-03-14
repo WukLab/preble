@@ -53,8 +53,11 @@ from sglang.srt.managers.router.manager import start_router_process
 from sglang.srt.managers.tokenizer_manager import TokenizerManager
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import handle_port_init
+import logging
+import datetime
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+logger = logging.getLogger('server')
 
 
 app = FastAPI()
@@ -127,7 +130,7 @@ async def make_openai_style_logprobs(token_logprobs):
 @app.post("/generate")
 async def generate_request(obj: GenerateReqInput):
     obj.post_init()
-
+    # logger.debug(f"{datetime.datetime.utcnow()} {obj.text[:20]} ...")
     if obj.stream:
 
         async def stream_results():
