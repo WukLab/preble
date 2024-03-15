@@ -167,10 +167,12 @@ class ModelRpcServer(rpyc.Service):
         Note: Handle as a seperate async request to avoid blocking the existing function
         """
         prefix_indices, last_node = self.tree_cache.match_prefix(recv_req.input_ids)
+        running_queue_len=0 if self.running_batch is None else len(self.running_batch.reqs)
         out = SchedulingMetricsOut(
             rid=recv_req.rid,
             input_len=len(recv_req.input_ids),
             waiting_queue_len=len(self.forward_queue),
+            running_req_len=running_queue_len,
             prefix_match_len= len(prefix_indices),
             token_kv_available_size=self.token_to_kv_pool.available_size(),
             evicatable_size=self.tree_cache.evictable_size(),

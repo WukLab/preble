@@ -155,6 +155,7 @@ async def scheduling_metrics(raw_request: Request):
     The output format is:
     out_dict = {
         "waiting_queue_len": int,
+        "running_req_len": int,
         "prefix_match_len": int,
         "token_kv_available_size": int,
         "evicatable_size": int,
@@ -177,7 +178,6 @@ async def scheduling_metrics(raw_request: Request):
             "message": "Prompt not found in request"
         }
     ret = await tokenizer_manager.get_scheduling_metrics(text)
-    print("Got result")
     return ret
 
 

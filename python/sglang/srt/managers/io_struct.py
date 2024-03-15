@@ -87,6 +87,7 @@ class SchedulingMetricsReqInput:
 class SchedulingMetricsOut:
     rid: str
     waiting_queue_len: int
+    running_req_len: int
     prefix_match_len: int
     token_kv_available_size: int
     evicatable_size: int

@@ -293,6 +293,7 @@ class TokenizerManager:
             elif isinstance(recv_obj, SchedulingMetricsOut):
                 out_dict = {
                     "waiting_queue_len": recv_obj.waiting_queue_len,
+                    "running_req_len": recv_obj.running_req_len,
                     "prefix_match_len": recv_obj.prefix_match_len,
                     "token_kv_available_size": recv_obj.token_kv_available_size,
                     "evicatable_size": recv_obj.evicatable_size,
