@@ -18,8 +18,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-srt = ["aiohttp", "fastapi", "psutil", "rpyc", "torch", "uvloop", "uvicorn",
-       "zmq", "vllm>=0.2.5", "interegular", "lark", "numba",
+srt = ["pandas","aiohttp", "fastapi", "psutil", "rpyc", "torch", "uvloop", "uvicorn",
+       "zmq", "vllm==0.3.3", "interegular", "lark", "numba",
        "pydantic", "referencing", "diskcache", "cloudpickle", "pillow", "outlines>=0.0.27"]
 openai = ["openai>=1.0", "numpy"]
 anthropic = ["anthropic", "numpy"]
