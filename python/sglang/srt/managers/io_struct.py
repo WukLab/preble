@@ -78,6 +78,21 @@ class TokenizedGenerateReqInput:
     logprob_start_len: int
     stream: bool
 
+@dataclass
+class SchedulingMetricsReqInput:
+    rid: str
+    input_ids: List[int]
+
+@dataclass
+class SchedulingMetricsOut:
+    rid: str
+    waiting_queue_len: int
+    prefix_match_len: int
+    token_kv_available_size: int
+    evicatable_size: int
+    tree_cache_metrics_hit: int
+    tree_cache_metrics_total: int
+    input_len: int
 
 @dataclass
 class BatchTokenIDOut:
