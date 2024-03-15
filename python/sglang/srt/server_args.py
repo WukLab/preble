@@ -29,6 +29,7 @@ class ServerArgs:
     disable_regex_jump_forward: bool = False
     disable_disk_cache: bool = False
     cuda_devices: Optional[List[int]] = None
+    metrics_buffer_size: int = 5
 
     def __post_init__(self):
         if self.tokenizer_path is None:

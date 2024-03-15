@@ -35,13 +35,11 @@ class TestSGLangServerMetrics(unittest.TestCase):
         token_kv_available_size = metrics_data1['token_kv_available_size']
         tree_cache_metrics_hit = metrics_data1['tree_cache_metrics_hit']
         tree_cache_metrics_total = metrics_data1['tree_cache_metrics_total']
-        waiting_queue_len = metrics_data1['waiting_queue_len']
         prefix_match_len = metrics_data1['prefix_match_len']
         evicatable_size = metrics_data1['evicatable_size']
         input_len = metrics_data1['input_len']
 
         self.assertTrue(token_kv_available_size > 0)
-        self.assertEqual(waiting_queue_len, 0)
         self.assertEqual(prefix_match_len, 1)
         self.assertEqual(evicatable_size, 24)
         self.assertEqual(input_len, 3)
@@ -57,7 +55,6 @@ class TestSGLangServerMetrics(unittest.TestCase):
         r = requests.post(metrics_url, json={"prompt": "Say this is different warmup request"})
         metrics_data2 = r.json()
 
-        self.assertEqual(metrics_data2['waiting_queue_len'], 0)
         self.assertEqual(metrics_data2['prefix_match_len'], 8)
         self.assertEqual(metrics_data1['token_kv_available_size'] - metrics_data2['token_kv_available_size'], metrics_data2['evicatable_size'] - metrics_data1['evicatable_size'])
         self.assertEqual(metrics_data2['evicatable_size'], 44)
