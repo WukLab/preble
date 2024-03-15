@@ -18,6 +18,8 @@ from sglang.srt.managers.io_struct import (
     BatchTokenIDOut,
     FlushCacheReq,
     TokenizedGenerateReqInput,
+    SchedulingMetricsReqInput, 
+    SchedulingMetricsOut
 )
 from sglang.srt.managers.router.infer_batch import Batch, ForwardMode, Req
 from sglang.srt.managers.router.model_runner import ModelRunner
@@ -157,6 +159,26 @@ class ModelRpcServer(rpyc.Service):
                 f"#queue-req: {len(self.forward_queue)}, "
                 f"#running-req: {0 if self.running_batch is None else len(self.running_batch.reqs)}"
             )
+
+    def exposed_scheduler_metrics_request(self, recv_req: SchedulingMetricsReqInput):
+        """
+        Performs a prefix match on the data and collect metrics that could be useful for a global load balancer.
+
+        Note: Handle as a seperate async request to avoid blocking the existing function
+        """
+        prefix_indices, last_node = self.tree_cache.match_prefix(recv_req.input_ids)
+        out = SchedulingMetricsOut(
+            rid=recv_req.rid,
+            input_len=len(recv_req.input_ids),
+            waiting_queue_len=len(self.forward_queue),
+            prefix_match_len= len(prefix_indices),
+            token_kv_available_size=self.token_to_kv_pool.available_size(),
+            evicatable_size=self.tree_cache.evictable_size(),
+            tree_cache_metrics_hit=self.tree_cache_metrics["hit"],
+            tree_cache_metrics_total=self.tree_cache_metrics["total"],
+        )
+        return out
+
 
     def exposed_step(self, recv_reqs):
         if self.tp_size != 1:
@@ -621,6 +643,9 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap(self.model_server.exposed_step)
+            self.scheduler_metrics_request = async_wrap(
+                self.model_server.exposed_scheduler_metrics_request
+            )
         else:
             with ThreadPoolExecutor(tp_size) as executor:
                 # Launch model processes
@@ -646,7 +671,9 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap("step")
-
+            self.scheduler_metrics_request = async_wrap(
+                self.model_server.exposed_scheduler_metrics_request
+            ) # TODO test metric collection in TP mode
 
 def _init_service(port):
     t = ThreadedServer(
