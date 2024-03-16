@@ -18,6 +18,8 @@ from sglang.srt.managers.io_struct import (
     BatchTokenIDOut,
     FlushCacheReq,
     TokenizedGenerateReqInput,
+    SchedulingMetricsReqInput, 
+    SchedulingMetricsOut
 )
 from sglang.srt.managers.router.infer_batch import Batch, ForwardMode, Req
 from sglang.srt.managers.router.model_runner import ModelRunner
@@ -32,6 +34,7 @@ from sglang.srt.utils import (
     set_random_seed,
 )
 from vllm.logger import _default_handler as vllm_default_handler
+from collections import deque
 
 logger = logging.getLogger("model_rpc")
 
@@ -121,6 +124,12 @@ class ModelRpcServer(rpyc.Service):
         # Init running status
         self.forward_queue: List[Req] = []
         self.running_batch: Batch = None
+
+        # Store the length and running batch sizes in a buffer since they variance is noisy
+        self.forward_queue_len_buffer = deque(maxlen=server_args.metrics_buffer_size)
+        self.running_batch_len_buffer = deque(maxlen=server_args.metrics_buffer_size)
+
+
         self.out_pyobjs = []
         self.decode_forward_ct = 0
         self.stream_interval = server_args.stream_interval
@@ -157,6 +166,29 @@ class ModelRpcServer(rpyc.Service):
                 f"#queue-req: {len(self.forward_queue)}, "
                 f"#running-req: {0 if self.running_batch is None else len(self.running_batch.reqs)}"
             )
+
+    def exposed_scheduler_metrics_request(self, recv_req: SchedulingMetricsReqInput):
+        """
+        Performs a prefix match on the data and collect metrics that could be useful for a global load balancer.
+
+        Note: Handle as a seperate async request to avoid blocking the existing function
+        """
+        prefix_indices, last_node = self.tree_cache.match_prefix(recv_req.input_ids)
+        average_waiting_queue_len = sum(self.forward_queue_len_buffer) / len(self.forward_queue_len_buffer) if len(self.forward_queue_len_buffer) > 0 else 0
+        average_running_batch_len = sum(self.running_batch_len_buffer) / len(self.running_batch_len_buffer) if len(self.running_batch_len_buffer) > 0 else 0     
+        out = SchedulingMetricsOut(
+            rid=recv_req.rid,
+            input_len=len(recv_req.input_ids),
+            waiting_queue_len=average_waiting_queue_len,
+            running_req_len=average_running_batch_len,
+            prefix_match_len= len(prefix_indices),
+            token_kv_available_size=self.token_to_kv_pool.available_size(),
+            evicatable_size=self.tree_cache.evictable_size(),
+            tree_cache_metrics_hit=self.tree_cache_metrics["hit"],
+            tree_cache_metrics_total=self.tree_cache_metrics["total"],
+        )
+        return out
+
 
     def exposed_step(self, recv_reqs):
         if self.tp_size != 1:
@@ -380,6 +412,8 @@ class ModelRpcServer(rpyc.Service):
                 f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
                 f"hit_tokens: {hit_tokens}."
             )
+            self.forward_queue_len_buffer.append(len(self.forward_queue))
+            self.running_batch_len_buffer.append(running_req)
 
         new_batch = Batch.init_new(
             can_run_list,
@@ -621,6 +655,9 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap(self.model_server.exposed_step)
+            self.scheduler_metrics_request = async_wrap(
+                self.model_server.exposed_scheduler_metrics_request
+            )
         else:
             with ThreadPoolExecutor(tp_size) as executor:
                 # Launch model processes
@@ -646,7 +683,9 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap("step")
-
+            self.scheduler_metrics_request = async_wrap(
+                self.model_server.exposed_scheduler_metrics_request
+            ) # TODO test metric collection in TP mode
 
 def _init_service(port):
     t = ThreadedServer(

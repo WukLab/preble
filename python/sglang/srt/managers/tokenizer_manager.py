@@ -22,11 +22,15 @@ from sglang.srt.managers.io_struct import (
     FlushCacheReq,
     GenerateReqInput,
     TokenizedGenerateReqInput,
+    SchedulingMetricsReqInput,
+    SchedulingMetricsOut
 )
 from sglang.srt.mm_utils import expand2square, process_anyres_image
 from sglang.srt.sampling_params import SamplingParams
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback, is_multimodal_model, load_image
+import uuid
+from typing import Dict
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -117,7 +121,7 @@ class TokenizerManager:
             )
 
         self.to_create_loop = True
-        self.rid_to_state = {}  # Dict[str -> ReqState]
+        self.rid_to_state: Dict[str, ReqState] = {}  # Dict[str -> ReqState]
 
     async def get_pixel_values(self, image_data):
         aspect_ratio = getattr(self.hf_config, "image_aspect_ratio", None)
@@ -137,6 +141,29 @@ class TokenizerManager:
             return get_pixel_values(
                 image_data, aspect_ratio, grid_pinpoints, self.processor
             )
+
+    async def get_scheduling_metrics(self, text: str):
+        """
+        Assume the input isn't tokenized and sends the request to the router to get the individual request metrics
+        """
+        input_ids = self.tokenizer.encode(text)
+        rid = str(uuid.uuid4())
+        scheduling_metric_request = SchedulingMetricsReqInput(
+            rid=rid,
+            input_ids=input_ids,
+        )
+        rid = scheduling_metric_request.rid
+        self.send_to_router.send_pyobj(scheduling_metric_request)
+
+        lock = asyncio.Lock()
+        event = asyncio.Event()
+        state = ReqState([], False, event, lock)
+        self.rid_to_state[rid] = state
+        await event.wait()
+        result = state.out_list[-1]
+        del self.rid_to_state[rid]
+        event.clear()
+        return result
 
     async def generate_request(self, obj: GenerateReqInput):
         if self.to_create_loop:
@@ -263,5 +290,20 @@ class TokenizerManager:
                     state.out_list.append(out_dict)
                     state.finished = recv_obj.finished[i]
                     state.event.set()
+            elif isinstance(recv_obj, SchedulingMetricsOut):
+                out_dict = {
+                    "waiting_queue_len": recv_obj.waiting_queue_len,
+                    "running_req_len": recv_obj.running_req_len,
+                    "prefix_match_len": recv_obj.prefix_match_len,
+                    "token_kv_available_size": recv_obj.token_kv_available_size,
+                    "evicatable_size": recv_obj.evicatable_size,
+                    "tree_cache_metrics_hit": recv_obj.tree_cache_metrics_hit,
+                    "tree_cache_metrics_total": recv_obj.tree_cache_metrics_total,
+                    "input_len": recv_obj.input_len,
+                }
+                state = self.rid_to_state[recv_obj.rid]
+                state.out_list.append(out_dict)
+                state.finished = True
+                state.event.set()
             else:
                 raise ValueError(f"Invalid object: {recv_obj}")

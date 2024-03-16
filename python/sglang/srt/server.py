@@ -148,6 +148,38 @@ async def generate_request(obj: GenerateReqInput):
 
     return ret
 
+@app.post("/scheduling_metrics")
+async def scheduling_metrics(raw_request: Request):
+    """
+    Returns metrics that could be used by a global data parallel scheduler.
+    The output format is:
+    out_dict = {
+        "waiting_queue_len": int,
+        "running_req_len": int,
+        "prefix_match_len": int,
+        "token_kv_available_size": int,
+        "evicatable_size": int,
+        "tree_cache_metrics_hit": int,
+        "tree_cache_metrics_total": int,
+        "input_len": int
+    }
+    """
+    request_json = await raw_request.json()
+    request = request_json
+    if not tokenizer_manager:
+        return {
+            "status": "error",
+            "message": "Tokenizer manager not initialized"
+        }
+    text = request.get("prompt", None)
+    if text is None:
+        return {
+            "status": "error",
+            "message": "Prompt not found in request"
+        }
+    ret = await tokenizer_manager.get_scheduling_metrics(text)
+    return ret
+
 
 @app.post("/v1/completions")
 async def v1_completions(raw_request: Request):

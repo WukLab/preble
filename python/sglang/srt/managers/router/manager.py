@@ -8,6 +8,7 @@ from sglang.srt.backend_config import GLOBAL_BACKEND_CONFIG
 from sglang.srt.managers.router.model_rpc import ModelRpcClient
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
+from sglang.srt.managers.io_struct import SchedulingMetricsReqInput
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -47,10 +48,27 @@ class RouterManager:
                     await asyncio.sleep(self.extend_dependency_time)
 
             await asyncio.sleep(0.0006)
+    
+    async def scheduler_metrics_request(self, recv_req: SchedulingMetricsReqInput):
+        """
+        Pipes the scheduler request model client to get the metrics back to detokenizer flow.
 
-    async def loop_for_recv_requests(self):
+        Detokenizer used in order to follow structure of existing code.
+        """
+        out = await self.model_client.scheduler_metrics_request(recv_req)
+        self.send_to_detokenizer.send_pyobj(out)
+
+    async def loop_for_recv_requests(self, loop):
+        """
+        Recieves from tokenizer and forwards to model. 
+
+        In the case that it's a scheduling metric request, it will be handled asynchronously
+        """
         while True:
             recv_req = await self.recv_from_tokenizer.recv_pyobj()
+            if isinstance(recv_req, SchedulingMetricsReqInput):
+                loop.create_task(self.scheduler_metrics_request(recv_req))
+                continue
             self.recv_reqs.append(recv_req)
 
 
@@ -75,5 +93,6 @@ def start_router_process(
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.create_task(router.loop_for_recv_requests())
+    loop.create_task(router.loop_for_recv_requests(loop))
+
     loop.run_until_complete(router.loop_for_forward())

@@ -15,3 +15,8 @@ pip install -e "python[all]"
 
 Currently the benchmarking results are all stored in onedrive.
 - Add the log file, jupyter notebook for plotting, figure as a seperate marked folder
+
+Run Server
+```
+python -m sglang.launch_server --model-path meta-llama/Llama-2-7b-chat-hf --port 30000
+```

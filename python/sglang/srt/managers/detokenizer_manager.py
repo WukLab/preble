@@ -4,7 +4,7 @@ import uvloop
 import zmq
 import zmq.asyncio
 from sglang.srt.hf_transformers_utils import get_tokenizer
-from sglang.srt.managers.io_struct import BatchStrOut, BatchTokenIDOut
+from sglang.srt.managers.io_struct import BatchStrOut, BatchTokenIDOut, SchedulingMetricsOut
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
 
@@ -72,6 +72,8 @@ class DetokenizerManager:
                         recv_obj.finished,
                     )
                 )
+            elif isinstance(recv_obj, SchedulingMetricsOut):
+                self.send_to_tokenizer.send_pyobj(recv_obj)
             else:
                 raise ValueError(f"Invalid object: {recv_obj}")
 
