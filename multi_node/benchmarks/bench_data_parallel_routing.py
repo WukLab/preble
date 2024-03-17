@@ -159,7 +159,6 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, filename="dump.log")
-    logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
     start_date = datetime.datetime.utcnow()

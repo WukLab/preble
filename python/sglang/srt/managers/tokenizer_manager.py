@@ -300,6 +300,7 @@ class TokenizerManager:
                     "tree_cache_metrics_hit": recv_obj.tree_cache_metrics_hit,
                     "tree_cache_metrics_total": recv_obj.tree_cache_metrics_total,
                     "input_len": recv_obj.input_len,
+                    "matching_overhead": recv_obj.matching_overhead,
                 }
                 state = self.rid_to_state[recv_obj.rid]
                 state.out_list.append(out_dict)
