@@ -141,6 +141,7 @@ class ModelDetails:
 
     async def async_generate_batch_request_per_sec(
         self,
+        exp_start: float,
         requests: List[str],
         sampling_params,
         request_rate: float,
@@ -160,20 +161,23 @@ class ModelDetails:
         tasks: List[asyncio.Task] = []
         id = 0
         async for request in get_request(requests, request_rate):
-            task = asyncio.create_task(self.async_send_request(id, request, sampling_params))
+            task = asyncio.create_task(self.async_send_request(exp_start, id, request, sampling_params))
             tasks.append(task)
             id += 1
         results = await asyncio.gather(*tasks)
         return results
 
     async def async_send_request(
-        self, id, text, sampling_params
+        self, exp_start, id, text, sampling_params
     ): 
-        runtime: EndpointRuntimeInterface = (
-            self.select_runtime_with_identifiers(text, sampling_params)
+        start_time = time.time()
+        # runtime: EndpointRuntimeInterface = (
+        #     self.select_runtime_with_identifiers(text, sampling_params)
+        # )
+        runtime = await asyncio.to_thread(
+            self.select_runtime_with_identifiers, text, sampling_params
         )
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
-        start_time = time.time()
         async with aiohttp.ClientSession(timeout=timeout) as session:
             while True:
                 async with session.post(runtime.generate_url,
@@ -191,6 +195,7 @@ class ModelDetails:
                 if "error" not in output:
                     break
         output["request_latency"] = time.time() - start_time
+        output["task_created_at"] = start_time - exp_start
         # print(f"{id} finishes")
         return output
 

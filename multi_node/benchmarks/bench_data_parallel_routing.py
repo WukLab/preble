@@ -134,6 +134,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         tic_benchmark = time.time()
         if rps > 0.0:
             results = asyncio.run(model_details.async_generate_batch_request_per_sec(
+                tic_benchmark,
                 prompts,
                 {
                     "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
@@ -157,6 +158,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         request_latencies = [result["request_latency"] for result in results]
         average_request_latency, std_request_latency, average_p90 = np.mean(request_latencies), np.std(request_latencies), np.percentile(request_latencies, 90)
         max_latency, p99_latency = np.max(request_latencies), np.percentile(request_latencies, 99)
+        task_start_time = [result["task_created_at"] for result in results]
         logging.debug(
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Latency: {latency}"
         )
@@ -169,6 +171,9 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         logging.debug(
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Max Latency: {max_latency}, P99: {p99_latency}"
         )
+        logging.info(f"Last task created at: {task_start_time[-1]}s")
+        # with open('start_time.npy', 'wb') as f:
+        #     np.save(f, np.array(task_start_time))
         if custom_policy == CustomPolicyType.LPM:
             with open(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}_{rps}.json", "w") as f:
                 json.dump(lpm.metrics_dict, f)
@@ -215,6 +220,7 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
         tic_benchmark = time.time()
         if rps > 0.0:
             results = asyncio.run(model_details.async_generate_batch_request_per_sec(
+                tic_benchmark,
                 prompts,
                 {
                     "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
@@ -237,6 +243,7 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
         # Each result as a request_latency as a dict. Compute avg, p90 statistics
         request_latencies = [result["request_latency"] for result in results]
         average_request_latency, std_request_latency, average_p90 = np.mean(request_latencies), np.std(request_latencies), np.percentile(request_latencies, 90)
+        task_start_time = [result["task_created_at"] for result in results]
         
         logging.debug(
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}) Overall Latency: {latency}"
@@ -247,6 +254,7 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
         logging.debug(
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}) Overall Request Latency: {average_request_latency}, STD: {std_request_latency}, P90: {average_p90}"
         )
+        logging.info(f"Last task created at: {task_start_time[-1]}s")
         # save lpm to json
         with open(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}_{rps}.json", "w") as f:
             json.dump(lpm_scheduler.metrics_dict, f)
@@ -268,7 +276,7 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
     
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="perf_debug_metrics_server_log_5.log")
+    logging.basicConfig(level=logging.DEBUG, filename="perf_debug_metrics_server_log_4.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -285,7 +293,7 @@ if __name__ == "__main__":
         # [200, 0.2, 4096, 0],
         # [300, 0.2, 8192, 0],
         # [200, 0.2, 4096, 0],
-        [200, 0.2, 8192, 200],
+        [200, 0.2, 4096, 50],
         # [200, 0.2, 4096, 100],
 
         # [300, 0.2, 8192, 0],

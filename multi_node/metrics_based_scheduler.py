@@ -24,6 +24,8 @@ class MetricData:
     tokenization_time: float
     return_time: float
     request_processing_time: float
+    routing_time: float
+    inner_router_time: float
 
     @staticmethod
     def from_dict(input_dict):
@@ -41,7 +43,9 @@ class MetricData:
             queue_processing_time=input_dict["queue_processing_time"],
             tokenization_time=input_dict["tokenization_time"],
             return_time=input_dict["return_time"],
-            request_processing_time=input_dict["request_processing_time"]
+            request_processing_time=input_dict["request_processing_time"],
+            routing_time=input_dict["routing_time"],
+            inner_router_time=input_dict["inner_router_time"]
         )
 
 @dataclass

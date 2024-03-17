@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
 # Load JSON data
-file_name = 'test_basic_metrics_server_DataParallelRuntimeSelectionPolicy.CUSTOM_200_0.2_8192_200.json'
+file_name = '/mnt/ssd1/alm-os/sglang_multi_model/test_basic_metrics_server_DataParallelRuntimeSelectionPolicy.CUSTOM_200_0.2_8192_200.json'
 with open(file_name, 'r') as file:
     data = json.load(file)
 

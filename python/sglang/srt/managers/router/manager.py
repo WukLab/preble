@@ -9,6 +9,7 @@ from sglang.srt.managers.router.model_rpc import ModelRpcClient
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
 from sglang.srt.managers.io_struct import SchedulingMetricsReqInput
+import time
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -58,7 +59,10 @@ class RouterManager:
 
         Detokenizer used in order to follow structure of existing code.
         """
+        start = time.time()
         out = await self.model_client.scheduler_metrics_request(recv_req)
+        inner_time = time.time() - start
+        out.inner_router_time = inner_time
         self.send_to_tokenizer.send_pyobj(out)
 
     async def loop_for_recv_requests(self, loop):

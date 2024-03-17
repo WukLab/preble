@@ -189,7 +189,8 @@ class ModelRpcServer(rpyc.Service):
             tree_cache_metrics_hit=self.tree_cache_metrics["hit"],
             tree_cache_metrics_total=self.tree_cache_metrics["total"],
             total_radix_cache_processing_time=time.time() - start_time,
-            queue_processing_time=time.time()
+            queue_processing_time=time.time(),
+            inner_router_time=0,
         )
         return out
 

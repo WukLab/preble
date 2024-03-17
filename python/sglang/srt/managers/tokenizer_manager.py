@@ -150,7 +150,7 @@ class TokenizerManager:
         """
         start_time = time.time()
         input_ids = self.tokenizer.encode(text)
-        tokenization_time = time.time() - start_time
+        tokenization_time = time.time() 
 
         rid = str(uuid.uuid4())
         scheduling_metric_request = SchedulingMetricsReqInput(
@@ -160,6 +160,8 @@ class TokenizerManager:
         rid = scheduling_metric_request.rid
 
         self.send_to_router.send_pyobj(scheduling_metric_request)
+        routing_time = time.time()
+        
         lock = asyncio.Lock()
         event = asyncio.Event()
         state = ReqState([], False, event, lock)
@@ -169,7 +171,8 @@ class TokenizerManager:
         del self.rid_to_state[rid]
         event.clear()
 
-        result["tokenization_time"] = tokenization_time
+        result["tokenization_time"] = tokenization_time - start_time
+        result["routing_time"] = routing_time - tokenization_time
         result["return_time"] = time.time()
         return result
 
@@ -310,6 +313,7 @@ class TokenizerManager:
                     "input_len": recv_obj.input_len,
                     "total_radix_cache_processing_time": recv_obj.total_radix_cache_processing_time,
                     "queue_processing_time": time.time() - recv_obj.queue_processing_time,
+                    "inner_router_time": recv_obj.inner_router_time,
                 }
                 state = self.rid_to_state[recv_obj.rid]
                 state.out_list.append(out_dict)
