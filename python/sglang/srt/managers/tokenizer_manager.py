@@ -314,6 +314,7 @@ class TokenizerManager:
                     "total_radix_cache_processing_time": recv_obj.total_radix_cache_processing_time,
                     "queue_processing_time": time.time() - recv_obj.queue_processing_time,
                     "inner_router_time": recv_obj.inner_router_time,
+                    "matching_overhead": recv_obj.matching_overhead,
                 }
                 state = self.rid_to_state[recv_obj.rid]
                 state.out_list.append(out_dict)

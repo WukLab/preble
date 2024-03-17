@@ -8,7 +8,7 @@ import aiohttp
 import uuid
 from dataclasses import dataclass
 from sglang.srt.server import Runtime as SGLangServer
-from typing import List
+from typing import List, Iterable
 from concurrent.futures import ThreadPoolExecutor
 import json
 import asyncio
@@ -141,10 +141,9 @@ class ModelDetails:
 
     async def async_generate_batch_request_per_sec(
         self,
-        exp_start: float,
-        requests: List[str],
-        sampling_params,
+        requests: Iterable,
         request_rate: float,
+        routine,
     ):
         async def get_request(
             input_requests,
@@ -159,16 +158,14 @@ class ModelDetails:
                 await asyncio.sleep(interval)
 
         tasks: List[asyncio.Task] = []
-        id = 0
         async for request in get_request(requests, request_rate):
-            task = asyncio.create_task(self.async_send_request(exp_start, id, request, sampling_params))
+            task = asyncio.create_task(routine(*request))
             tasks.append(task)
-            id += 1
         results = await asyncio.gather(*tasks)
         return results
 
     async def async_send_request(
-        self, exp_start, id, text, sampling_params
+        self, text, sampling_params
     ): 
         start_time = time.time()
         # runtime: EndpointRuntimeInterface = (
@@ -195,7 +192,6 @@ class ModelDetails:
                 if "error" not in output:
                     break
         output["request_latency"] = time.time() - start_time
-        output["task_created_at"] = start_time - exp_start
         # print(f"{id} finishes")
         return output
 

@@ -97,6 +97,7 @@ class SchedulingMetricsOut:
     total_radix_cache_processing_time: float
     queue_processing_time: float
     inner_router_time: float
+    matching_overhead: float
 
 @dataclass
 class BatchTokenIDOut:
