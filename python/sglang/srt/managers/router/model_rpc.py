@@ -173,11 +173,12 @@ class ModelRpcServer(rpyc.Service):
 
         Note: Handle as a seperate async request to avoid blocking the existing function
         """
-        start = time.time()
+        start_time = time.time()
         prefix_indices, last_node = self.tree_cache.match_prefix(recv_req.input_ids)
-        match_overhead = time.time() - start
+        match_overhead = time.time() - start_time
         average_waiting_queue_len = sum(self.forward_queue_len_buffer) / len(self.forward_queue_len_buffer) if len(self.forward_queue_len_buffer) > 0 else 0
         average_running_batch_len = sum(self.running_batch_len_buffer) / len(self.running_batch_len_buffer) if len(self.running_batch_len_buffer) > 0 else 0     
+
         out = SchedulingMetricsOut(
             rid=recv_req.rid,
             input_len=len(recv_req.input_ids),
@@ -188,6 +189,9 @@ class ModelRpcServer(rpyc.Service):
             evicatable_size=self.tree_cache.evictable_size(),
             tree_cache_metrics_hit=self.tree_cache_metrics["hit"],
             tree_cache_metrics_total=self.tree_cache_metrics["total"],
+            total_radix_cache_processing_time=time.time() - start_time,
+            queue_processing_time=time.time(),
+            inner_router_time=0,
             matching_overhead=match_overhead * 1000,
         )
         return out

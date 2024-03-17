@@ -94,6 +94,9 @@ class SchedulingMetricsOut:
     tree_cache_metrics_hit: int
     tree_cache_metrics_total: int
     input_len: int
+    total_radix_cache_processing_time: float
+    queue_processing_time: float
+    inner_router_time: float
     matching_overhead: float
 
 @dataclass
