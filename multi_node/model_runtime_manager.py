@@ -30,7 +30,6 @@ class EndpointRuntimeInterface:
     def generate_url(self, url):
         self._generate_url = url
 
-    
     @property
     def flush_cache_url(self):
         return f"{self.url}/flush_cache"

@@ -164,6 +164,7 @@ async def scheduling_metrics(raw_request: Request):
         "input_len": int
     }
     """
+    start_time = time.time()
     request_json = await raw_request.json()
     request = request_json
     if not tokenizer_manager:
@@ -177,7 +178,11 @@ async def scheduling_metrics(raw_request: Request):
             "status": "error",
             "message": "Prompt not found in request"
         }
+    request_processing_time = time.time() - start_time
     ret = await tokenizer_manager.get_scheduling_metrics(text)
+    ret["request_processing_time"] = request_processing_time
+    ret["return_time"] = time.time() - ret["return_time"]
+    ret["total_internal_request_time"] = time.time() - start_time
     return ret
 
 

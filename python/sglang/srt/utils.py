@@ -115,6 +115,7 @@ def handle_port_init(
     port: Optional[int] = None,
     additional_ports: Optional[List[int]] = None,
     tp_size: int = 1,
+    num_metrics_port: int = 2,
 ):
     port = 30000 if port is None else port
     additional_ports = [] if additional_ports is None else additional_ports
@@ -126,20 +127,19 @@ def handle_port_init(
         new_port = alloc_usable_network_port(1, used_list=[port])[0]
         log.info(f"WARNING: Port {port} is not available. Use {new_port} instead.")
         port = new_port
-
     # then we check on additional ports
     additional_unique_ports = set(additional_ports) - {port}
     # filter out ports that are already in use
     can_use_ports = [port for port in additional_unique_ports if check_port(port)]
 
     num_specified_ports = len(can_use_ports)
-    if num_specified_ports < 4 + tp_size:
+    if num_specified_ports < 4 + tp_size + num_metrics_port:
         addtional_can_use_ports = alloc_usable_network_port(
-            num=4 + tp_size - num_specified_ports, used_list=can_use_ports + [port]
+            num=4 + tp_size - num_specified_ports + num_metrics_port, used_list=can_use_ports + [port]
         )
         can_use_ports.extend(addtional_can_use_ports)
 
-    additional_ports = can_use_ports[: 4 + tp_size]
+    additional_ports = can_use_ports[: 4 + tp_size + num_metrics_port]
     return port, additional_ports
 
 

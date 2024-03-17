@@ -31,6 +31,7 @@ from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback, is_multimodal_model, load_image
 import uuid
 from typing import Dict
+import time
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -98,6 +99,7 @@ class TokenizerManager:
             self.model_path, trust_remote_code=server_args.trust_remote_code
         )
 
+        # Create a two way zmq pair
         self.context_len = get_context_length(self.hf_config)
 
         if is_multimodal_model(self.model_path):
@@ -146,15 +148,18 @@ class TokenizerManager:
         """
         Assume the input isn't tokenized and sends the request to the router to get the individual request metrics
         """
+        start_time = time.time()
         input_ids = self.tokenizer.encode(text)
+        tokenization_time = time.time() - start_time
+
         rid = str(uuid.uuid4())
         scheduling_metric_request = SchedulingMetricsReqInput(
             rid=rid,
             input_ids=input_ids,
         )
         rid = scheduling_metric_request.rid
-        self.send_to_router.send_pyobj(scheduling_metric_request)
 
+        self.send_to_router.send_pyobj(scheduling_metric_request)
         lock = asyncio.Lock()
         event = asyncio.Event()
         state = ReqState([], False, event, lock)
@@ -163,6 +168,9 @@ class TokenizerManager:
         result = state.out_list[-1]
         del self.rid_to_state[rid]
         event.clear()
+
+        result["tokenization_time"] = tokenization_time
+        result["return_time"] = time.time()
         return result
 
     async def generate_request(self, obj: GenerateReqInput):
@@ -300,6 +308,8 @@ class TokenizerManager:
                     "tree_cache_metrics_hit": recv_obj.tree_cache_metrics_hit,
                     "tree_cache_metrics_total": recv_obj.tree_cache_metrics_total,
                     "input_len": recv_obj.input_len,
+                    "total_radix_cache_processing_time": recv_obj.total_radix_cache_processing_time,
+                    "queue_processing_time": time.time() - recv_obj.queue_processing_time,
                 }
                 state = self.rid_to_state[recv_obj.rid]
                 state.out_list.append(out_dict)

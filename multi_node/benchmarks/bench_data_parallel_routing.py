@@ -23,13 +23,14 @@ from benchmark_workload_gen import get_react_workload, generate_random_workload
 import random
 random.seed(10)
 import datetime
-
+from dataclasses import dataclass
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 from multi_node_loader import MultiNodeLoader
 import logging
 import asyncio
 import torch
+from enum import Enum, auto
 import gc
 
 custom_download_dir = "/mnt/ssd1/cache/"
@@ -78,39 +79,58 @@ def gen_workload(num_workloads, distribution_of_non_shared, num_requests):
     random.shuffle(prompts)
     return prompts
 
+class CustomPolicyType(Enum):
+    ORACLE = auto()
+    LPM = auto()
+
+
+
+@dataclass
+class Oracle(CustomRuntimeSelector):
+    num_workloads: int
+
+    def runtime_selector(self, text: str):
+        num_nodes = self.num_nodes
+        for i in range(self.num_workloads):
+            if text.startswith(f"Workload {i} "):
+                return i % num_nodes
+            
+        return random.randint(0, num_nodes - 1)
+
 def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requests, rps=0.0, model_name="mistralai/Mistral-7B-v0.1"):
     prompts = gen_workload(num_workloads, distribution_of_non_shared, num_requests)
-    
-    class Oracle(CustomRuntimeSelector):
-        def runtime_selector(self, text: str):
-            num_nodes = self.num_nodes
-            for i in range(num_workloads):
-                if text.startswith(f"Workload {i} "):
-                    return i % num_nodes
-                
-            return random.randint(0, num_nodes - 1)
+
 
     loader = MultiNodeLoader(available_cuda_nodes=available_gpus)
     logging.debug(
         f"=====STARTING BENCHMARK OF {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
     )
 
-    def load_and_run_benchmark(policy):
+    def load_and_run_benchmark(policy, custom_policy=None):
         random.seed(10)
         logging.debug(
-            f"=====STARTING Policy {policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
+            f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
         )
 
         model_details = loader.load_model(
             model_name, gpus=available_gpus, urls=[]
         )
+        lpm = LongestPrefixMatchSelector(num_nodes=len(available_gpus), runtimes=model_details.runtimes)
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
-            model_details.update_runtime_selection_policy(
-                DataParallelRuntimeSelectionPolicy.CUSTOM,
-                custom_runtime_selector=Oracle(num_nodes=len(available_gpus)),
-            )
+            if custom_policy == CustomPolicyType.ORACLE:
+                oracle = Oracle(num_nodes=len(available_gpus), num_workloads=num_workloads)
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=oracle,
+                )
+            elif custom_policy == CustomPolicyType.LPM:
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=lpm,
+                )
         else:
             model_details.update_runtime_selection_policy(policy)
+
         tic_benchmark = time.time()
         if rps > 0.0:
             results = asyncio.run(model_details.async_generate_batch_request_per_sec(
@@ -136,29 +156,36 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         # Each result as a request_latency as a dict. Compute avg, p90 statistics
         request_latencies = [result["request_latency"] for result in results]
         average_request_latency, std_request_latency, average_p90 = np.mean(request_latencies), np.std(request_latencies), np.percentile(request_latencies, 90)
-        
+        max_latency, p99_latency = np.max(request_latencies), np.percentile(request_latencies, 99)
         logging.debug(
-            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}) Overall Latency: {latency}"
+            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Latency: {latency}"
         )
         logging.debug(
-            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}) Overall Throughput: {num_requests / latency}"
+            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Throughput: {num_requests / latency}"
         )
         logging.debug(
-            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}) Overall Request Latency: {average_request_latency}, STD: {std_request_latency}, P90: {average_p90}"
+            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Request Latency: {average_request_latency}, STD: {std_request_latency}, P90: {average_p90}"
         )
+        logging.debug(
+            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Max Latency: {max_latency}, P99: {p99_latency}"
+        )
+        if custom_policy == CustomPolicyType.LPM:
+            with open(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}_{rps}.json", "w") as f:
+                json.dump(lpm.metrics_dict, f)
 
         df = pd.DataFrame(model_details.request_router.model_selection_stats)
         df.drop("text", axis=1, inplace=True)
         counts = df['selected_runtime'].value_counts().to_dict()
-        print(policy, counts)
+        logging.debug(f"{policy}-{custom_policy}, {counts}")
 
         loader.unload_model(model_details)
         torch.cuda.empty_cache() 
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM)
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM)
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LPM)
 
 def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_requests, rps=0.0, model_name="mistralai/Mistral-7B-v0.1"):
     prompts = gen_workload(num_workloads, distribution_of_non_shared, num_requests)
@@ -221,12 +248,12 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}) Overall Request Latency: {average_request_latency}, STD: {std_request_latency}, P90: {average_p90}"
         )
         # save lpm to json
-        with open(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}.json", "w") as f:
+        with open(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}_{rps}.json", "w") as f:
             json.dump(lpm_scheduler.metrics_dict, f)
 
         df = pd.DataFrame(model_details.request_router.model_selection_stats)
         # Save df to csv
-        df.to_csv(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}.csv")
+        # df.to_csv(f"test_basic_metrics_server_{policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}.csv")
         df.drop("text", axis=1, inplace=True)
         counts = df['selected_runtime'].value_counts().to_dict()
         print(policy, counts)
@@ -241,7 +268,7 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
     
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="test_basic_metrics_server.log")
+    logging.basicConfig(level=logging.DEBUG, filename="perf_debug_metrics_server_log_5.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -255,12 +282,13 @@ if __name__ == "__main__":
         # [200, 0.2, 4096],
         # [10, 0.2, 1024, 5],
         # [100, 0.2, 1024],
-        # [200, 0.2, 4096, 5],
-        [200, 0.2, 4096, 0],
-        # [200, 0.2, 4096, 20],
-        # [200, 0.2, 4096, 30],
-        
-        # [200, 0.2, 8192, 50],
+        # [200, 0.2, 4096, 0],
+        # [300, 0.2, 8192, 0],
+        # [200, 0.2, 4096, 0],
+        [200, 0.2, 8192, 200],
+        # [200, 0.2, 4096, 100],
+
+        # [300, 0.2, 8192, 0],
         # [200, 0.2, 8192, 100],
         # [200, 0.2, 8192, 150],
         # [200, 0.2, 8192, 200],
@@ -269,7 +297,6 @@ if __name__ == "__main__":
         # [300, 0.2, 8192, 100],
         # [300, 0.2, 8192, 150],
         # [300, 0.2, 8192, 200],
-        
         # [150, 0.2, 2048, 100],
         # [150, 0.2, 2048, 200],
         # [150, 0.2, 2048, 300],
@@ -279,7 +306,7 @@ if __name__ == "__main__":
     ]
     available_gpus = [0, 1]
     for config in configurations_to_test:
-        test_metrics_server_policy(*config, model_name=model_name)
+        test_oracle_random_basic(*config, model_name=model_name)
     logging.debug(f"Total Experiment Time: {time.time() - start_time}")
 
 # 100 random workloads -> 4096 * 0.8 = 3276 shared workloads. 4096 * 0.2 = 812 random workloads 

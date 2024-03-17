@@ -25,6 +25,9 @@ class RouterManager:
             f"tcp://127.0.0.1:{port_args.detokenizer_port}"
         )
 
+        self.send_to_tokenizer = context.socket(zmq.PUSH)
+        self.send_to_tokenizer.connect(f"tcp://127.0.0.1:{port_args.tokenizer_port}")
+
         # Init status
         self.model_client = model_client
         self.recv_reqs = []
@@ -56,7 +59,7 @@ class RouterManager:
         Detokenizer used in order to follow structure of existing code.
         """
         out = await self.model_client.scheduler_metrics_request(recv_req)
-        self.send_to_detokenizer.send_pyobj(out)
+        self.send_to_tokenizer.send_pyobj(out)
 
     async def loop_for_recv_requests(self, loop):
         """
