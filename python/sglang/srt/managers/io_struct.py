@@ -94,6 +94,7 @@ class SchedulingMetricsOut:
     tree_cache_metrics_hit: int
     tree_cache_metrics_total: int
     input_len: int
+    matching_overhead: float
 
 @dataclass
 class BatchTokenIDOut:

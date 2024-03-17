@@ -78,6 +78,11 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         prompts.append(random.choice(random_workload))
     random.shuffle(prompts)
     # Save prompts to json dict
+    sampling_params = {
+        "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
+        "temperature": 0,
+        "max_new_tokens": 1
+    }
     
     class Oracle(CustomRuntimeSelector):
         def runtime_selector(self, text: str):
@@ -111,23 +116,16 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
             model_details.update_runtime_selection_policy(policy)
         tic_benchmark = time.time()
         if rps > 0.0:
+            requests = [(prompt, sampling_params) for prompt in prompts]
             results = asyncio.run(model_details.async_generate_batch_request_per_sec(
-                prompts,
-                {
-                    "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
-                    "temperature": 0,
-                    "max_new_tokens": 1
-                },
+                requests,
                 rps,
+                model_details.async_send_request,
             ))
         else:
             results = model_details.generate_batch_request(
                 prompts,
-                {
-                    "experiment_id": f"random_experiment_{num_workloads}_{distribution_of_non_shared}_{num_requests}",
-                    "temperature": 0,
-                    "max_new_tokens": 1
-                },
+                sampling_params,
                 256,
             )
         latency = time.time() - tic_benchmark
@@ -148,7 +146,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         df = pd.DataFrame(model_details.request_router.model_selection_stats)
         df.drop("text", axis=1, inplace=True)
         counts = df['selected_runtime'].value_counts().to_dict()
-        print(policy, counts)
+        logging.info(policy, counts)
 
         loader.unload_model(model_details)
         torch.cuda.empty_cache() 
@@ -160,8 +158,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="7b_rps_test.log")
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, filename="dump.log")
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
     start_date = datetime.datetime.utcnow()
