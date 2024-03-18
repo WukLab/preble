@@ -324,6 +324,7 @@ class ModelRunner:
         )
         head_num = self.model_config.num_key_value_heads // self.tp_size
         cell_size = head_num * head_dim * self.model_config.num_hidden_layers * 2 * 2
+        logger.info(f'kv one token size: {head_num} * {head_dim} * {self.model_config.num_hidden_layers} * 2 * 2 = {cell_size} bytes')
         rest_memory = available_gpu_memory - total_gpu_memory * (
             1 - self.mem_fraction_static
         )

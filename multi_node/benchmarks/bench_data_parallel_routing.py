@@ -113,7 +113,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         )
 
         model_details = loader.load_model(
-            model_name, gpus=available_gpus, urls=[]
+            model_name, gpus=available_gpus, urls=[],
         )
         lpm = LongestPrefixMatchSelector(num_nodes=len(available_gpus), runtimes=model_details.runtimes)
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
@@ -181,8 +181,8 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         gc.collect()
         time.sleep(5)
 
-    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LPM)
 
 def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_requests, rps=0.0, model_name="mistralai/Mistral-7B-v0.1"):
@@ -264,7 +264,7 @@ def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_re
     
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="perf_debug_merge.log")
+    logging.basicConfig(level=logging.DEBUG, filename="limited_mistral_kv.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -281,7 +281,7 @@ if __name__ == "__main__":
         # [200, 0.2, 4096, 0],
         # [300, 0.2, 8192, 0],
         # [200, 0.2, 4096, 0],
-        [250, 0.2, 4096, 100],
+        # [250, 0.2, 4096, 100],
         # [200, 0.2, 4096, 100],
 
         # [300, 0.2, 8192, 0],
@@ -299,6 +299,8 @@ if __name__ == "__main__":
         # [300, 0.2, 12288, 1024],
         # [300, 0.2, 12288, 2048],
         # [200, 0.8, 1024]
+        [200, 0.2, 4096, 100],
+        [300, 0.2, 4096, 100],
     ]
     available_gpus = [0, 1]
     for config in configurations_to_test:

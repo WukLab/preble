@@ -88,7 +88,7 @@ class ModelDetails:
                     model_path=model_path,
                     cuda_devices=[gpu],
                     context_length=1024,
-                    mem_fraction_static=0.8,
+                    mem_fraction_static=0.42,
                     gpu=gpu,
                     **kwargs,
                 )
