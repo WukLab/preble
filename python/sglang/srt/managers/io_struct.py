@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from sglang.srt.sampling_params import SamplingParams
+from sglang.srt.managers.router.infer_batch import Req
 
 
 @dataclass
@@ -116,7 +117,12 @@ class BatchStrOut:
     output_str: List[str]
     meta_info: List[Dict]
     finished: List[bool]
-
+    
+@dataclass
+class MigrationReq:
+    url: str
+    requets: List[Req]
+    radix_cache = None
 
 @dataclass
 class FlushCacheReq:

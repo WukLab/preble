@@ -32,7 +32,7 @@ from sglang.srt.conversation import (
 )
 from sglang.srt.hf_transformers_utils import get_tokenizer
 from sglang.srt.managers.detokenizer_manager import start_detokenizer_process
-from sglang.srt.managers.io_struct import DetokenizeReqInput, GenerateReqInput
+from sglang.srt.managers.io_struct import DetokenizeReqInput, GenerateReqInput, MigrationReq
 from sglang.srt.managers.openai_protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -148,6 +148,18 @@ async def generate_request(obj: GenerateReqInput):
 
     return ret
 
+# Just add request wihout expecting result
+@app.post("/add_request")
+async def add_request(obj: GenerateReqInput):
+    obj.post_init()
+    await tokenizer_manager.add_request_to_queue(obj)
+    return Response(status_code=200)
+
+@app.post("/migrate_control")
+async def migrate_request(migration_target_url: str):
+    await tokenizer_manager.schedule_migration_request(migration_target_url)
+    return Response(status_code=200)
+
 @app.post("/scheduling_metrics")
 async def scheduling_metrics(raw_request: Request):
     """
@@ -184,7 +196,6 @@ async def scheduling_metrics(raw_request: Request):
     ret["return_time"] = time.time() - ret["return_time"]
     ret["total_internal_request_time"] = time.time() - start_time
     return ret
-
 
 @app.post("/v1/completions")
 async def v1_completions(raw_request: Request):
@@ -445,7 +456,8 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
         router_port=server_args.additional_ports[1],
         detokenizer_port=server_args.additional_ports[2],
         nccl_port=server_args.additional_ports[3],
-        model_rpc_ports=server_args.additional_ports[4:],
+        migrate_port=server_args.additional_ports[4],
+        model_rpc_ports=server_args.additional_ports[5:],
     )
 
     # Load chat template if needed
@@ -597,6 +609,7 @@ class Runtime:
         port: Optional[int] = None,
         additional_ports: Optional[Union[List[int], int]] = None,
         cuda_devices: Optional[List[int]] = None,
+        freeze: bool = False,
     ):
         host = "127.0.0.1"
         port, additional_ports = handle_port_init(port, additional_ports, tp_size)
@@ -618,6 +631,7 @@ class Runtime:
             random_seed=random_seed,
             log_level=log_level,
             cuda_devices=cuda_devices,
+            freeze=freeze,
         )
 
         self.url = self.server_args.url()

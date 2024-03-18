@@ -143,6 +143,9 @@ class TokenizerManager:
             return get_pixel_values(
                 image_data, aspect_ratio, grid_pinpoints, self.processor
             )
+    
+    async def schedule_migration_request(self, url: str):
+        self.send_to_router.send_pyobj(url)
 
     async def get_scheduling_metrics(self, text: str):
         """
@@ -175,6 +178,40 @@ class TokenizerManager:
         result["routing_time"] = routing_time - tokenization_time
         result["return_time"] = time.time()
         return result
+    
+    async def add_request_to_queue(self, obj: GenerateReqInput):
+        if self.to_create_loop:
+            await self.create_handle_loop()
+        rid = obj.rid
+        input_ids = self.tokenizer.encode(obj.text)
+        sampling_params = SamplingParams(**obj.sampling_params)
+        if sampling_params.max_new_tokens != 0:
+            sampling_params.normalize(self.tokenizer)
+            sampling_params.verify()
+
+        if isinstance(obj.image_data, list) and len(obj.image_data) > 0:
+            pixel_values, image_hash, image_size = await self.get_pixel_values(
+                obj.image_data[0]
+            )
+        elif isinstance(obj.image_data, str):
+            pixel_values, image_hash, image_size = await self.get_pixel_values(
+                obj.image_data
+            )
+        else:
+            pixel_values, image_hash, image_size = None, None, None
+        tokenized_obj = TokenizedGenerateReqInput(
+            rid=rid,
+            input_text=obj.text,
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_hash=image_hash,
+            image_size=image_size,
+            sampling_params=sampling_params,
+            return_logprob=obj.return_logprob,
+            logprob_start_len=obj.logprob_start_len,
+            stream=obj.stream,
+        )
+        await self.send_to_router.send_pyobj(tokenized_obj)
 
     async def generate_request(self, obj: GenerateReqInput):
         if self.to_create_loop:

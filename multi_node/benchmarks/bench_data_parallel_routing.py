@@ -181,8 +181,8 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LPM)
 
 def test_metrics_server_policy(num_workloads, distribution_of_non_shared, num_requests, rps=0.0, model_name="mistralai/Mistral-7B-v0.1"):

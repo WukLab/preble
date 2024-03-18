@@ -196,6 +196,12 @@ class ModelRpcServer(rpyc.Service):
         )
         return out
 
+    def exposed_get_migration_candidates(self):
+        if self.tp_size != 1:
+            raise ValueError("TP>1 migration is not considered when implemented")
+        ret = self.forward_queue
+        self.forward_queue = []
+        return ret
 
     def exposed_step(self, recv_reqs):
         if self.tp_size != 1:
@@ -662,6 +668,8 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap(self.model_server.exposed_step)
+            self.push_req_step = async_wrap(self.model_server.handle_generate_request)
+            self.get_migrate_candidates = async_wrap(self.model_server.exposed_get_migration_candidates)
             self.scheduler_metrics_request = async_wrap(
                 self.model_server.exposed_scheduler_metrics_request
             )
@@ -690,6 +698,8 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap("step")
+            # TODO: test push_req_step in TP mode
+            self.push_req_step = async_wrap("handle_generate_request")
             self.scheduler_metrics_request = async_wrap(
                 self.model_server.exposed_scheduler_metrics_request
             ) # TODO test metric collection in TP mode

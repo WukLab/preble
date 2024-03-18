@@ -1,14 +1,17 @@
 import asyncio
 import logging
+from typing import Dict
+import uuid
 
 import uvloop
 import zmq
 import zmq.asyncio
 from sglang.srt.backend_config import GLOBAL_BACKEND_CONFIG
 from sglang.srt.managers.router.model_rpc import ModelRpcClient
+from sglang.srt.managers.tokenizer_manager import ReqState
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
-from sglang.srt.managers.io_struct import SchedulingMetricsReqInput
+from sglang.srt.managers.io_struct import SchedulingMetricsReqInput, MigrationReq
 import time
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -17,7 +20,7 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 class RouterManager:
     def __init__(self, model_client: ModelRpcClient, port_args: PortArgs):
         # Init communication
-        context = zmq.asyncio.Context(2)
+        context = zmq.asyncio.Context(5)
         self.recv_from_tokenizer = context.socket(zmq.PULL)
         self.recv_from_tokenizer.bind(f"tcp://127.0.0.1:{port_args.router_port}")
 
@@ -28,13 +31,20 @@ class RouterManager:
 
         self.send_to_tokenizer = context.socket(zmq.PUSH)
         self.send_to_tokenizer.connect(f"tcp://127.0.0.1:{port_args.tokenizer_port}")
-
+        
+        self.send_to_migration_target = context.socket(zmq.PUSH)
+        self.recv_from_migration_source = context.socket(zmq.PULL)
+        self.recv_from_migration_source.connect(f'tcp://*:{port_args.migrate_port}')
+        
         # Init status
         self.model_client = model_client
         self.recv_reqs = []
 
         # Init some configs
         self.extend_dependency_time = GLOBAL_BACKEND_CONFIG.extend_dependency_time
+        
+        # Dict[uid -> migration url]
+        self.uid_to_migrate_decision: Dict[str, ReqState] = {}
 
     async def loop_for_forward(self):
         while True:
@@ -51,6 +61,14 @@ class RouterManager:
                 if has_finished:
                     await asyncio.sleep(self.extend_dependency_time)
 
+            await asyncio.sleep(0.0006)
+            
+    async def loop_for_push_request(self):
+        while True:
+            next_step_input = list(self.recv_reqs)
+            self.recv_reqs = []
+            for recv_req in next_step_input:
+                await self.model_client.push_req_step(recv_req)
             await asyncio.sleep(0.0006)
     
     async def scheduler_metrics_request(self, recv_req: SchedulingMetricsReqInput):
@@ -76,8 +94,28 @@ class RouterManager:
             if isinstance(recv_req, SchedulingMetricsReqInput):
                 loop.create_task(self.scheduler_metrics_request(recv_req))
                 continue
+            if isinstance(recv_req, str):
+                loop.create_task(self.schedule_request_migration(recv_req))
+                continue
             self.recv_reqs.append(recv_req)
+    
+    async def schedule_migration(self):
+        candidates = await self.model_client.get_migrate_candidates()
+        rid = str(uuid.uuid4())
+        
+        
+        lock = asyncio.Lock()
+        event = asyncio.Event()
+        state = ReqState([], False, event, lock)
+        self.uid_to_migrate_decision
+        
 
+    #TODO: add actual migration logic
+    async def schedule_request_migration(self, url: str):
+        self.send_to_migration_target.connect(url)
+        moved_reqs = list(self.model_client.model_server.forward_queue)
+        await self.send_to_migration_target.send_pyobj(MigrationReq(url, moved_reqs))
+        self.send_to_migration_target.disconnect(url)
 
 def start_router_process(
     server_args: ServerArgs,
@@ -100,6 +138,8 @@ def start_router_process(
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.create_task(router.loop_for_recv_requests(loop))
-
-    loop.run_until_complete(router.loop_for_forward())
+    recving_loop = loop.create_task(router.loop_for_recv_requests(loop))
+    if server_args.freeze:
+        loop.run_until_complete(router.loop_for_push_request())
+    else:
+        loop.run_until_complete(router.loop_for_forward())
