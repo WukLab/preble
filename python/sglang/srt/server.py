@@ -459,6 +459,7 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
         migrate_port=server_args.additional_ports[4],
         model_rpc_ports=server_args.additional_ports[5:],
     )
+    logger.info(f'{server_args.url()}, ports: {port_args}')
 
     # Load chat template if needed
     if server_args.chat_template is not None:
@@ -557,31 +558,32 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
             return
 
         # Warmup
-        try:
-            # print("Warmup...", flush=True)
-            res = requests.post(
-                url + "/generate",
-                json={
-                    "text": "Say this is a warmup request.",
-                    "sampling_params": {
-                        "temperature": 0,
-                        "max_new_tokens": 16,
+        if not server_args.freeze:
+            try:
+                # print("Warmup...", flush=True)
+                res = requests.post(
+                    url + "/generate",
+                    json={
+                        "text": "Say this is a warmup request.",
+                        "sampling_params": {
+                            "temperature": 0,
+                            "max_new_tokens": 16,
+                        },
                     },
-                },
-                timeout=60,
-            )
-            # print(f"Warmup done. model response: {res.json()['text']}")
-            # print("=" * 20, "Server is ready", "=" * 20, flush=True)
-        except requests.exceptions.RequestException as e:
-            if pipe_finish_writer is not None:
-                pipe_finish_writer.send(str(e))
-            else:
-                print(e, flush=True)
-            return
+                    timeout=60,
+                )
+                # print(f"Warmup done. model response: {res.json()['text']}")
+                # print("=" * 20, "Server is ready", "=" * 20, flush=True)
+            except requests.exceptions.RequestException as e:
+                if pipe_finish_writer is not None:
+                    pipe_finish_writer.send(str(e))
+                else:
+                    print(e, flush=True)
+                return
 
         if pipe_finish_writer is not None:
             pipe_finish_writer.send("init ok")
-
+            
     t = threading.Thread(target=_wait_and_warmup)
     t.start()
     try:

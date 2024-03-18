@@ -74,13 +74,14 @@ class ModelDetails:
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
-    def load_runtimes(self, model_path, gpus, urls=[]):
+    def load_runtimes(self, model_path, gpus, urls=[], **kwargs):
         def load_runtime(index, gpu):
             runtime: EndpointRuntimeInterface
             if len(urls) > 0:
                 runtime = EndpointRuntimeInterface(
                     url=urls[index], 
-                    gpu=gpu
+                    gpu=gpu,
+                    **kwargs,
                 )
             else:
                 runtime = ExtendedSGLangRuntime(
@@ -89,6 +90,7 @@ class ModelDetails:
                     context_length=1024,
                     mem_fraction_static=0.8,
                     gpu=gpu,
+                    **kwargs,
                 )
             self.runtimes.append(runtime)
             self.gpus.add(gpu)

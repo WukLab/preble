@@ -34,7 +34,7 @@ class RouterManager:
         
         self.send_to_migration_target = context.socket(zmq.PUSH)
         self.recv_from_migration_source = context.socket(zmq.PULL)
-        self.recv_from_migration_source.connect(f'tcp://*:{port_args.migrate_port}')
+        self.recv_from_migration_source.bind(f'tcp://0.0.0.0:{port_args.migrate_port}')
         
         # Init status
         self.model_client = model_client
@@ -99,23 +99,28 @@ class RouterManager:
                 continue
             self.recv_reqs.append(recv_req)
     
-    async def schedule_migration(self):
-        candidates = await self.model_client.get_migrate_candidates()
-        rid = str(uuid.uuid4())
-        
-        
-        lock = asyncio.Lock()
-        event = asyncio.Event()
-        state = ReqState([], False, event, lock)
-        self.uid_to_migrate_decision
-        
-
+    async def loop_for_migration_requests(self, loop):
+        while True:
+            recv_req = await self.recv_from_migration_source.recv_pyobj()
+            if isinstance(recv_req, MigrationReq):
+                self.solve_migration_request(recv_req)
+                continue
+            raise ValueError(f"Invalid object: {recv_req}")
+    
     #TODO: add actual migration logic
+    #  1. Triggered periodically and internally
+    #  2. Ask global scheduler for migration destination
     async def schedule_request_migration(self, url: str):
         self.send_to_migration_target.connect(url)
-        moved_reqs = list(self.model_client.model_server.forward_queue)
-        await self.send_to_migration_target.send_pyobj(MigrationReq(url, moved_reqs))
+        candidates = await self.model_client.get_migrate_candidates()
+        print(f"sending candidates: {candidates}")
+        await self.send_to_migration_target.send_pyobj(MigrationReq(candidates))
         self.send_to_migration_target.disconnect(url)
+        
+    def solve_migration_request(self, mreq: MigrationReq):
+        if mreq.requets:
+            print(f"recving requests: {mreq.requets}")
+            self.model_client.model_server.forward_queue.extend(mreq.requets)
 
 def start_router_process(
     server_args: ServerArgs,
@@ -138,7 +143,8 @@ def start_router_process(
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    recving_loop = loop.create_task(router.loop_for_recv_requests(loop))
+    loop.create_task(router.loop_for_recv_requests(loop))
+    loop.create_task(router.loop_for_migration_requests(loop))
     if server_args.freeze:
         loop.run_until_complete(router.loop_for_push_request())
     else:

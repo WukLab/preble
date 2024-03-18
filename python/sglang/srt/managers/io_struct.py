@@ -120,7 +120,6 @@ class BatchStrOut:
     
 @dataclass
 class MigrationReq:
-    url: str
     requets: List[Req]
     radix_cache = None
 
