@@ -197,6 +197,14 @@ async def scheduling_metrics(raw_request: Request):
     ret["total_internal_request_time"] = time.time() - start_time
     return ret
 
+@app.post("/dump_prefix_hit_trace")
+async def dump_prefix_hit_trace(fpath: str):
+    """
+    Ask the runtime to log prefix hit trace to the provided file path    
+    """
+    await tokenizer_manager.dump_prefix_hit_trace(fpath)
+    return Response(status_code=200)
+
 @app.post("/v1/completions")
 async def v1_completions(raw_request: Request):
     request_json = await raw_request.json()
@@ -612,7 +620,9 @@ class Runtime:
         additional_ports: Optional[Union[List[int], int]] = None,
         cuda_devices: Optional[List[int]] = None,
         freeze: bool = False,
+        log_prefix_hit: bool = False,
     ):
+        logger.info(f'mem_fraction_static: {mem_fraction_static}')
         host = "127.0.0.1"
         port, additional_ports = handle_port_init(port, additional_ports, tp_size)
         self.server_args = ServerArgs(
@@ -634,6 +644,7 @@ class Runtime:
             log_level=log_level,
             cuda_devices=cuda_devices,
             freeze=freeze,
+            log_prefix_hit=log_prefix_hit,
         )
 
         self.url = self.server_args.url()

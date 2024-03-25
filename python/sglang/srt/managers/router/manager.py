@@ -11,7 +11,7 @@ from sglang.srt.managers.router.model_rpc import ModelRpcClient
 from sglang.srt.managers.tokenizer_manager import ReqState
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
-from sglang.srt.managers.io_struct import SchedulingMetricsReqInput, MigrationReq
+from sglang.srt.managers.io_struct import SchedulingMetricsReqInput, MigrationReq, DumpTrace
 import time
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -53,7 +53,7 @@ class RouterManager:
             out_pyobjs = await self.model_client.step(next_step_input)
 
             for obj in out_pyobjs:
-                self.send_to_detokenizer.send_pyobj(obj)
+                await self.send_to_detokenizer.send_pyobj(obj)
 
             # async sleep for receiving the subsequent request and avoiding cache miss
             if len(out_pyobjs) != 0:
@@ -78,10 +78,15 @@ class RouterManager:
         Detokenizer used in order to follow structure of existing code.
         """
         start = time.time()
+        waiting_time_tokenizer_manager = start - recv_req.tokenizer_dispatch_time
         out = await self.model_client.scheduler_metrics_request(recv_req)
+        # out = await asyncio.to_thread(self.model_client.model_server.exposed_scheduler_metrics_request, recv_req)
         inner_time = time.time() - start
+        out.waiting_time_tokenizer_manager = waiting_time_tokenizer_manager
         out.inner_router_time = inner_time
-        self.send_to_tokenizer.send_pyobj(out)
+        out.manager_recv_time = recv_req.manager_recv_time
+        out.manager_dispatch_time = time.time()
+        await self.send_to_tokenizer.send_pyobj(out)
 
     async def loop_for_recv_requests(self, loop):
         """
@@ -92,12 +97,20 @@ class RouterManager:
         while True:
             recv_req = await self.recv_from_tokenizer.recv_pyobj()
             if isinstance(recv_req, SchedulingMetricsReqInput):
+                recv_req.manager_recv_time = time.time() - recv_req.tokenizer_dispatch_time
                 loop.create_task(self.scheduler_metrics_request(recv_req))
                 continue
             if isinstance(recv_req, str):
                 loop.create_task(self.schedule_request_migration(recv_req))
                 continue
+            if isinstance(recv_req, DumpTrace):
+                await self.dump_trace(recv_req)
+                continue
             self.recv_reqs.append(recv_req)
+    
+    async def dump_trace(self, recv_req: DumpTrace):
+        print(f"dumping trace to: {recv_req.fpath}")
+        await self.model_client.dump_prefix_hit_trace(recv_req.fpath)
     
     async def loop_for_migration_requests(self, loop):
         while True:

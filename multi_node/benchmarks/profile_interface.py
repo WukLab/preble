@@ -10,6 +10,7 @@ import asyncio
 import time, datetime
 import aiohttp
 import logging
+import concurrent.futures
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from benchmarks.benchmark_workload_gen import get_react_workload
@@ -20,23 +21,38 @@ logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("filelock").setLevel(logging.WARNING)
 
+def async_wrap(f):
+    async def _func(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return _func
+
 """
 The workload uses the tokenizer to encode a prompt and then measures the throughput of the tokenizer.
 The input prompt is synthetic and may not be representative of the actual workload.
 The input is obtained with the react example, the length of generated token id is around 2000.
 """
 def profile_tokenizer_throughput(rps: float, t: int, model_details: ModelDetails):
-    logging.fino("===== Profile Tokenizer Throughput =====")
-    logging.fino(f'rps={rps}, t={t}')
+    logging.info("===== Profile Tokenizer Throughput =====")
+    logging.info(f'rps={rps}, t={t}')
     num_samples = math.floor(rps * t) if rps != float('inf') else t
     # avoid numeric to ensure consistent token length
     prompts = [(get_react_workload(f'Workload i '), ) for _ in range(num_samples)] 
+    tokenizer = model_details.runtimes[0].get_tokenizer()
     
-    async def encode(text):
-        return model_details.runtimes[0].get_tokenizer().encode(text)
+    pool = concurrent.futures.ThreadPoolExecutor()
+    
+    async def async_encode(text):
+        # loop = asyncio.get_running_loop()
+        # result = await loop.run_in_executor(pool, tokenizer.encode, text)
+        result = await asyncio.to_thread(tokenizer.encode, text)
+        return result
+    
     start = time.time()
     results = asyncio.run(model_details.async_generate_batch_request_per_sec(
-        prompts, rps, encode
+        prompts, rps, 
+        async_encode,
+        # async_wrap(tokenizer.encode),
     ))
     latency = time.time() - start
     logging.info(f'End to end latency: {latency} seconds')
@@ -99,13 +115,14 @@ if __name__ == "__main__":
         # [inf, batch size]
         
         # [1, 10],
-        # [float('inf'), 100],
+        [float('inf'), 4096],
         # [float('inf'), 200],
         # [float('inf'), 300],
         # [float('inf'), 200],
-        [float('inf'), 400],
+        # [float('inf'), 400],
     ]
-    profile_task = profile_matching_throughput
+    # profile_task = profile_matching_throughput
+    profile_task = profile_tokenizer_throughput
     
     for config in configurations_to_profile:
         profile_task(*config, model_details)

@@ -50,7 +50,7 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
 
 
 def random_uuid_string():
-    return str(uuid.uuid4())
+    return str(uuid.uuid4().hex)
 
 
 class ModelDetails:
@@ -71,10 +71,13 @@ class ModelDetails:
             num_nodes=len(gpus)
         )
         self.gpus = set(gpus)
+        self.start_time = None
+        self.request_sent_time = []
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
     def load_runtimes(self, model_path, gpus, urls=[], **kwargs):
+        print(kwargs)
         def load_runtime(index, gpu):
             runtime: EndpointRuntimeInterface
             if len(urls) > 0:
@@ -88,7 +91,6 @@ class ModelDetails:
                     model_path=model_path,
                     cuda_devices=[gpu],
                     context_length=1024,
-                    mem_fraction_static=0.42,
                     gpu=gpu,
                     **kwargs,
                 )
@@ -104,6 +106,16 @@ class ModelDetails:
         request_id = sampling_params.pop("request_id", random_uuid_string())
         runtime_id = self.request_router.select_runtime(text, experiment_id, request_id)
         return self.runtimes[runtime_id]
+    
+    def async_wrap(f):
+        async def _func(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return _func
+    
+    @async_wrap
+    def async_select_runtime_with_identifiers(self, text, sampling_params) -> EndpointRuntimeInterface:
+        return self.select_runtime_with_identifiers(text, sampling_params)
 
     def generate_request(self, text, sampling_params):
         runtime: EndpointRuntimeInterface = (
@@ -158,7 +170,8 @@ class ModelDetails:
                     continue
                 interval = np.random.exponential(1.0 / request_rate)
                 await asyncio.sleep(interval)
-
+        if self.start_time is None:
+            self.start_time = time.time()
         tasks: List[asyncio.Task] = []
         async for request in get_request(requests, request_rate):
             task = asyncio.create_task(routine(*request))
@@ -170,19 +183,24 @@ class ModelDetails:
         self, text, sampling_params
     ): 
         start_time = time.time()
+        rid = random_uuid_string()
+        sampling_params["request_id"] = rid
         # runtime: EndpointRuntimeInterface = (
         #     self.select_runtime_with_identifiers(text, sampling_params)
         # )
         runtime = await asyncio.to_thread(
             self.select_runtime_with_identifiers, text, sampling_params
         )
+        # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
         async with aiohttp.ClientSession(timeout=timeout) as session:
+            self.request_sent_time.append(time.time() - self.start_time)
             while True:
                 async with session.post(runtime.generate_url,
                     json={
                         "text": text,
                         "sampling_params": sampling_params,
+                        "rid": rid,
                     },) as response:
                     chunks = []
                     async for chunk, _ in response.content.iter_chunks():
@@ -196,4 +214,5 @@ class ModelDetails:
         output["request_latency"] = time.time() - start_time
         # print(f"{id} finishes")
         return output
+    
 

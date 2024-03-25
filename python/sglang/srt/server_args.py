@@ -31,6 +31,7 @@ class ServerArgs:
     cuda_devices: Optional[List[int]] = None
     metrics_buffer_size: int = 5
     freeze: bool = False
+    log_prefix_hit: bool = False
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -206,6 +207,11 @@ class ServerArgs:
             "--freeze",
             action="store_true",
             help="Whether the server should loop forward",
+        )
+        parser.add_argument(
+            "--log-prefix-hit",
+            action="store_true",
+            help="Whether the server should log prefix hit",
         )
 
     @classmethod
