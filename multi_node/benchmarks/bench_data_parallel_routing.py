@@ -116,7 +116,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
-    dataloader = ToolBenchDataLoader('/mnt/ssd1/alm-os/ToolBench/data/answer/G1_workload.json', num_workloads, num_requests, tokenizer, LoadDistribution.EVEN)
+    dataloader = ToolBenchDataLoader('/mnt/data/ssd/sglang_multi_model/multi_node/benchmarks/G1_workload_updated.json', num_workloads, num_requests, tokenizer, LoadDistribution.EVEN)
     requests = dataloader.generate_workload()
 
     def load_and_run_benchmark(policy, custom_policy=None):
@@ -234,7 +234,23 @@ if __name__ == "__main__":
         # [250, 0.2, 4096, 100],
         # [200, 0.2, 4096, 5],
         # [200, 0.2, 4096, 75],
-        [200, 0.2, 4096, 100],
+        # [10, 0.2, 1024, 10],
+        # [10, 0.2, 1024, 50],
+        # [10, 0.2, 1024, 100],
+        # [100, 0.2, 4096, 25],
+        # [100, 0.2, 4096, 50],
+        # [100, 0.2, 4096, 100],
+
+        [200, 0.2, 4096, 25],
+        [200, 0.2, 4096, 50],
+
+        [100, 0.2, 4096, 40],
+        # [200, 0.2, 4096, 100],
+
+        # [100, 0.2, 4096, 100],
+        # [150, 0.2, 4096, 100],
+        # [200, 0.2, 4096, 100],
+
         # [200, 0.2, 4096, 150],
         # [300, 0.2, 4096, 50],
         # [300, 0.2, 4096, 75],

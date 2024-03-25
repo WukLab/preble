@@ -198,7 +198,7 @@ class RandomDataLoader(DataLoader):
         return prompts
     
 class ToolBenchDataLoader(DataLoader):
-    def __init__(self, data_path: str, num_patterns: int, total_num_requests: int, tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, load_dist: LoadDistribution = LoadDistribution.EVEN):
+    def __init__(self, data_path: str, num_patterns: int, total_num_requests: int, tokenizer, load_dist: LoadDistribution = LoadDistribution.EVEN):
         super().__init__(data_path, num_patterns, total_num_requests, tokenizer, load_dist)
         self.data = self.read_data()
         
@@ -211,6 +211,7 @@ class ToolBenchDataLoader(DataLoader):
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
+            print(self.num_patterns, load_threshold)
             selected_prefixs = np.random.choice(prefix_stats, self.num_patterns, replace=False)
             for p in selected_prefixs:
                 selected_instances = np.random.choice(self.data[p], load_threshold, replace=False)
