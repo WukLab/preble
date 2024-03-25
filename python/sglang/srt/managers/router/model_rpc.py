@@ -36,6 +36,7 @@ from sglang.srt.utils import (
 )
 from vllm.logger import _default_handler as vllm_default_handler
 from collections import deque
+import os
 
 logger = logging.getLogger("model_rpc")
 
@@ -435,7 +436,9 @@ class ModelRpcServer(rpyc.Service):
             tree_cache_hit_rate = (
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
-            logger.info(
+            current_gpu = os.environ['CUDA_VISIBLE_DEVICES'].split(",")[torch.cuda.current_device()]
+            logger.debug(
+                f"GPU: {current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
                 f"#new_token: {new_batch_input_tokens}. "
@@ -444,13 +447,13 @@ class ModelRpcServer(rpyc.Service):
                 f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%."
                 f"hit_tokens: {hit_tokens}."
             )
-            logger.debug(
-                f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
-                f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
-                f"ff_cache_hit_rate: {100.0 * self.jump_forward_cache.get_cache_hit_rate():.2f}%. "
-                f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
-                f"hit_tokens: {hit_tokens}."
-            )
+            # logger.debug(
+            #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
+            #     f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
+            #     f"ff_cache_hit_rate: {100.0 * self.jump_forward_cache.get_cache_hit_rate():.2f}%. "
+            #     f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
+            #     f"hit_tokens: {hit_tokens}."
+            # )
             self.forward_queue_len_buffer.append(len(self.forward_queue))
             self.running_batch_len_buffer.append(running_req)
 
