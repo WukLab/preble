@@ -113,12 +113,17 @@ class GlobalLongestPrefixMatch(CustomRuntimeSelector):
         ]
 
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer_cache = {
+
+        }
         self.waiting_queues = [0 for _ in range(num_nodes)]
         self.metrics_dict = []
 
     def runtime_selector(self, text: str, request_id: str):
         # Tokenize the text
         start_time = time.time()
+        if text in self.tokenizer_cache:
+            tokens = self.tokenizer_cache[text]
         tokens = self.tokenizer.encode(text)[:1024 - 1]
         # Find the longest prefix match
         prefix_match_length = [self.tree_caches[i].match_prefix(tokens)[0] for i in range(self.num_nodes)]

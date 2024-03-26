@@ -73,6 +73,8 @@ class BenchBasicOracleVSRandom(unittest.TestCase):
 
 class CustomPolicyType(Enum):
     ORACLE = auto()
+    ORACLE_B = auto()
+
     LPM = auto()
     GLPM = auto()
 
@@ -91,19 +93,39 @@ class Oracle(CustomRuntimeSelector):
                 return i % num_nodes
             
         return random.randint(0, num_nodes - 1)
-    
+
 @dataclass
-class TBOracle(CustomRuntimeSelector):
+class TBOracle:
     trace = {}
     tbl = {}
+    num_nodes: int
+    counter = {}
 
     def runtime_selector(self, text: str, request_id: str):
         match = re.search(r'You have access of the following tools:\n1.(.+?): ', text)
         if match:
             tool = match.group(1)
+            self.counter[tool] = self.counter.get(tool, 0) + 1
             num_nodes = self.num_nodes
             if tool not in self.tbl:
                 self.tbl[tool] = random.randint(0, num_nodes - 1)
+            return self.tbl[tool]
+        else:
+            return random.randint(0, self.num_nodes - 1)
+
+@dataclass
+class TBOracleB(CustomRuntimeSelector):
+    trace = {}
+    tbl = {}
+    counter: int = 0
+
+    def runtime_selector(self, text: str, request_id: str):
+        match = re.search(r'You have access of the following tools:\n1.(.+?): ', text)
+        if match:
+            tool = match.group(1)
+            if tool not in self.tbl:
+                self.tbl[tool] = self.counter % self.num_nodes
+                self.counter += 1
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
@@ -136,6 +158,12 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
             if custom_policy == CustomPolicyType.ORACLE:
                 # oracle = Oracle(num_nodes=len(available_gpus), num_workloads=num_workloads)
                 oracle = TBOracle(num_nodes=len(available_gpus))
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=oracle,
+                )
+            elif custom_policy == CustomPolicyType.ORACLE_B:
+                oracle = TBOracleB(num_nodes=len(available_gpus))
                 model_details.update_runtime_selection_policy(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=oracle,
@@ -185,6 +213,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         logging.debug(
             f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Overall Max Latency: {max_latency}, P99: {p99_latency}"
         )
+
         # if custom_policy == CustomPolicyType.ORACLE:
         #     with open(f"{exp_name}_metric_{policy}_{custom_policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}_{rps}.json", "w") as f:
         #         json.dump(oracle.trace, f)
@@ -198,7 +227,9 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         df.drop("text", axis=1, inplace=True)
         counts = df['selected_runtime'].value_counts().to_dict()
         logging.debug(f"{policy}-{custom_policy}, {counts}")
-        
+        logging.debug(
+            f"Params=({model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}) Counts: {counts}"
+        )
         # for i, runtime in enumerate(model_details.runtimes):
         #     session.post(f'{runtime.url}/dump_prefix_hit_trace', params={'fpath': f'{exp_name}_server_{i}_prefix_hit_trace_{policy}_{custom_policy}_{num_workloads}_{distribution_of_non_shared}_{num_requests}_{rps}.json'})
 
@@ -207,14 +238,14 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_B)
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LPM)
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GLPM)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="tool_bench.log")
+    logging.basicConfig(level=logging.DEBUG, filename="debug_output.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -237,14 +268,43 @@ if __name__ == "__main__":
         # [10, 0.2, 1024, 10],
         # [10, 0.2, 1024, 50],
         # [10, 0.2, 1024, 100],
+
         # [100, 0.2, 4096, 25],
         # [100, 0.2, 4096, 50],
         # [100, 0.2, 4096, 100],
 
-        [200, 0.2, 4096, 25],
-        [200, 0.2, 4096, 50],
+        # [100, 0.2, 4096, 25],
+        # [100, 0.2, 4096, 50],
+        # [100, 0.2, 4096, 100],
+        # [100, 0.2, 4096, 200],
 
-        [100, 0.2, 4096, 40],
+        # [200, 0.2, 4096, 25],
+        # [200, 0.2, 4096, 50],
+        # [200, 0.2, 4096, 100],
+        # [200, 0.2, 4096, 200],
+        # [400, 0.2, 8192, 25],
+
+        # [100, 0.2, 4096, 50],
+        # [200, 0.2, 4096, 25],
+        # [300, 0.2, 8192, 200],
+
+        # [300, 0.2, 8192, 25],
+        # [300, 0.2, 8192, 50],
+        # [300, 0.2, 8192, 100],
+        # [300, 0.2, 8192, 200],
+
+        # [100, 0.2, 4096, 50],
+        # [200, 0.2, 4096, 25],
+        # [400, 0.2, 8192, 25],
+
+        # [400, 0.2, 8192, 50],
+        # [400, 0.2, 8192, 100],
+        # [400, 0.2, 8192, 200],
+
+        # [300, 0.2, 8192, 25],
+        # [300, 0.2, 4096, 50],
+        # [300, 0.2, 4096, 100],
+        # [300, 0.2, 4096, 200],
         # [200, 0.2, 4096, 100],
 
         # [100, 0.2, 4096, 100],

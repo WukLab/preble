@@ -203,7 +203,11 @@ class ModelDetails:
                         "rid": rid,
                     },) as response:
                     chunks = []
+                    i = 0
                     async for chunk, _ in response.content.iter_chunks():
+                        if i == 0:
+                            totk_time = time.time() - start_time
+                            i += 1
                         chunks.append(chunk)
                 output = b"".join(chunks).decode("utf-8")
                 output = json.loads(output)
@@ -212,6 +216,9 @@ class ModelDetails:
                 if "error" not in output:
                     break
         output["request_latency"] = time.time() - start_time
+        output["TTFT"] = totk_time
+        
+        #  throughput as token generated per second
         # print(f"{id} finishes")
         return output
     

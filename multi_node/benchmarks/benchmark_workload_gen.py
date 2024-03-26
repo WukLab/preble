@@ -145,7 +145,7 @@ def generate_random_workload():
 
 class LoadDistribution(Enum):
     EVEN = auto()
-    FOLLOW = auto()
+    ALL = auto()
     
 class DataLoader:
     def __init__(
@@ -211,7 +211,6 @@ class ToolBenchDataLoader(DataLoader):
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
-            print(self.num_patterns, load_threshold)
             selected_prefixs = np.random.choice(prefix_stats, self.num_patterns, replace=False)
             for p in selected_prefixs:
                 selected_instances = np.random.choice(self.data[p], load_threshold, replace=False)
@@ -223,6 +222,17 @@ class ToolBenchDataLoader(DataLoader):
                             "temperature": 0,
                             "max_new_tokens": output_len
                         }))
+        elif self.load_dist == LoadDistribution.ALL:
+            for tool, items in self.data.items():
+                for item in items:
+                    output_len = len(self.tokenizer(item['output']).input_ids)
+                    workload.append((
+                        e['prompt'], 
+                        {
+                            "temperature": 0,
+                            "max_new_tokens": output_len
+                        }))
         else:
             raise NotImplementedError()
+        random.shuffle(workload)
         return workload
