@@ -9,6 +9,8 @@ import concurrent.futures
 import time
 import aiohttp, asyncio
 from unsync import unsync
+import logging
+logging = logging.getLogger(__name__)
 
 @dataclass
 class MetricData:
@@ -104,10 +106,10 @@ class LongestPrefixMatchSelector(CustomRuntimeSelector):
             
         return selected_runtime
 
-
 class GlobalLongestPrefixMatch(CustomRuntimeSelector):
     def __init__(self, num_nodes: int, model_name: str):
         self.num_nodes = num_nodes
+        self.global_tree_cache = RadixCache()
         self.tree_caches = [
             RadixCache() for _ in range(num_nodes)
         ]
@@ -119,12 +121,15 @@ class GlobalLongestPrefixMatch(CustomRuntimeSelector):
         self.waiting_queues = [0 for _ in range(num_nodes)]
         self.metrics_dict = []
 
-    def runtime_selector(self, text: str, request_id: str):
+    def runtime_selector(self, text: str=None, request_id: str=None, input_ids=None, ):
         # Tokenize the text
         start_time = time.time()
-        if text in self.tokenizer_cache:
-            tokens = self.tokenizer_cache[text]
-        tokens = self.tokenizer.encode(text)[:1024 - 1]
+        # if text in self.tokenizer_cache:
+        #     tokens = self.tokenizer_cache[text]
+        if input_ids:
+            tokens = input_ids
+        else:
+            tokens = self.tokenizer.encode(text)[:1024 - 1]
         # Find the longest prefix match
         prefix_match_length = [self.tree_caches[i].match_prefix(tokens)[0] for i in range(self.num_nodes)]
         percent_matched = [len(match) / len(tokens) for match in prefix_match_length]
@@ -133,7 +138,7 @@ class GlobalLongestPrefixMatch(CustomRuntimeSelector):
             runtime_selected = random.randint(0, self.num_nodes - 1)
         else:
             runtime_selected = max(range(self.num_nodes), key=lambda i: (percent_matched[i], -self.waiting_queues[i]))
-
+        logging.debug(f"Selected runtime: {runtime_selected}, {percent_matched}, {self.waiting_queues[runtime_selected]}")
         # Insert the tokenized text into the radix cache
         self.tree_caches[runtime_selected].insert(tuple(tokens))
         self.waiting_queues[runtime_selected] += 1

@@ -73,6 +73,7 @@ class ModelDetails:
         self.gpus = set(gpus)
         self.start_time = None
         self.request_sent_time = []
+        self.current_experiment_state_time = None
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
@@ -90,7 +91,7 @@ class ModelDetails:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
                     cuda_devices=[gpu],
-                    context_length=1024,
+                    context_length=4096,
                     gpu=gpu,
                     **kwargs,
                 )
@@ -101,12 +102,12 @@ class ModelDetails:
         for index, gpu in enumerate(gpus):
             load_runtime(index, gpu)
 
-    def select_runtime_with_identifiers(self, text, sampling_params) -> EndpointRuntimeInterface:
+    def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         request_id = sampling_params.pop("request_id", random_uuid_string())
-        runtime_id = self.request_router.select_runtime(text, experiment_id, request_id)
+        runtime_id = self.request_router.select_runtime(text, experiment_id, request_id, input_ids)
         return self.runtimes[runtime_id]
-    
+
     def async_wrap(f):
         async def _func(*args, **kwargs):
             return f(*args, **kwargs)
@@ -114,8 +115,8 @@ class ModelDetails:
         return _func
     
     @async_wrap
-    def async_select_runtime_with_identifiers(self, text, sampling_params) -> EndpointRuntimeInterface:
-        return self.select_runtime_with_identifiers(text, sampling_params)
+    def async_select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
+        return self.select_runtime_with_identifiers(text, sampling_params, input_ids)
 
     def generate_request(self, text, sampling_params):
         runtime: EndpointRuntimeInterface = (
@@ -159,6 +160,7 @@ class ModelDetails:
         request_rate: float,
         routine,
     ):
+        self.current_experiment_state_time = time.time()
         async def get_request(
             input_requests,
             request_rate: float,
@@ -174,13 +176,13 @@ class ModelDetails:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []
         async for request in get_request(requests, request_rate):
-            task = asyncio.create_task(routine(*request))
+            task = asyncio.create_task(routine(**request))
             tasks.append(task)
         results = await asyncio.gather(*tasks)
         return results
 
     async def async_send_request(
-        self, text, sampling_params
+        self, text=None, sampling_params=None, input_ids=None
     ): 
         start_time = time.time()
         rid = random_uuid_string()
@@ -189,7 +191,7 @@ class ModelDetails:
         #     self.select_runtime_with_identifiers(text, sampling_params)
         # )
         runtime = await asyncio.to_thread(
-            self.select_runtime_with_identifiers, text, sampling_params
+            self.select_runtime_with_identifiers, text, sampling_params, input_ids
         )
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
@@ -203,21 +205,23 @@ class ModelDetails:
                         "rid": rid,
                     },) as response:
                     chunks = []
-                    i = 0
+                    ttft = 0
                     async for chunk, _ in response.content.iter_chunks():
-                        if i == 0:
-                            totk_time = time.time() - start_time
-                            i += 1
+                        if ttft == 0:
+                            ttft = time.time() - start_time
                         chunks.append(chunk)
+                    request_latency = time.time() - start_time
+                    global_time = time.time() - self.current_experiment_state_time
                 output = b"".join(chunks).decode("utf-8")
                 output = json.loads(output)
-
                 # Re-send the request if it failed.
                 if "error" not in output:
                     break
-        output["request_latency"] = time.time() - start_time
-        output["TTFT"] = totk_time
-        
+        output["request_latency"] = request_latency
+        output["TTFT"] = ttft
+        output["global_time"] = global_time
+        output["topt_req_sec"] = output["meta_info"]["completion_tokens"] / request_latency
+        output["total_tokens"] = output["meta_info"]["prompt_tokens"] + output["meta_info"]["completion_tokens"]
         #  throughput as token generated per second
         # print(f"{id} finishes")
         return output

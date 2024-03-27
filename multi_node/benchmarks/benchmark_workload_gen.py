@@ -216,23 +216,32 @@ class ToolBenchDataLoader(DataLoader):
                 selected_instances = np.random.choice(self.data[p], load_threshold, replace=False)
                 for e in selected_instances:
                     output_len = len(self.tokenizer(e['output']).input_ids)
-                    workload.append((
-                        e['prompt'], 
+                    workload.append(
                         {
-                            "temperature": 0,
-                            "max_new_tokens": output_len
-                        }))
-        elif self.load_dist == LoadDistribution.ALL:
-            for tool, items in self.data.items():
-                for item in items:
-                    output_len = len(self.tokenizer(item['output']).input_ids)
-                    workload.append((
-                        e['prompt'], 
-                        {
-                            "temperature": 0,
-                            "max_new_tokens": output_len
-                        }))
+                            "text": e['prompt'], 
+                            'input_ids': self.tokenizer(e['prompt']),
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len
+                            }
+                        }
+                    )
+
+        # elif self.load_dist == LoadDistribution.ALL:
+        #     for tool, items in self.data.items():
+        #         for item in items:
+        #             output_len = len(self.tokenizer(item['output']).input_ids)
+        #             workload.append((
+        #                 e['prompt'], 
+        #                 {
+        #                     "temperature": 0,
+        #                     "max_new_tokens": output_len
+        #                 }))
         else:
             raise NotImplementedError()
+        print(len(workload))
         random.shuffle(workload)
+        # save to json
+        with open(f"workload_{self.num_patterns}_{self.total_num_requests}.json", 'w') as f:
+            json.dump([{"text": item['text']} for item in workload], f)
         return workload
