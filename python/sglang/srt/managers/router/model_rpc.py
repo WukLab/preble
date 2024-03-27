@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List
 import json
 
-import numpy as np
 import rpyc
 import torch
 from rpyc.utils.classic import obtain
@@ -41,8 +40,8 @@ import os
 logger = logging.getLogger("model_rpc")
 
 
-class ModelRpcServer(rpyc.Service):
-    def exposed_init_model(
+class ModelRpcServer:
+    def __init__(
         self,
         tp_rank: int,
         server_args: ServerArgs,
@@ -51,7 +50,6 @@ class ModelRpcServer(rpyc.Service):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
 
         # Copy arguments
-        self.model_mode = server_args.model_mode
         self.tp_rank = tp_rank
         self.tp_size = server_args.tp_size
         self.schedule_heuristic = server_args.schedule_heuristic
@@ -62,17 +60,26 @@ class ModelRpcServer(rpyc.Service):
 
         # Init model and tokenizer
         self.model_config = ModelConfig(
-            server_args.model_path, server_args.trust_remote_code, context_length=server_args.context_length
-        )
-        self.model_runner = ModelRunner(
-            self.model_config,
-            server_args.mem_fraction_static,
-            tp_rank,
-            server_args.tp_size,
-            port_args.nccl_port,
-            server_args.load_format,
+            server_args.model_path,
             server_args.trust_remote_code,
-            server_args.model_mode,
+            context_length=server_args.context_length,
+        )
+
+        # for model end global settings
+        server_args_dict = {
+            "enable_flashinfer": server_args.enable_flashinfer,
+            "attention_reduce_in_fp32": server_args.attention_reduce_in_fp32,
+        }
+
+        self.model_runner = ModelRunner(
+            model_config=self.model_config,
+            mem_fraction_static=server_args.mem_fraction_static,
+            tp_rank=tp_rank,
+            tp_size=server_args.tp_size,
+            nccl_port=port_args.nccl_port,
+            load_format=server_args.load_format,
+            trust_remote_code=server_args.trust_remote_code,
+            server_args_dict=server_args_dict,
         )
         if is_multimodal_model(server_args.model_path):
             self.processor = get_processor(
@@ -87,7 +94,6 @@ class ModelRpcServer(rpyc.Service):
                 tokenizer_mode=server_args.tokenizer_mode,
                 trust_remote_code=server_args.trust_remote_code,
             )
-        self.eos_token_id = self.tokenizer.eos_token_id
         self.max_total_num_token = self.model_runner.max_total_num_token
         self.max_num_running_seq = self.max_total_num_token // 2
         self.max_prefill_num_token = max(
@@ -107,11 +113,11 @@ class ModelRpcServer(rpyc.Service):
             f"max_total_num_token={self.max_total_num_token}, "
             f"max_prefill_num_token={self.max_prefill_num_token}, "
             f"context_len={self.model_config.context_len}, "
-            f"model_mode={self.model_mode} "
         )
+        logger.info(server_args.get_optional_modes_logging())
 
         # Init cache
-        self.tree_cache = RadixCache(disable="no-cache" in self.model_mode)
+        self.tree_cache = RadixCache(server_args.disable_radix_cache)
         self.tree_cache_metrics = {"total": 0, "hit": 0}
         self.scheduler = Scheduler(
             self.schedule_heuristic,
@@ -486,9 +492,7 @@ class ModelRpcServer(rpyc.Service):
                 prefill_logprobs,
                 normalized_logprobs,
                 last_logprobs,
-            ) = self.model_runner.forward(
-                batch, ForwardMode.EXTEND, batch.return_logprob
-            )
+            ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
             if prefill_logprobs is not None:
                 logprobs = prefill_logprobs.cpu().tolist()
                 normalized_logprobs = normalized_logprobs.cpu().tolist()
@@ -520,7 +524,7 @@ class ModelRpcServer(rpyc.Service):
                 # If logprob_start_len > 0, then first logprob_start_len prompt tokens
                 # will be ignored.
                 prompt_token_len = len(req.logprob)
-                token_ids = req.input_ids[-prompt_token_len :] + [next_token_ids[i]]
+                token_ids = req.input_ids[-prompt_token_len:] + [next_token_ids[i]]
                 token_logprobs = req.logprob + [last_logprobs[i]]
                 req.token_logprob = list(zip(token_ids, token_logprobs))
                 if req.logprob_start_len == 0:
@@ -575,9 +579,7 @@ class ModelRpcServer(rpyc.Service):
 
         # Forward
         logits, (_, _, last_logprobs) = self.model_runner.forward(
-            batch,
-            ForwardMode.DECODE,
-            batch.return_logprob,
+            batch, ForwardMode.DECODE
         )
         next_token_ids, _ = batch.sample(logits)
         next_token_ids = next_token_ids.cpu().tolist()
@@ -638,8 +640,7 @@ class ModelRpcServer(rpyc.Service):
                     "completion_tokens": len(req.input_ids)
                     + len(req.output_ids)
                     - req.prompt_tokens,
-                    "completion_tokens_wo_jump_forward":
-                    req.completion_tokens_wo_jump_forward
+                    "completion_tokens_wo_jump_forward": req.completion_tokens_wo_jump_forward,
                 }
                 if req.return_logprob:
                     meta_info["prompt_logprob"] = req.logprob
@@ -687,14 +688,19 @@ class ModelRpcServer(rpyc.Service):
                 batch.reqs = []
 
 
+class ModelRpcService(rpyc.Service):
+    exposed_ModelRpcServer = ModelRpcServer
+
+
 class ModelRpcClient:
     def __init__(self, server_args: ServerArgs, port_args: PortArgs):
         tp_size = server_args.tp_size
 
         if tp_size == 1:
             # Init model
-            self.model_server = ModelRpcServer()
-            self.model_server.exposed_init_model(0, server_args, port_args)
+            self.model_server = ModelRpcService().exposed_ModelRpcServer(
+                0, server_args, port_args
+            )
 
             # Wrap functions
             def async_wrap(f):
@@ -714,14 +720,16 @@ class ModelRpcClient:
             with ThreadPoolExecutor(tp_size) as executor:
                 # Launch model processes
                 rets = executor.map(start_model_process, port_args.model_rpc_ports)
-                self.model_servers = [x[0] for x in rets]
+                self.remote_services = [x[0] for x in rets]
                 self.procs = [x[1] for x in rets]
 
                 # Init model
                 def init_model(i):
-                    return self.model_servers[i].init_model(i, server_args, port_args)
+                    return self.remote_services[i].ModelRpcServer(
+                        i, server_args, port_args
+                    )
 
-                rets = [obtain(x) for x in executor.map(init_model, range(tp_size))]
+                self.model_servers = executor.map(init_model, range(tp_size))
 
             # Wrap functions
             def async_wrap(func_name):
@@ -743,7 +751,7 @@ class ModelRpcClient:
 
 def _init_service(port):
     t = ThreadedServer(
-        ModelRpcServer(),
+        ModelRpcService(),
         port=port,
         protocol_config={"allow_pickle": True, "sync_request_timeout": 1800},
     )

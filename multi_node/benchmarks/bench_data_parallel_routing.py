@@ -267,7 +267,7 @@ def test_oracle_random_basic(num_workloads, distribution_of_non_shared, num_requ
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GLPM)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="tool_bench_4096_cropped_to_50.log")
+    logging.basicConfig(level=logging.DEBUG, filename="tool_bench_debug_2.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -282,7 +282,6 @@ if __name__ == "__main__":
         # [50, 0.2, 1024, 50],
         # [100, 0.2, 2048, 16],
         # [200, 0.2, 4096, 50],
-
 
 
         # (25,0.2, 1024, 10),
