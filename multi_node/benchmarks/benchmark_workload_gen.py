@@ -12,6 +12,9 @@ from transformers import (
 from typing import List, Optional, Tuple, Union
 import math
 import copy
+from collections import defaultdict
+import scipy.stats as ss
+
 
 random.seed(10)
 np.random.seed(10)
@@ -206,7 +209,7 @@ class ToolBenchDataLoader(DataLoader):
         data = json.load(open(self.data_path, 'r'))
         return data
     
-    def generate_workload(self):
+    def generate_workload(self, k = None):
         workload = []
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
@@ -237,6 +240,46 @@ class ToolBenchDataLoader(DataLoader):
         #                     "temperature": 0,
         #                     "max_new_tokens": output_len
         #                 }))
+        elif self.load_dist == LoadDistribution.MANUAL:
+            assert k is not None
+            prefix_stats = sorted([(p, len(l)) for p, l in self.data.items()], key=lambda x: x[1], reverse=True)[:self.num_patterns]
+            # ZIPF distribution
+            # sample hit to each selected prefix with the given distribution
+            hist = []
+            while len(hist) < self.total_num_requests:
+                tool_uses = np.random.zipf(a=k, size=self.num_patterns)
+                valid_tool_uses = [t for t in tool_uses if t < self.num_patterns]
+                hist.extend(valid_tool_uses[:self.total_num_requests - len(hist)])
+            
+            # Normal distribution
+            # x = np.arange(0, self.num_patterns)
+            # xU, xL = x + 0.5, x - 0.5 
+            # prob = ss.norm.cdf(xU, scale = 3, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = 3, loc=self.num_patterns//2)
+            # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
+            # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
+            
+            import matplotlib.pyplot as plt
+            plt.hist(hist, bins=self.num_patterns)
+            plt.savefig("hist.png")
+            tool_usage = defaultdict(int)
+            for tool_index in hist:
+                tool_usage[tool_index] += 1
+            workload = []
+            for tool_index, num_requests in tool_usage.items():
+                prefix = prefix_stats[tool_index][0]
+                selected_instances = np.random.choice(self.data[prefix], num_requests, replace=True)
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e['output']).input_ids)
+                    workload.append(
+                        {
+                            "text": e['prompt'], 
+                            'input_ids': self.tokenizer(e['prompt']),
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len
+                            }
+                        }
+                    )
         else:
             raise NotImplementedError()
         print(len(workload))
