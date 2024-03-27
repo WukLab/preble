@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from sglang.srt.sampling_params import SamplingParams
+from sglang.srt.managers.router.infer_batch import Req
 
 
 @dataclass
@@ -82,6 +83,8 @@ class TokenizedGenerateReqInput:
 class SchedulingMetricsReqInput:
     rid: str
     input_ids: List[int]
+    tokenizer_dispatch_time: float
+    manager_recv_time: float
 
 @dataclass
 class SchedulingMetricsOut:
@@ -97,7 +100,10 @@ class SchedulingMetricsOut:
     total_radix_cache_processing_time: float
     queue_processing_time: float
     inner_router_time: float
+    waiting_time_tokenizer_manager: float
     matching_overhead: float
+    manager_dispatch_time: float
+    manager_recv_time: float
 
 @dataclass
 class BatchTokenIDOut:
@@ -116,7 +122,11 @@ class BatchStrOut:
     output_str: List[str]
     meta_info: List[Dict]
     finished: List[bool]
-
+    
+@dataclass
+class MigrationReq:
+    requets: List[Req]
+    radix_cache = None
 
 @dataclass
 class FlushCacheReq:
@@ -126,3 +136,7 @@ class FlushCacheReq:
 @dataclass
 class DetokenizeReqInput:
     input_ids: List[int]
+    
+@dataclass
+class DumpTrace:
+    fpath: str

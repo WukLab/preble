@@ -5,6 +5,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
+import json
 
 import numpy as np
 import rpyc
@@ -35,6 +36,7 @@ from sglang.srt.utils import (
 )
 from vllm.logger import _default_handler as vllm_default_handler
 from collections import deque
+import os
 
 logger = logging.getLogger("model_rpc")
 
@@ -105,7 +107,7 @@ class ModelRpcServer(rpyc.Service):
             f"max_total_num_token={self.max_total_num_token}, "
             f"max_prefill_num_token={self.max_prefill_num_token}, "
             f"context_len={self.model_config.context_len}, "
-            f"model_mode={self.model_mode}"
+            f"model_mode={self.model_mode} "
         )
 
         # Init cache
@@ -148,6 +150,9 @@ class ModelRpcServer(rpyc.Service):
         self.new_token_ratio = min(0.4 * server_args.schedule_conservativeness, 1.0)
         self.min_new_token_ratio = min(0.2 * server_args.schedule_conservativeness, 1.0)
         self.new_token_ratio_step = (0.0001, 0.05)  # (down, up)
+        self.log_prefix_hit = server_args.log_prefix_hit
+        self.prefix_hit_trace = []
+        self.last_batch_schedule_time = time.time()
 
     def flush_cache(self):
         if len(self.forward_queue) == 0 and (
@@ -166,6 +171,19 @@ class ModelRpcServer(rpyc.Service):
                 f"#queue-req: {len(self.forward_queue)}, "
                 f"#running-req: {0 if self.running_batch is None else len(self.running_batch.reqs)}"
             )
+            
+    def waiting_queue_prefix_hit(self, s: SchedulingMetricsReqInput):
+        max_pref_length = 0
+        for req in self.forward_queue:
+            for i, (a, b) in enumerate(zip(s.input_ids, req.input_ids)):
+                if a != b:
+                    max_pref_length = max(max_pref_length, i)
+                    break
+            else:
+                if len(req.input_ids) >= len(s.input_ids):
+                    max_pref_length = len(s.input_ids) - 1
+                    break
+        return max_pref_length
 
     def exposed_scheduler_metrics_request(self, recv_req: SchedulingMetricsReqInput):
         """
@@ -175,6 +193,8 @@ class ModelRpcServer(rpyc.Service):
         """
         start_time = time.time()
         prefix_indices, last_node = self.tree_cache.match_prefix(recv_req.input_ids)
+        # max_prefix_match = max(len(prefix_indices), self.waiting_queue_prefix_hit(recv_req))
+        max_prefix_match = len(prefix_indices)
         match_overhead = time.time() - start_time
         average_waiting_queue_len = sum(self.forward_queue_len_buffer) / len(self.forward_queue_len_buffer) if len(self.forward_queue_len_buffer) > 0 else 0
         average_running_batch_len = sum(self.running_batch_len_buffer) / len(self.running_batch_len_buffer) if len(self.running_batch_len_buffer) > 0 else 0     
@@ -184,7 +204,7 @@ class ModelRpcServer(rpyc.Service):
             input_len=len(recv_req.input_ids),
             waiting_queue_len=average_waiting_queue_len,
             running_req_len=average_running_batch_len,
-            prefix_match_len= len(prefix_indices),
+            prefix_match_len= max_prefix_match,
             token_kv_available_size=self.token_to_kv_pool.available_size(),
             evicatable_size=self.tree_cache.evictable_size(),
             tree_cache_metrics_hit=self.tree_cache_metrics["hit"],
@@ -192,10 +212,19 @@ class ModelRpcServer(rpyc.Service):
             total_radix_cache_processing_time=time.time() - start_time,
             queue_processing_time=time.time(),
             inner_router_time=0,
+            waiting_time_tokenizer_manager=0,
             matching_overhead=match_overhead * 1000,
+            manager_dispatch_time=0,
+            manager_recv_time=0,
         )
         return out
 
+    def exposed_get_migration_candidates(self):
+        if self.tp_size != 1:
+            raise ValueError("TP>1 migration is not considered when implemented")
+        ret = self.forward_queue
+        self.forward_queue = []
+        return ret
 
     def exposed_step(self, recv_reqs):
         if self.tp_size != 1:
@@ -319,6 +348,10 @@ class ModelRpcServer(rpyc.Service):
             and len(self.running_batch.reqs) > self.max_num_running_seq
         ):
             return None
+        
+        # if len(self.forward_queue) <= 100 and time.time() - self.last_batch_schedule_time < 5:
+        #     return None
+        # self.last_batch_schedule_time = time.time()
 
         for req in self.forward_queue:
             prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
@@ -403,7 +436,9 @@ class ModelRpcServer(rpyc.Service):
             tree_cache_hit_rate = (
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
-            logger.info(
+            current_gpu = os.environ['CUDA_VISIBLE_DEVICES'].split(",")[torch.cuda.current_device()]
+            logger.debug(
+                f"GPU: {current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
                 f"#new_token: {new_batch_input_tokens}. "
@@ -412,13 +447,13 @@ class ModelRpcServer(rpyc.Service):
                 f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%."
                 f"hit_tokens: {hit_tokens}."
             )
-            logger.debug(
-                f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
-                f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
-                f"ff_cache_hit_rate: {100.0 * self.jump_forward_cache.get_cache_hit_rate():.2f}%. "
-                f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
-                f"hit_tokens: {hit_tokens}."
-            )
+            # logger.debug(
+            #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
+            #     f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
+            #     f"ff_cache_hit_rate: {100.0 * self.jump_forward_cache.get_cache_hit_rate():.2f}%. "
+            #     f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
+            #     f"hit_tokens: {hit_tokens}."
+            # )
             self.forward_queue_len_buffer.append(len(self.forward_queue))
             self.running_batch_len_buffer.append(running_req)
 
@@ -429,7 +464,14 @@ class ModelRpcServer(rpyc.Service):
             self.tree_cache,
         )
         self.forward_queue = [x for x in self.forward_queue if x not in can_run_list]
+        if self.log_prefix_hit:
+            self.prefix_hit_trace.append({x.rid: [x.input_text[:20], len(x.prefix_indices)] for x in can_run_list})
+                
         return new_batch
+    
+    def dump_prefix_hit_trace(self, path: str):
+        with open(path, 'w') as f:
+            json.dump(self.prefix_hit_trace, f)        
 
     def forward_fill_batch(self, batch: Batch):
         # Build batch tensors
@@ -662,9 +704,12 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap(self.model_server.exposed_step)
+            self.push_req_step = async_wrap(self.model_server.handle_generate_request)
+            self.get_migrate_candidates = async_wrap(self.model_server.exposed_get_migration_candidates)
             self.scheduler_metrics_request = async_wrap(
                 self.model_server.exposed_scheduler_metrics_request
             )
+            self.dump_prefix_hit_trace = async_wrap(self.model_server.dump_prefix_hit_trace)
         else:
             with ThreadPoolExecutor(tp_size) as executor:
                 # Launch model processes
@@ -690,6 +735,8 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap("step")
+            # TODO: test push_req_step in TP mode
+            self.push_req_step = async_wrap("handle_generate_request")
             self.scheduler_metrics_request = async_wrap(
                 self.model_server.exposed_scheduler_metrics_request
             ) # TODO test metric collection in TP mode

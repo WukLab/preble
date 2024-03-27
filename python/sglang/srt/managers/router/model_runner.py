@@ -230,6 +230,22 @@ class InputMetadata:
 
         return ret
 
+def initialize_dummy_weights(
+    model: torch.nn.Module,
+    low: float = -1e-3,
+    high: float = 1e-3,
+) -> None:
+    """Initialize model weights with random values.
+
+    The model weights must be randomly initialized for accurate performance
+    measurements. Additionally, the model weights should not cause NaNs in the
+    forward pass. We empirically found that initializing the weights with
+    values between -1e-3 and 1e-3 works well for most models.
+    """
+    for param in model.state_dict().values():
+        if torch.is_floating_point(param):
+            param.data.uniform_(low, high)
+
 
 class ModelRunner:
     def __init__(
@@ -305,12 +321,15 @@ class ModelRunner:
                 model = model_class(
                     config=self.model_config.hf_config, linear_method=linear_method
                 )
-            model.load_weights(
-                self.model_config.path,
-                cache_dir=None,
-                load_format=self.load_format,
-                revision=None,
-            )
+            if self.load_format == 'dummy':
+                initialize_dummy_weights(model)
+            else:
+                model.load_weights(
+                    self.model_config.path,
+                    cache_dir=None,
+                    load_format=self.load_format,
+                    revision=None,
+                )
         self.model = model.eval()
 
         logger.info(f"Rank {self.tp_rank}: load weight end.")
@@ -324,6 +343,7 @@ class ModelRunner:
         )
         head_num = self.model_config.num_key_value_heads // self.tp_size
         cell_size = head_num * head_dim * self.model_config.num_hidden_layers * 2 * 2
+        logger.info(f'kv one token size: {head_num} * {head_dim} * {self.model_config.num_hidden_layers} * 2 * 2 = {cell_size} bytes')
         rest_memory = available_gpu_memory - total_gpu_memory * (
             1 - self.mem_fraction_static
         )

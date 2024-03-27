@@ -30,6 +30,8 @@ class ServerArgs:
     disable_disk_cache: bool = False
     cuda_devices: Optional[List[int]] = None
     metrics_buffer_size: int = 5
+    freeze: bool = False
+    log_prefix_hit: bool = False
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -195,6 +197,22 @@ class ServerArgs:
             "--cuda-devices",
             help="Cuda devices.",
         )
+        parser.add_argument(
+            "--metrics-buffer-size",
+            type=int,
+            default=ServerArgs.metrics_buffer_size,
+            help="The buffer size for storing metrics",
+        )
+        parser.add_argument(
+            "--freeze",
+            action="store_true",
+            help="Whether the server should loop forward",
+        )
+        parser.add_argument(
+            "--log-prefix-hit",
+            action="store_true",
+            help="Whether the server should log prefix hit",
+        )
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace):
@@ -211,4 +229,5 @@ class PortArgs:
     router_port: int
     detokenizer_port: int
     nccl_port: int
+    migrate_port: int
     model_rpc_ports: List[int]

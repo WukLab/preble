@@ -133,13 +133,13 @@ def handle_port_init(
     can_use_ports = [port for port in additional_unique_ports if check_port(port)]
 
     num_specified_ports = len(can_use_ports)
-    if num_specified_ports < 4 + tp_size + num_metrics_port:
+    if num_specified_ports < 5 + tp_size + num_metrics_port:
         addtional_can_use_ports = alloc_usable_network_port(
-            num=4 + tp_size - num_specified_ports + num_metrics_port, used_list=can_use_ports + [port]
+            num=5 + tp_size - num_specified_ports + num_metrics_port, used_list=can_use_ports + [port]
         )
         can_use_ports.extend(addtional_can_use_ports)
 
-    additional_ports = can_use_ports[: 4 + tp_size + num_metrics_port]
+    additional_ports = can_use_ports[: 5 + tp_size + num_metrics_port]
     return port, additional_ports
 
 

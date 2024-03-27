@@ -13,7 +13,7 @@ class MultiNodeLoader:
         )
         self.current_gpu_memory_usage = get_gpu_profile()
 
-    def load_model(self, model_path, gpus=[], urls=[]) -> ModelDetails:
+    def load_model(self, model_path, gpus=[], urls=[], **kwargs) -> ModelDetails:
         """
         Load a model onto the specified gpus
 
@@ -21,7 +21,7 @@ class MultiNodeLoader:
         There's also a question on how to unload memory
         """
         model_details = ModelDetails(model_path, gpus)
-        model_details.load_runtimes(model_path=model_path, gpus=gpus, urls=urls)
+        model_details.load_runtimes(model_path=model_path, gpus=gpus, urls=urls, **kwargs)
         # TODO verify if the memory is available
         self.models_allocated.append(model_details)
         for gpu in gpus:

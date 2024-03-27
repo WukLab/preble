@@ -23,7 +23,8 @@ from sglang.srt.managers.io_struct import (
     GenerateReqInput,
     TokenizedGenerateReqInput,
     SchedulingMetricsReqInput,
-    SchedulingMetricsOut
+    SchedulingMetricsOut,
+    DumpTrace
 )
 from sglang.srt.mm_utils import expand2square, process_anyres_image
 from sglang.srt.sampling_params import SamplingParams
@@ -124,6 +125,7 @@ class TokenizerManager:
 
         self.to_create_loop = True
         self.rid_to_state: Dict[str, ReqState] = {}  # Dict[str -> ReqState]
+        self.tokenizer_pool = concurrent.futures.ThreadPoolExecutor()
 
     async def get_pixel_values(self, image_data):
         aspect_ratio = getattr(self.hf_config, "image_aspect_ratio", None)
@@ -143,24 +145,29 @@ class TokenizerManager:
             return get_pixel_values(
                 image_data, aspect_ratio, grid_pinpoints, self.processor
             )
+    
+    async def schedule_migration_request(self, url: str):
+        self.send_to_router.send_pyobj(url)
 
     async def get_scheduling_metrics(self, text: str):
         """
         Assume the input isn't tokenized and sends the request to the router to get the individual request metrics
         """
         start_time = time.time()
-        input_ids = self.tokenizer.encode(text)
+        # input_ids = self.tokenizer.encode(text)
+        loop = asyncio.get_running_loop()
+        input_ids = await loop.run_in_executor(self.tokenizer_pool, self.tokenizer.encode, text)
         tokenization_time = time.time() 
 
         rid = str(uuid.uuid4())
         scheduling_metric_request = SchedulingMetricsReqInput(
             rid=rid,
             input_ids=input_ids,
+            tokenizer_dispatch_time=time.time(),
+            manager_recv_time=0,
         )
-        rid = scheduling_metric_request.rid
-
-        self.send_to_router.send_pyobj(scheduling_metric_request)
-        routing_time = time.time()
+        await self.send_to_router.send_pyobj(scheduling_metric_request)
+        routing_time = scheduling_metric_request.tokenizer_dispatch_time
         
         lock = asyncio.Lock()
         event = asyncio.Event()
@@ -174,7 +181,45 @@ class TokenizerManager:
         result["tokenization_time"] = tokenization_time - start_time
         result["routing_time"] = routing_time - tokenization_time
         result["return_time"] = time.time()
+        result["waiting_time"] = result['return_time'] - routing_time
         return result
+    
+    async def add_request_to_queue(self, obj: GenerateReqInput):
+        if self.to_create_loop:
+            await self.create_handle_loop()
+        rid = obj.rid
+        input_ids = self.tokenizer.encode(obj.text)
+        sampling_params = SamplingParams(**obj.sampling_params)
+        if sampling_params.max_new_tokens != 0:
+            sampling_params.normalize(self.tokenizer)
+            sampling_params.verify()
+
+        if isinstance(obj.image_data, list) and len(obj.image_data) > 0:
+            pixel_values, image_hash, image_size = await self.get_pixel_values(
+                obj.image_data[0]
+            )
+        elif isinstance(obj.image_data, str):
+            pixel_values, image_hash, image_size = await self.get_pixel_values(
+                obj.image_data
+            )
+        else:
+            pixel_values, image_hash, image_size = None, None, None
+        tokenized_obj = TokenizedGenerateReqInput(
+            rid=rid,
+            input_text=obj.text,
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_hash=image_hash,
+            image_size=image_size,
+            sampling_params=sampling_params,
+            return_logprob=obj.return_logprob,
+            logprob_start_len=obj.logprob_start_len,
+            stream=obj.stream,
+        )
+        await self.send_to_router.send_pyobj(tokenized_obj)
+    
+    async def dump_prefix_hit_trace(self, fpath: str):
+        await self.send_to_router.send_pyobj(DumpTrace(fpath))
 
     async def generate_request(self, obj: GenerateReqInput):
         if self.to_create_loop:
@@ -313,7 +358,10 @@ class TokenizerManager:
                     "input_len": recv_obj.input_len,
                     "total_radix_cache_processing_time": recv_obj.total_radix_cache_processing_time,
                     "queue_processing_time": time.time() - recv_obj.queue_processing_time,
+                    'tokenizer_manager_waiting_time': recv_obj.waiting_time_tokenizer_manager,
                     "inner_router_time": recv_obj.inner_router_time,
+                    "manager_tokenizer_waiting_time": time.time() - recv_obj.manager_dispatch_time,
+                    "manager_recv_time": recv_obj.manager_recv_time,
                     "matching_overhead": recv_obj.matching_overhead,
                 }
                 state = self.rid_to_state[recv_obj.rid]

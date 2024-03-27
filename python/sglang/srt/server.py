@@ -32,7 +32,7 @@ from sglang.srt.conversation import (
 )
 from sglang.srt.hf_transformers_utils import get_tokenizer
 from sglang.srt.managers.detokenizer_manager import start_detokenizer_process
-from sglang.srt.managers.io_struct import DetokenizeReqInput, GenerateReqInput
+from sglang.srt.managers.io_struct import DetokenizeReqInput, GenerateReqInput, MigrationReq
 from sglang.srt.managers.openai_protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -148,6 +148,18 @@ async def generate_request(obj: GenerateReqInput):
 
     return ret
 
+# Just add request wihout expecting result
+@app.post("/add_request")
+async def add_request(obj: GenerateReqInput):
+    obj.post_init()
+    await tokenizer_manager.add_request_to_queue(obj)
+    return Response(status_code=200)
+
+@app.post("/migrate_control")
+async def migrate_request(migration_target_url: str):
+    await tokenizer_manager.schedule_migration_request(migration_target_url)
+    return Response(status_code=200)
+
 @app.post("/scheduling_metrics")
 async def scheduling_metrics(raw_request: Request):
     """
@@ -185,6 +197,13 @@ async def scheduling_metrics(raw_request: Request):
     ret["total_internal_request_time"] = time.time() - start_time
     return ret
 
+@app.post("/dump_prefix_hit_trace")
+async def dump_prefix_hit_trace(fpath: str):
+    """
+    Ask the runtime to log prefix hit trace to the provided file path    
+    """
+    await tokenizer_manager.dump_prefix_hit_trace(fpath)
+    return Response(status_code=200)
 
 @app.post("/v1/completions")
 async def v1_completions(raw_request: Request):
@@ -445,8 +464,10 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
         router_port=server_args.additional_ports[1],
         detokenizer_port=server_args.additional_ports[2],
         nccl_port=server_args.additional_ports[3],
-        model_rpc_ports=server_args.additional_ports[4:],
+        migrate_port=server_args.additional_ports[4],
+        model_rpc_ports=server_args.additional_ports[5:],
     )
+    logger.info(f'{server_args.url()}, ports: {port_args}')
 
     # Load chat template if needed
     if server_args.chat_template is not None:
@@ -545,31 +566,32 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
             return
 
         # Warmup
-        try:
-            # print("Warmup...", flush=True)
-            res = requests.post(
-                url + "/generate",
-                json={
-                    "text": "Say this is a warmup request.",
-                    "sampling_params": {
-                        "temperature": 0,
-                        "max_new_tokens": 16,
+        if not server_args.freeze:
+            try:
+                # print("Warmup...", flush=True)
+                res = requests.post(
+                    url + "/generate",
+                    json={
+                        "text": "Say this is a warmup request.",
+                        "sampling_params": {
+                            "temperature": 0,
+                            "max_new_tokens": 16,
+                        },
                     },
-                },
-                timeout=60,
-            )
-            # print(f"Warmup done. model response: {res.json()['text']}")
-            # print("=" * 20, "Server is ready", "=" * 20, flush=True)
-        except requests.exceptions.RequestException as e:
-            if pipe_finish_writer is not None:
-                pipe_finish_writer.send(str(e))
-            else:
-                print(e, flush=True)
-            return
+                    timeout=60,
+                )
+                # print(f"Warmup done. model response: {res.json()['text']}")
+                # print("=" * 20, "Server is ready", "=" * 20, flush=True)
+            except requests.exceptions.RequestException as e:
+                if pipe_finish_writer is not None:
+                    pipe_finish_writer.send(str(e))
+                else:
+                    print(e, flush=True)
+                return
 
         if pipe_finish_writer is not None:
             pipe_finish_writer.send("init ok")
-
+            
     t = threading.Thread(target=_wait_and_warmup)
     t.start()
     try:
@@ -597,7 +619,10 @@ class Runtime:
         port: Optional[int] = None,
         additional_ports: Optional[Union[List[int], int]] = None,
         cuda_devices: Optional[List[int]] = None,
+        freeze: bool = False,
+        log_prefix_hit: bool = False,
     ):
+        logger.info(f'mem_fraction_static: {mem_fraction_static}')
         host = "127.0.0.1"
         port, additional_ports = handle_port_init(port, additional_ports, tp_size)
         self.server_args = ServerArgs(
@@ -618,6 +643,8 @@ class Runtime:
             random_seed=random_seed,
             log_level=log_level,
             cuda_devices=cuda_devices,
+            freeze=freeze,
+            log_prefix_hit=log_prefix_hit,
         )
 
         self.url = self.server_args.url()

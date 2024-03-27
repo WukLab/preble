@@ -2,6 +2,20 @@ import random
 import json
 import string
 
+import numpy as np
+import random
+from enum import Enum, auto
+from transformers import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+)
+from typing import List, Optional, Tuple, Union
+import math
+import copy
+
+random.seed(10)
+np.random.seed(10)
+
 ReActWorkloadEx1 = """
 Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
 Thought 1: I need to search Colorado orogeny, find the area that the eastern sector of the Colorado orogeny extends into, then find the elevation range of the area.
@@ -128,3 +142,106 @@ def generate_random_workload():
                 break
     return prompts
     # print(sum(avg)/len(avg))
+
+class LoadDistribution(Enum):
+    EVEN = auto()
+    ALL = auto()
+    
+class DataLoader:
+    def __init__(
+        self,
+        data_path: str,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        load_dist: LoadDistribution = LoadDistribution.EVEN
+    ):
+        self.data_path = data_path
+        self.num_patterns = num_patterns
+        self.total_num_requests = total_num_requests
+        self.tokenizer = tokenizer
+        self.load_dist = load_dist
+
+    def generate_workload(self):
+        raise NotImplementedError()
+    
+class RandomDataLoader(DataLoader):
+    def __init__(
+        self,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
+        distribution_of_non_shared: float = 0.0,
+        output_len: int = 1,
+    ):
+        super().__init__("random", num_patterns, total_num_requests, tokenizer, load_dist)
+        self.distribution_of_non_shared = distribution_of_non_shared
+        self.output_len = output_len
+    
+    def generate_workload(self):
+        num_prefixed_shared = int(self.total_num_requests * (1 - self.distribution_of_non_shared))
+        num_non_shared = int(self.total_num_requests * self.distribution_of_non_shared)
+        prompts = []
+        sampling_params = {
+            "experiment_id": f"random_experiment_{self.num_patterns}_{self.distribution_of_non_shared}_{self.total_num_requests}",
+            "temperature": 0,
+            "max_new_tokens": 1
+        }
+        for i in range(num_prefixed_shared):
+            workload_num = i % self.num_patterns
+            prompts.append((get_react_workload(f"Workload {workload_num} "), copy.deepcopy(sampling_params)))
+        random_workload = generate_random_workload()
+        for _ in range(num_non_shared):
+            prompts.append((random.choice(random_workload), copy.deepcopy(sampling_params)))
+        random.shuffle(prompts)
+        return prompts
+    
+class ToolBenchDataLoader(DataLoader):
+    def __init__(self, data_path: str, num_patterns: int, total_num_requests: int, tokenizer, load_dist: LoadDistribution = LoadDistribution.EVEN):
+        super().__init__(data_path, num_patterns, total_num_requests, tokenizer, load_dist)
+        self.data = self.read_data()
+        
+    def read_data(self):
+        data = json.load(open(self.data_path, 'r'))
+        return data
+    
+    def generate_workload(self):
+        workload = []
+        if self.load_dist == LoadDistribution.EVEN:
+            load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
+            prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
+            selected_prefixs = np.random.choice(prefix_stats, self.num_patterns, replace=False)
+            for p in selected_prefixs:
+                selected_instances = np.random.choice(self.data[p], load_threshold, replace=False)
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e['output']).input_ids)
+                    workload.append(
+                        {
+                            "text": e['prompt'], 
+                            'input_ids': self.tokenizer(e['prompt']),
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len
+                            }
+                        }
+                    )
+
+        # elif self.load_dist == LoadDistribution.ALL:
+        #     for tool, items in self.data.items():
+        #         for item in items:
+        #             output_len = len(self.tokenizer(item['output']).input_ids)
+        #             workload.append((
+        #                 e['prompt'], 
+        #                 {
+        #                     "temperature": 0,
+        #                     "max_new_tokens": output_len
+        #                 }))
+        else:
+            raise NotImplementedError()
+        print(len(workload))
+        random.shuffle(workload)
+        # save to json
+        with open(f"workload_{self.num_patterns}_{self.total_num_requests}.json", 'w') as f:
+            json.dump([{"text": item['text']} for item in workload], f)
+        return workload
