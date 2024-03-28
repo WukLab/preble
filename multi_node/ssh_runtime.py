@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger('SSHRuntimeLogger')
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -23,7 +23,7 @@ def stream_logger(name, stream):
             line = stream.readline()
             if not line:
                 break
-            logger.info(f"{name}: {line.strip()}")
+            logger.info(f"{line.strip()}")
     finally:
         stream.close()
 
@@ -104,10 +104,8 @@ class SSHRuntimeManager:
         self.process_pid = pid
         self.port = port
 
-        stdout_thread = threading.Thread(target=stream_logger, args=("STDOUT", stdout), daemon=True)
         stderr_thread = threading.Thread(target=stream_logger, args=("STDERR", stderr), daemon=True)
         
-        stdout_thread.start()
         stderr_thread.start()
         
         return port   

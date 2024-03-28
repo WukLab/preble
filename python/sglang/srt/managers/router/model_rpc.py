@@ -443,7 +443,7 @@ class ModelRpcServer:
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
             current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
-            logger.debug(
+            logger.info(
                 f"GPU: {current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
