@@ -44,12 +44,6 @@ class DataParallelRequestRouter:
     def select_runtime(self, text, experiment_id, request_id, input_ids=None) -> str:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)
-        elif (
-            self.runtime_selection_policy
-            == DataParallelRuntimeSelectionPolicy.CONSISTENT_HASH
-        ):
-            # prefix cache -> consistent hash select which runtime
-            selected_runtime = self.consistent_radix_hash.get_node_for_key(text)
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
             selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids)
         else:

@@ -568,6 +568,7 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
     if server_args.api_key and server_args.api_key != "":
         app.add_middleware(APIKeyValidatorMiddleware, api_key=server_args.api_key)
 
+    print(f"Server is on port {server_args.port} on host {server_args.host} on pid {os.getpid()}")
     def _launch_server():
         uvicorn.run(
             app,
@@ -662,7 +663,8 @@ class Runtime:
         log_prefix_hit: bool = False,
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
-        host = "127.0.0.1"
+        # host = "127.0.0.1"
+        host = "0.0.0.0"
         port, additional_ports = handle_port_init(port, additional_ports, tp_size)
         self.server_args = ServerArgs(
             model_path=model_path,
@@ -698,7 +700,6 @@ class Runtime:
 
         self.pid = None
         pipe_reader, pipe_writer = mp.Pipe(duplex=False)
-
         proc = mp.Process(target=launch_server, args=(self.server_args, pipe_writer))
         proc.start()
         pipe_writer.close()
