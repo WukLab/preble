@@ -442,7 +442,7 @@ class ModelRpcServer:
             tree_cache_hit_rate = (
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
-            current_gpu = os.environ['CUDA_VISIBLE_DEVICES'].split(",")[torch.cuda.current_device()]
+            current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
             logger.debug(
                 f"GPU: {current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
