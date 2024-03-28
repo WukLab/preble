@@ -77,7 +77,7 @@ class SSHRuntime:
     def shutdown(self):
         if self.ssh_client:
             self.ssh_client.exec_command(f"pkill -f {self.port}")
-            self.ssh_client.exec_command(f"pkill -f sglang")
+            self.ssh_client.exec_command(f"pkill -f sglang") # TODO check this. this might kill if two people run exp4eriments together
             self.ssh_client.close()
 
     def kwargs_to_cli_args(self, **kwargs):

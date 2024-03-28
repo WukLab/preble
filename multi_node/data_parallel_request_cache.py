@@ -6,6 +6,7 @@ from typing import List, Optional
 from dataclasses import dataclass
 random.seed(10)
 import time
+import pandas as pd
 
 @dataclass
 class CustomRuntimeSelector:
@@ -61,3 +62,9 @@ class DataParallelRequestRouter:
 
     def update_runtime_selection_policy(self, runtime_selection_policy):
         self.runtime_selection_policy = runtime_selection_policy
+
+    def get_model_selection_counts(self):
+        df = pd.DataFrame(self.model_selection_stats)
+        df.drop("text", axis=1, inplace=True)
+        counts = df["selected_runtime"].value_counts().to_dict()
+        return counts
