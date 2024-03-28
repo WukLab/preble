@@ -14,6 +14,15 @@ import json
 import asyncio
 import numpy as np
 import time
+import paramiko
+from ssh_runtime import SSHRuntimeManager
+
+class GPUConfig:
+    def __init__(self, gpu_id, url=None, use_ssh=False, ssh_config={}) -> None:
+        self.gpu_id = gpu_id
+        self.url = url
+        self.use_ssh = use_ssh
+        self.ssh_config = ssh_config
 
 @dataclass
 class EndpointRuntimeInterface:
@@ -48,6 +57,9 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
         super().__init__(*args, **kwargs)
         self.gpu = gpu
 
+class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)
@@ -59,48 +71,55 @@ class ModelDetails:
     """
 
     def __init__(
-        self, model_path, gpus, runtime_selection_policy=DataParallelRuntimeSelectionPolicy.RANDOM
+        self, model_path, gpu_configs, runtime_selection_policy=DataParallelRuntimeSelectionPolicy.RANDOM
     ) -> None:
         self.model_path = model_path
         self.weights = []
         self.runtimes: List[EndpointRuntimeInterface] = []
         self.request_router: DataParallelRequestRouter = DataParallelRequestRouter(
-            runtime_selection_policy, total_nodes=len(gpus)
+            runtime_selection_policy, total_nodes=len(gpu_configs)
         )
-        self.consistent_radix_hash = ConsistentHashingWithRadixCache(
-            num_nodes=len(gpus)
-        )
-        self.gpus = set(gpus)
+        # self.gpus = set(gpus)
+        self.gpu_configs = gpu_configs
         self.start_time = None
         self.request_sent_time = []
         self.current_experiment_state_time = None
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
-    def load_runtimes(self, model_path, gpus, urls=[], **kwargs):
+    def load_runtimes(self, model_path, gpu_configs, **kwargs):
         print(kwargs)
-        def load_runtime(index, gpu):
+        def load_runtime(config: GPUConfig):
             runtime: EndpointRuntimeInterface
-            if len(urls) > 0:
-                runtime = EndpointRuntimeInterface(
-                    url=urls[index], 
-                    gpu=gpu,
-                    **kwargs,
+            gpu_id = config.gpu_id
+            if config.use_ssh:
+                runtime = SSHRuntime(
+                    model_path=model_path,
+                    ssh_config=config.ssh_config,
+                    gpu=gpu_id,
+                    cuda_devices=gpu_id,
+                    context_length=4096,
+                    **kwargs
                 )
+            elif config.url:
+                runtime = URLRuntime(
+                    config.url, 
+                    cuda_devices=[gpu_id],
+                    context_length=4096,
+                    **kwargs)
             else:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
-                    cuda_devices=[gpu],
+                    cuda_devices=[gpu_id],
+                    gpu=gpu_id,
                     context_length=4096,
-                    gpu=gpu,
                     **kwargs,
                 )
             self.runtimes.append(runtime)
-            self.gpus.add(gpu)
 
         # parallelizae loading for each gpu
-        for index, gpu in enumerate(gpus):
-            load_runtime(index, gpu)
+        for config in gpu_configs:
+            load_runtime(config)
 
     def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
