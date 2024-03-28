@@ -27,6 +27,7 @@ class SSHRuntime:
         command = f'setsid /mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
         print("Running command", command)
         transport = self.ssh_client.get_transport()
+        transport.set_keepalive(30) # Send keepalive packets every 30 seconds
         channel = transport.open_session()
         self.channel = channel
         channel.update_environment(environment_variables)

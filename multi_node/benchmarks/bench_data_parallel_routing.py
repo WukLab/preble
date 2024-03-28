@@ -324,7 +324,7 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="tool_bench_4096_zipf.log")
+    logging.basicConfig(level=logging.DEBUG, filename="experiment_accurate_ttft.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -335,17 +335,20 @@ if __name__ == "__main__":
     # model_name = "lmsys/vicuna-13b-v1.5"
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
-        (4, 0.2, 64, 4),
+        # [200, 0.2, 1024, 50],
+        [300, 0.2, 4096, 100],
+        # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
-        # GPUConfig(gpu_id=0, url=None, use_ssh=False),
+        GPUConfig(gpu_id=0, url=None, use_ssh=False),
         # GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
-            "hostname": "192.168.1.18",
-            "username": "vikranth",
-            "port": 456,
-            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python"
-        }),
+        # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
+        #     "hostname": "192.168.1.18",
+        #     "username": "vikranth",
+        #     "port": 456,
+        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+        #     "node_name": "08",
+        # }),
         # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
         #     "hostname": "192.168.1.18",
         #     "username": "vikranth",

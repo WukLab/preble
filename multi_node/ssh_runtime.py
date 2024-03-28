@@ -11,7 +11,7 @@ formatter = logging.Formatter('%(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-def stream_logger(name, stream):
+def stream_logger(node_name, stream):
     """
     Reads from a stream line by line and logs each line.
     
@@ -20,9 +20,12 @@ def stream_logger(name, stream):
     """
     try:
         while True:
-            line = stream.readline()
+            line = stream.readline().strip()
             if not line:
                 break
+            pattern = r"(GPU:\s+(\d+))"
+            if node_name:
+                line = re.sub(pattern, rf"GPU: {node_name}_\2", line)
             logger.info(f"{line.strip()}")
     finally:
         stream.close()
@@ -34,6 +37,7 @@ class SSHRuntimeManager:
         self.gpu = gpu
         assert self.ssh_config
         self.ssh_client = self.initialize_ssh_client()
+        self.node_name = self.ssh_config.get("node_name")
         self.port = self.start_remote_runtime(**kwargs)
         # Initialize server with running these configs
         # Save url to url
@@ -63,6 +67,9 @@ class SSHRuntimeManager:
         transport = self.ssh_client.get_transport()
         channel = transport.open_session()
         self.channel = channel
+        self.transport = transport
+        self.transport.set_keepalive(30) # Send keepalive packets every 30 seconds
+
         channel.update_environment(environment_variables)
         channel.exec_command(command)
         stdout = channel.makefile('r', -1)
@@ -104,17 +111,17 @@ class SSHRuntimeManager:
         self.process_pid = pid
         self.port = port
 
-        stderr_thread = threading.Thread(target=stream_logger, args=("STDERR", stderr), daemon=True)
-        
-        stderr_thread.start()
-        
+        # stderr_thread = threading.Thread(target=stream_logger, args=(self.node_name, stderr), daemon=True)
+        # stderr_thread.start()
         return port   
     
     def shutdown(self):
         if self.ssh_client:
-            self.ssh_client.exec_command(f"pkill -f {self.port}")
-            self.ssh_client.exec_command(f"pkill -f sglang")
+            self.ssh_client.exec_command(f"pkill -KILL -f {self.port}")
+            stdin, stdout, stderr = self.ssh_client.exec_command("pkill -KILL -f sglang")
+            self.channel.close()
             self.ssh_client.close()
+
 
     def kwargs_to_cli_args(self, **kwargs):
         args = []
