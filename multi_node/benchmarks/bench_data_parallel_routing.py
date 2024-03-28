@@ -338,18 +338,19 @@ if __name__ == "__main__":
         (4, 0.2, 64, 4),
     ]
     gpu_configs = [
-        GPUConfig(gpu_id=0, url=None, use_ssh=False),
-        GPUConfig(gpu_id=1, url=None, use_ssh=False),
+        # GPUConfig(gpu_id=0, url=None, use_ssh=False),
+        # GPUConfig(gpu_id=1, url=None, use_ssh=False),
         GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
             "hostname": "192.168.1.18",
             "username": "vikranth",
             "port": 456,
+            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python"
         }),
-        GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
-            "hostname": "192.168.1.18",
-            "username": "vikranth",
-            "port": 456,
-        }),
+        # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
+        #     "hostname": "192.168.1.18",
+        #     "username": "vikranth",
+        #     "port": 456,
+        # }),
     ]
 
     for config in configurations_to_test:

@@ -1,6 +1,31 @@
 import paramiko
 import re, time
 import requests
+import threading
+import logging
+
+logger = logging.getLogger('SSHRuntimeLogger')
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+def stream_logger(name, stream):
+    """
+    Reads from a stream line by line and logs each line.
+    
+    :param name: A name to identify the stream in the logs.
+    :param stream: The stream to read from.
+    """
+    try:
+        while True:
+            line = stream.readline()
+            if not line:
+                break
+            logger.info(f"{name}: {line.strip()}")
+    finally:
+        stream.close()
 
 class SSHRuntimeManager:
     def __init__(self, model_path, ssh_config, gpu, **kwargs):
@@ -17,13 +42,23 @@ class SSHRuntimeManager:
     def initialize_ssh_client(self):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(**self.ssh_config)
+        ssh.connect(
+            hostname=self.ssh_config["hostname"],
+            username=self.ssh_config["username"],
+            port=self.ssh_config.get("port", 456),
+            key_filename=self.ssh_config.get("key_filename"),
+            password=self.ssh_config.get("password"),
+        )
         return ssh
 
     def start_remote_runtime(self, **kwargs):
         cli_args = self.kwargs_to_cli_args(**kwargs)
-        environment_variables = {'CUDA_VISIBLE_DEVICES': str(self.gpu)}
-        command = f'setsid /mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
+        environment_variables = {
+            'CUDA_VISIBLE_DEVICES': str(self.gpu),
+            'LOGLEVEL': 'DEBUG'
+        }
+        python_process = self.ssh_config.get("python_process", "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python")
+        command = f'setsid {python_process} -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
         print("Running command", command)
         transport = self.ssh_client.get_transport()
         channel = transport.open_session()
@@ -69,6 +104,12 @@ class SSHRuntimeManager:
         self.process_pid = pid
         self.port = port
 
+        stdout_thread = threading.Thread(target=stream_logger, args=("STDOUT", stdout), daemon=True)
+        stderr_thread = threading.Thread(target=stream_logger, args=("STDERR", stderr), daemon=True)
+        
+        stdout_thread.start()
+        stderr_thread.start()
+        
         return port   
     
     def shutdown(self):

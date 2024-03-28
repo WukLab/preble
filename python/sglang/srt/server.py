@@ -473,6 +473,10 @@ async def v1_chat_completions(raw_request: Request):
 def launch_server(server_args: ServerArgs, pipe_finish_writer):
     global tokenizer_manager
     global chat_template_name
+    logging.basicConfig(
+        level=os.environ.get('LOGLEVEL', 'INFO').upper()
+    )
+
     if server_args.cuda_devices:
        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in server_args.cuda_devices)
 
