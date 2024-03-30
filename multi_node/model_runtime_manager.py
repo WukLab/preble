@@ -45,7 +45,8 @@ class RequestFuncOutput:
     ):
         self.output_len = len(tokenizer(self.generated_text).input_ids)
         # print(self.output_len, self.generated_text, self.success, self.error)
-        self.tpot = (self.request_latency - self.ttft) / self.output_len
+        if self.output_len > 1:
+            self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
         self.prefill_decode_ratio = self.ttft / self.request_latency
 
     @property

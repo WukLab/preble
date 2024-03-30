@@ -198,7 +198,8 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
+    logging.basicConfig(level=logging.DEBUG, filename="testing.log")
+    # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -233,7 +234,7 @@ if __name__ == "__main__":
     for config in configurations_to_test:
         test_oracle_random_basic(
             *config,
-            exp_time=600,
+            exp_time=100,
             model_name=model_name,
             gpu_configs=gpu_configs,
             load_distribution=LoadDistribution.EVEN,
