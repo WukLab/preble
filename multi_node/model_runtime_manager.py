@@ -44,8 +44,8 @@ class RequestFuncOutput:
         tokenizer,
     ):
         self.output_len = len(tokenizer(self.generated_text).input_ids)
-        print(self.output_len, self.generated_text, self.success, self.error)
-        self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
+        # print(self.output_len, self.generated_text, self.success, self.error)
+        self.tpot = (self.request_latency - self.ttft) / self.output_len
         self.prefill_decode_ratio = self.ttft / self.request_latency
 
     @property
@@ -122,6 +122,7 @@ class ModelDetails:
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
+    # Send context-length like params from input
     def load_runtimes(self, model_path, gpu_configs, **kwargs):
         print(kwargs)
         def load_runtime(config: GPUConfig):
@@ -133,21 +134,21 @@ class ModelDetails:
                     ssh_config=config.ssh_config,
                     gpu=gpu_id,
                     cuda_devices=gpu_id,
-                    context_length=4096,
+                    # context_length=4096,
                     **kwargs
                 )
             elif config.url:
                 runtime = URLRuntime(
                     config.url, 
                     cuda_devices=[gpu_id],
-                    context_length=4096,
+                    # context_length=4096,
                     **kwargs)
             else:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
                     cuda_devices=[gpu_id],
                     gpu=gpu_id,
-                    context_length=4096,
+                    # context_length=4096,
                     **kwargs,
                 )
             self.runtimes.append(runtime)
@@ -213,6 +214,7 @@ class ModelDetails:
         requests: Iterable,
         request_rate: float,
         routine,
+        exp_time: float = 0.0,
     ):
         self.current_experiment_state_time = time.time()
         async def get_request(
@@ -233,8 +235,11 @@ class ModelDetails:
             async for request in get_request(requests, request_rate):
                 task = asyncio.create_task(routine(**request))
                 tasks.append(task)
-            results = await asyncio.gather(*tasks)
-            return results
+            remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
+            done, pending = await asyncio.wait(tasks, timeout=remaining_time)
+            for task in pending:
+                task.cancel()
+            return [task.result() for task in done]
         except asyncio.CancelledError:
             # Cancel all tasks if a CancelledError occurs
             for task in tasks:

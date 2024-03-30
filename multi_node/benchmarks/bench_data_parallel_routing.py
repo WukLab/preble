@@ -21,7 +21,9 @@ from metrics_based_scheduler import LongestPrefixMatchSelector, GlobalLongestPre
 from parameterized import parameterized
 from benchmark_workload_gen import (
     ToolBenchDataLoader,
+    RandomDataLoader,
     LoadDistribution,
+    Oracle,
     TBOracle,
     TBOracleB
 )
@@ -68,7 +70,9 @@ log = logging.getLogger(__name__)
 
 class CustomPolicyType(Enum):
     ORACLE = auto()
-    ORACLE_B = auto()
+    
+    TBORACLE = auto()
+    TBORACLE_B = auto()
 
     LPM = auto()
     GLPM = auto()
@@ -80,11 +84,13 @@ def test_oracle_random_basic(
     distribution_of_non_shared,
     num_requests,
     rps=0.0,
+    exp_time=1800,
     gpu_configs=None,
     model_name="mistralai/Mistral-7B-v0.1",
     load_distribution=LoadDistribution.EVEN,
     k=1.1,
 ):
+    num_requests = max(num_requests, int(rps * exp_time))
     loader = MultiNodeLoader()
     logging.debug(
         f"=====STARTING BENCHMARK OF {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
@@ -93,16 +99,22 @@ def test_oracle_random_basic(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
     start_time = time.time()
-    dataloader = ToolBenchDataLoader(
-        "G1_workload_updated_input_output_lengths_4096.json",
+    # dataloader = ToolBenchDataLoader(
+    #     "G1_workload_updated_input_output_lengths_4096.json",
+    #     num_workloads,
+    #     num_requests,
+    #     tokenizer,
+    #     load_dist=load_distribution,
+    # )
+    dataloader = RandomDataLoader(
         num_workloads,
         num_requests,
         tokenizer,
-        load_dist=load_distribution,
+        num_in_context_examples=7,
+        output_len=64,
     )
     requests = dataloader.generate_workload(k=k)
     print("Data loading time", time.time() - start_time)
-
     def load_and_run_benchmark(policy, custom_policy=None):
         random.seed(10)
         logging.debug(
@@ -115,17 +127,23 @@ def test_oracle_random_basic(
             log_prefix_hit=True,
             # mem_fraction_static=0.42,
             mem_fraction_static=0.8,
+            context_length=4096,
         )
 
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
             if custom_policy == CustomPolicyType.ORACLE:
-                # oracle = Oracle(num_nodes=len(available_gpus), num_workloads=num_workloads)
+                oracle = Oracle(num_nodes=len(model_details.runtimes), num_workloads=num_workloads)
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=oracle,
+                )
+            elif custom_policy == CustomPolicyType.TBORACLE_B:
                 oracle = TBOracle(num_nodes=len(model_details.runtimes))
                 model_details.update_runtime_selection_policy(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=oracle,
                 )
-            elif custom_policy == CustomPolicyType.ORACLE_B:
+            elif custom_policy == CustomPolicyType.TBORACLE_B:
                 oracle = TBOracleB(num_nodes=len(model_details.runtimes))
                 model_details.update_runtime_selection_policy(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
@@ -156,13 +174,15 @@ def test_oracle_random_basic(
                 requests,
                 rps,
                 model_details.async_send_request,
+                exp_time,
             )
         )
         overall_latency = time.time() - tic_benchmark
         counts = model_details.request_router.get_model_selection_counts()
 
-        bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(tokenizer=tokenizer, req_func_outputs=results, overall_latency=overall_latency, gpu_counts=counts)
-        exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}"
+        bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(tokenizer=tokenizer, req_func_outputs=results, overall_latency=overall_latency,
+                                                               time_limit=exp_time, gpu_counts=counts)
+        exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}, {exp_time}"
         bench_metrics.to_log_file(exp_params)
 
         loader.unload_model(model_details)
@@ -171,13 +191,14 @@ def test_oracle_random_basic(
         time.sleep(5)
 
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    load_and_run_benchmark(
-        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_B
-    )
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    # load_and_run_benchmark(
+    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_B
+    # )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench.log")
+    logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -189,7 +210,7 @@ if __name__ == "__main__":
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
-        [ 100, 0.2, 1024, 16],
+        [ 100, 0.2, 1024, 8],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
@@ -212,6 +233,7 @@ if __name__ == "__main__":
     for config in configurations_to_test:
         test_oracle_random_basic(
             *config,
+            exp_time=600,
             model_name=model_name,
             gpu_configs=gpu_configs,
             load_distribution=LoadDistribution.EVEN,
