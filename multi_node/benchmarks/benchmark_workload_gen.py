@@ -9,20 +9,16 @@ from transformers import (
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
 )
-from typing import List, Optional, Tuple, Union
+from typing import Union
 import math
 import copy
 from collections import defaultdict
 import scipy.stats as ss
-from data_parallel_request_cache import (
-    CustomRuntimeSelector,
-)
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
-import asyncio
-import re
-
+from datasets import load_dataset
+import logging
 random.seed(10)
 np.random.seed(10)
 
@@ -264,17 +260,6 @@ class ToolBenchDataLoader(DataLoader):
                             }
                         }
                     )
-
-        # elif self.load_dist == LoadDistribution.ALL:
-        #     for tool, items in self.data.items():
-        #         for item in items:
-        #             output_len = len(self.tokenizer(item['output']).input_ids)
-        #             workload.append((
-        #                 e['prompt'], 
-        #                 {
-        #                     "temperature": 0,
-        #                     "max_new_tokens": output_len
-        #                 }))
         elif self.load_dist == LoadDistribution.ZIPF:
             assert k is not None
             prefix_stats = sorted([(p, len(l)) for p, l in self.data.items()], key=lambda x: x[1], reverse=True)[:self.num_patterns]
@@ -285,13 +270,6 @@ class ToolBenchDataLoader(DataLoader):
                 tool_uses = np.random.zipf(a=k, size=self.num_patterns) - 1 # sampled index start from 1, but previous result is still valid
                 valid_tool_uses = [t for t in tool_uses if t < self.num_patterns]
                 hist.extend(valid_tool_uses[:self.total_num_requests - len(hist)])
-
-            # Normal distribution
-            # x = np.arange(0, self.num_patterns)
-            # xU, xL = x + 0.5, x - 0.5 
-            # prob = ss.norm.cdf(xU, scale = 3, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = 3, loc=self.num_patterns//2)
-            # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
-            # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
 
             plt.hist(hist, bins=self.num_patterns)
             plt.savefig(f"zipf_distribution_{k}.png")
@@ -348,61 +326,101 @@ class ToolBenchDataLoader(DataLoader):
         else:
             raise NotImplementedError()
         print(len(workload))
-        random.shuffle(workload)
         # save to json
         with open(f"workload_{self.num_patterns}_{self.total_num_requests}.json", 'w') as f:
             json.dump([{"text": item['text']} for item in workload], f)
         return workload
 
 
-@dataclass
-class Oracle(CustomRuntimeSelector):
-    num_workloads: int
-    trace = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
-        num_nodes = self.num_nodes
-        self.trace[request_id] = text[:50]
-        for i in range(self.num_workloads):
-            if text.startswith(f"Workload {i} "):
-                return i % num_nodes
+class LooGLEDatasetType(Enum):
+    LONG_QA = auto()
+    SHORT_CLOZE = auto()
+    SHORT_QA = auto()
 
-        return random.randint(0, num_nodes - 1)
+class LooGLEDataset(DataLoader):
+    def __init__(self, 
+                 loogle_dataset_type: LooGLEDatasetType, 
+                 num_patterns: int, 
+                 total_num_requests: int, 
+                 tokenizer, 
+                 load_dist, crop_max_decode=True):
+        super().__init__("loogle", num_patterns, total_num_requests, tokenizer=tokenizer, load_dist=load_dist)
+        self.prompt_format = {
+            LooGLEDatasetType.SHORT_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
+            LooGLEDatasetType.LONG_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
+        }
+        self.loogle_dataset_type = loogle_dataset_type
+        self.data = self.read_data(loogle_dataset_type)
+        self.max_decode_loogle = { # based on filtring 1.5x IQR on dataset
+            LooGLEDatasetType.SHORT_QA: 35,
+            LooGLEDatasetType.LONG_QA: 28,
+        }
+        if not crop_max_decode:
+            self.max_decode_loogle = { # based on filtring 1.5x IQR on dataset
+                LooGLEDatasetType.SHORT_QA: float('inf'),
+                LooGLEDatasetType.LONG_QA: float('inf'),
+            }
+        # Short QA has about 
 
+    def read_data(self, LooGLE_dataset_type: LooGLEDatasetType = LooGLEDatasetType.SHORT_QA):
+        if LooGLE_dataset_type == LooGLEDatasetType.LONG_QA:
+            data = load_dataset('bigainlco/LooGLE', 'longdep_qa', split='test')
+        elif LooGLE_dataset_type == LooGLEDatasetType.SHORT_QA:
+            data = load_dataset('bigainlco/LooGLE', 'shortdep_qa', split='test')
+        self.data = data
+        self.prompt_format = self.prompt_format[LooGLE_dataset_type]
+        return data
 
-@dataclass
-class TBOracle:
-    trace = {}
-    tbl = {}
-    num_nodes: int
-    counter = {}
+    def generate_workload(self, max_length: int):
+        workload = []
+        max_num_patterns = len(self.data)
+        logging.debug(f"Total patterns available {max_num_patterns}")
+        if self.num_patterns > max_num_patterns:
+            logging.warning(f"num_patterns {self.num_patterns} is larger than the number of patterns in the dataset {max_num_patterns}.")
+            self.num_patterns = max_num_patterns
+        
+        for item in self.data.shuffle().select(range(self.num_patterns)):
+            raw_inputs = item['input']
+            for j in eval(item['qa_pairs']):
+                json_obj = {'Q':j['Q'], 'input': raw_inputs}
+                prompt = self.prompt_format.format(**json_obj)
+                # tokenized_prompt = self.tokenizer.encode(prompt)
+                # if len(tokenized_prompt) > max_length:
+                #     half = int(max_length/2)
+                #     prompt = self.tokenizer.decode(tokenized_prompt[:half])+ self.tokenizer.decode(tokenized_prompt[-half:])
+                #     tokenized_prompt = self.tokenizer.encode(prompt)
+                workload.append(
+                    {
+                        "text": prompt, 
+                        "output": j['A'],
+                        "sampling_params": {
+                            "temperature": 0,
+                        }
+                    }
+                )
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
-        match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
-        if match:
-            tool = match.group(1)
-            self.counter[tool] = self.counter.get(tool, 0) + 1
-            num_nodes = self.num_nodes
-            if tool not in self.tbl:
-                self.tbl[tool] = random.randint(0, num_nodes - 1)
-            return self.tbl[tool]
-        else:
-            return random.randint(0, self.num_nodes - 1)
+        def tokenize_workload(request):
+            input_ids = self.tokenizer(request["text"]).input_ids
+            max_new_tokens = len(self.tokenizer(request["output"]).input_ids)
+            request.pop("output")
+            if max_new_tokens > self.max_decode_loogle[self.loogle_dataset_type]:
+                max_new_tokens = self.max_decode_loogle[self.loogle_dataset_type]
+            request["sampling_params"]["max_new_tokens"] = max_new_tokens
+            request["input_ids"] = input_ids
+            if len(tokenized_prompt) > max_length:
+                half = int(max_length/2)
+                prompt = self.tokenizer.decode(tokenized_prompt[:half])+ self.tokenizer.decode(tokenized_prompt[-half:])
+                tokenized_prompt = self.tokenizer.encode(prompt)
+                request["text"] = prompt
+                request["input_ids"] = tokenized_prompt
+            return request
 
-
-@dataclass
-class TBOracleB(CustomRuntimeSelector):
-    trace = {}
-    tbl = {}
-    counter: int = 0
-
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
-        match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
-        if match:
-            tool = match.group(1)
-            if tool not in self.tbl:
-                self.tbl[tool] = self.counter % self.num_nodes
-                self.counter += 1
-            return self.tbl[tool]
-        else:
-            return random.randint(0, self.num_nodes - 1)
+        with ThreadPoolExecutor(128) as executor:
+            futures = []
+            for request in workload:
+                futures.append(executor.submit(tokenize_workload, request))
+            wait(futures)
+        random.shuffle(workload)
+        return workload
+        

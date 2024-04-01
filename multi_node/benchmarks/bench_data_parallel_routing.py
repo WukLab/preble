@@ -23,9 +23,11 @@ from benchmark_workload_gen import (
     ToolBenchDataLoader,
     RandomDataLoader,
     LoadDistribution,
-    Oracle,
-    TBOracle,
-    TBOracleB
+    LooGLEDatasetType,
+    LooGLEDataset,
+)
+from bench_workload_gen_oracles import (
+    Oracle, TBOracle, TBOracleB, LoogleOracle
 )
 from benchmark_utils import BenchmarkMetrics
 
@@ -77,7 +79,32 @@ class CustomPolicyType(Enum):
     LPM = auto()
     GLPM = auto()
 
+    LOOGLE_ORACLE = auto()
 
+def update_runtime_selection_policy(model_details, policy, custom_policy=None, model_name=None, num_workloads=None):
+    if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
+        if custom_policy == CustomPolicyType.ORACLE:
+            custom_runtime_selector = Oracle(num_nodes=len(model_details.runtimes), num_workloads=num_workloads)
+        elif custom_policy == CustomPolicyType.TBORACLE_B:
+            custom_runtime_selector = TBOracle(num_nodes=len(model_details.runtimes))
+        elif custom_policy == CustomPolicyType.TBORACLE_B:
+            custom_runtime_selector = TBOracleB(num_nodes=len(model_details.runtimes))
+        elif custom_policy == CustomPolicyType.LOOGLE_ORACLE:
+            custom_runtime_selector = LoogleOracle(num_nodes=len(model_details.runtimes))
+        elif custom_policy == CustomPolicyType.LPM:
+            custom_runtime_selector = LongestPrefixMatchSelector(
+                num_nodes=len(model_details.runtimes), runtimes=model_details.runtimes
+            )
+        elif custom_policy == CustomPolicyType.GLPM:
+            custom_runtime_selector = GlobalLongestPrefixMatch(
+                num_nodes=len(model_details.runtimes), model_name=model_name
+            )
+        model_details.update_runtime_selection_policy(
+            DataParallelRuntimeSelectionPolicy.CUSTOM,
+            custom_runtime_selector=custom_runtime_selector,
+        )
+    else:
+        model_details.update_runtime_selection_policy(policy)
 
 def test_oracle_random_basic(
     num_workloads,
@@ -106,14 +133,23 @@ def test_oracle_random_basic(
     #     tokenizer,
     #     load_dist=load_distribution,
     # )
-    dataloader = RandomDataLoader(
-        num_workloads,
-        num_requests,
-        tokenizer,
-        num_in_context_examples=7,
-        output_len=64,
-    )
-    requests = dataloader.generate_workload(k=k)
+    # dataloader = RandomDataLoader(
+    #     num_workloads,
+    #     num_requests,
+    #     tokenizer,
+    #     num_in_context_examples=7,
+    #     output_len=64,
+    # )
+    # requests = dataloader.generate_workload(k=k)
+
+    dataloader_short = LooGLEDataset(
+        loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
+        num_patterns=num_workloads, 
+        total_num_requests=num_requests, 
+        tokenizer=tokenizer, 
+        load_dist=LoadDistribution.ALL, 
+        crop_max_decode=True)
+    requests = dataloader_short.generate_workload(max_length=32768)
     print("Data loading time", time.time() - start_time)
     def load_and_run_benchmark(policy, custom_policy=None):
         random.seed(10)
@@ -125,49 +161,10 @@ def test_oracle_random_basic(
             model_name,
             gpu_configs=gpu_configs,
             log_prefix_hit=True,
-            # mem_fraction_static=0.42,
             mem_fraction_static=0.8,
-            context_length=4096,
+            context_length=32768,
         )
-
-        if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
-            if custom_policy == CustomPolicyType.ORACLE:
-                oracle = Oracle(num_nodes=len(model_details.runtimes), num_workloads=num_workloads)
-                model_details.update_runtime_selection_policy(
-                    DataParallelRuntimeSelectionPolicy.CUSTOM,
-                    custom_runtime_selector=oracle,
-                )
-            elif custom_policy == CustomPolicyType.TBORACLE_B:
-                oracle = TBOracle(num_nodes=len(model_details.runtimes))
-                model_details.update_runtime_selection_policy(
-                    DataParallelRuntimeSelectionPolicy.CUSTOM,
-                    custom_runtime_selector=oracle,
-                )
-            elif custom_policy == CustomPolicyType.TBORACLE_B:
-                oracle = TBOracleB(num_nodes=len(model_details.runtimes))
-                model_details.update_runtime_selection_policy(
-                    DataParallelRuntimeSelectionPolicy.CUSTOM,
-                    custom_runtime_selector=oracle,
-                )
-            elif custom_policy == CustomPolicyType.LPM:
-                lpm = LongestPrefixMatchSelector(
-                    num_nodes=len(model_details.runtimes), runtimes=model_details.runtimes
-                )
-                model_details.update_runtime_selection_policy(
-                    DataParallelRuntimeSelectionPolicy.CUSTOM,
-                    custom_runtime_selector=lpm,
-                )
-            elif custom_policy == CustomPolicyType.GLPM:
-                glpm = GlobalLongestPrefixMatch(
-                    num_nodes=len(model_details.runtimes), model_name=model_name
-                )
-                model_details.update_runtime_selection_policy(
-                    DataParallelRuntimeSelectionPolicy.CUSTOM,
-                    custom_runtime_selector=glpm,
-                )
-        else:
-            model_details.update_runtime_selection_policy(policy)
-
+        update_runtime_selection_policy(model_details, policy, custom_policy, model_name, num_workloads=num_workloads)
         tic_benchmark = time.time()
         results: List[RequestFuncOutput] = asyncio.run(
             model_details.async_generate_batch_request_per_sec(
@@ -190,15 +187,15 @@ def test_oracle_random_basic(
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE)
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_B
     # )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="testing.log")
+    logging.basicConfig(level=logging.DEBUG, filename="loogle_short_qa_4_node.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -211,24 +208,25 @@ if __name__ == "__main__":
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
-        [ 100, 0.2, 1024, 8],
+        [ 4, 0, 100, 0.5],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
         GPUConfig(gpu_id=0, url=None, use_ssh=False),
         GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
-        #     "hostname": "192.168.1.18",
-        #     "username": "vikranth",
-        #     "port": 456,
-        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-        #     "node_name": "08",
-        # }),
-        # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
-        #     "hostname": "192.168.1.18",
-        #     "username": "vikranth",
-        #     "port": 456,
-        # }),
+        GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
+            "hostname": "192.168.1.18",
+            "username": "vikranth",
+            "port": 456,
+            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+            "node_name": "08",
+        }),
+        GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
+            "hostname": "192.168.1.18",
+            "username": "vikranth",
+            "port": 456,
+            "node_name": "08"
+        }),
     ]
 
     for config in configurations_to_test:
