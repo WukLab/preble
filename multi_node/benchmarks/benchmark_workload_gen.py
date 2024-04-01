@@ -17,7 +17,10 @@ import scipy.stats as ss
 from data_parallel_request_cache import (
     CustomRuntimeSelector,
 )
+import matplotlib.pyplot as plt
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
+import asyncio
 import re
 
 random.seed(10)
@@ -115,10 +118,11 @@ def get_react_workload(new_prefix, num_examples=4, num_new_chars=100):
     # Add examples to ReAct Workload
     workload_prompt = ReActWorkload
     for i in range(num_examples):
-        if i >= len(examples):
-            workload_prompt += random.choice(examples) + "\n"
-        else:
-            workload_prompt += examples[i] + "\n"
+        # if i >= len(examples):
+        #     workload_prompt += random.choice(examples) + "\n"
+        # else:
+        j = i % len(examples)
+        workload_prompt += examples[j] + "\n"
     return new_prefix + workload_prompt + gen_random_string(num_new_chars)
 
 
@@ -183,28 +187,53 @@ class RandomDataLoader(DataLoader):
         load_dist: LoadDistribution = LoadDistribution.EVEN,
         distribution_of_non_shared: float = 0.0,
         output_len: int = 1,
+        num_in_context_examples: int = 4
     ):
         super().__init__("random", num_patterns, total_num_requests, tokenizer, load_dist)
         self.distribution_of_non_shared = distribution_of_non_shared
         self.output_len = output_len
+        self.num_in_context_examples = num_in_context_examples
     
-    def generate_workload(self):
+    def generate_workload(self, k):
         num_prefixed_shared = int(self.total_num_requests * (1 - self.distribution_of_non_shared))
         num_non_shared = int(self.total_num_requests * self.distribution_of_non_shared)
-        prompts = []
+        workload = []
         sampling_params = {
             "experiment_id": f"random_experiment_{self.num_patterns}_{self.distribution_of_non_shared}_{self.total_num_requests}",
             "temperature": 0,
-            "max_new_tokens": 1
+            "max_new_tokens": self.output_len
         }
         for i in range(num_prefixed_shared):
             workload_num = i % self.num_patterns
-            prompts.append((get_react_workload(f"Workload {workload_num} "), copy.deepcopy(sampling_params)))
+            prompt = get_react_workload(f"Workload {workload_num} ", num_examples=self.num_in_context_examples)
+            workload.append(
+                {
+                    "text": prompt,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                }
+            )
         random_workload = generate_random_workload()
         for _ in range(num_non_shared):
-            prompts.append((random.choice(random_workload), copy.deepcopy(sampling_params)))
-        random.shuffle(prompts)
-        return prompts
+            prompt = random.choice(random_workload)
+            workload.append(
+                {
+                    "text": prompt,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                }
+            )
+        random.shuffle(workload)
+        def get_token_ids(request):
+            input_ids = self.tokenizer(request["text"]).input_ids
+            request["input_ids"] = input_ids
+        with ThreadPoolExecutor(128) as executor:
+            futures = []
+            for request in workload:
+                futures.append(executor.submit(get_token_ids, request))
+            wait(futures)
+        prompt_lens = [len(p["input_ids"]) for p in workload]
+        plt.hist(prompt_lens)
+        plt.savefig(f"react_prompt_length.png") 
+        return workload
     
 class ToolBenchDataLoader(DataLoader):
     def __init__(self, data_path: str, num_patterns: int, total_num_requests: int, tokenizer, load_dist: LoadDistribution = LoadDistribution.EVEN):
@@ -253,7 +282,7 @@ class ToolBenchDataLoader(DataLoader):
             # sample hit to each selected prefix with the given distribution
             hist = []
             while len(hist) < self.total_num_requests:
-                tool_uses = np.random.zipf(a=k, size=self.num_patterns)
+                tool_uses = np.random.zipf(a=k, size=self.num_patterns) - 1 # sampled index start from 1, but previous result is still valid
                 valid_tool_uses = [t for t in tool_uses if t < self.num_patterns]
                 hist.extend(valid_tool_uses[:self.total_num_requests - len(hist)])
 
@@ -264,7 +293,6 @@ class ToolBenchDataLoader(DataLoader):
             # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
             # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
 
-            import matplotlib.pyplot as plt
             plt.hist(hist, bins=self.num_patterns)
             plt.savefig(f"zipf_distribution_{k}.png")
             tool_usage = defaultdict(int)

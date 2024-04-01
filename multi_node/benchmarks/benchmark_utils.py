@@ -33,7 +33,7 @@ class BenchmarkMetrics:
             result.update_metrics(tokenizer) # Computes the generated output tokens
         
         ttfts = [result.ttft for result in req_func_outputs]
-        tpots = [result.tpot for result in req_func_outputs]
+        tpots = [result.tpot for result in req_func_outputs if result.tpot is not None]
         overall_latency = overall_latency
         request_latencies = [result.request_latency for result in req_func_outputs]
         throughput_tok_sec = sum([result.total_tokens for result in req_func_outputs]) / overall_latency
@@ -43,7 +43,7 @@ class BenchmarkMetrics:
             [result.global_time <= time_limit for result in req_func_outputs if result.success]
         )
         average_finished_tpot =  np.average([
-            result.tpot for result in req_func_outputs if result.global_time <= time_limit and result.success
+            result.tpot for result in req_func_outputs if result.tpot is not None and result.global_time <= time_limit and result.success
         ])
         prefill_decode_ratio = np.average([
             result.prefill_decode_ratio for result in req_func_outputs
