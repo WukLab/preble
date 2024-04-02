@@ -20,7 +20,8 @@ from data_parallel_request_cache import (
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
-import asyncio
+import logging
+from datasets import load_dataset
 import re
 
 random.seed(10)
@@ -398,6 +399,117 @@ class TBOracleB(CustomRuntimeSelector):
 
     def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
+        if match:
+            tool = match.group(1)
+            if tool not in self.tbl:
+                self.tbl[tool] = self.counter % self.num_nodes
+                self.counter += 1
+            return self.tbl[tool]
+        else:
+            return random.randint(0, self.num_nodes - 1)
+
+
+class LooGLEDatasetType(Enum):
+    LONG_QA = auto()
+    SHORT_CLOZE = auto()
+    SHORT_QA = auto()
+
+class LooGLEDataset(DataLoader):
+    def __init__(self, 
+                 loogle_dataset_type: LooGLEDatasetType, 
+                 num_patterns: int, 
+                 total_num_requests: int, 
+                 tokenizer, 
+                 load_dist, crop_max_decode=True):
+        super().__init__("loogle", num_patterns, total_num_requests, tokenizer=tokenizer, load_dist=load_dist)
+        self.prompt_format = {
+            LooGLEDatasetType.SHORT_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
+            LooGLEDatasetType.LONG_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
+        }
+        self.loogle_dataset_type = loogle_dataset_type
+        self.data = self.read_data(loogle_dataset_type)
+        self.max_decode_loogle = { # based on filtring 1.5x IQR on dataset
+            LooGLEDatasetType.SHORT_QA: 35,
+            LooGLEDatasetType.LONG_QA: 28,
+        }
+        if not crop_max_decode:
+            self.max_decode_loogle = { # based on filtring 1.5x IQR on dataset
+                LooGLEDatasetType.SHORT_QA: float('inf'),
+                LooGLEDatasetType.LONG_QA: float('inf'),
+            }
+        # Short QA has about 
+
+    def read_data(self, LooGLE_dataset_type: LooGLEDatasetType = LooGLEDatasetType.SHORT_QA):
+        if LooGLE_dataset_type == LooGLEDatasetType.LONG_QA:
+            data = load_dataset('bigainlco/LooGLE', 'longdep_qa', split='test')
+        elif LooGLE_dataset_type == LooGLEDatasetType.SHORT_QA:
+            data = load_dataset('bigainlco/LooGLE', 'shortdep_qa', split='test')
+        self.data = data
+        self.prompt_format = self.prompt_format[LooGLE_dataset_type]
+        return data
+
+    def generate_workload(self, max_length: int):
+        workload = []
+        max_num_patterns = len(self.data)
+        logging.debug(f"Total patterns available {max_num_patterns}")
+        if self.num_patterns > max_num_patterns:
+            logging.warning(f"num_patterns {self.num_patterns} is larger than the number of patterns in the dataset {max_num_patterns}.")
+            self.num_patterns = max_num_patterns
+        
+        for item in self.data.shuffle().select(range(self.num_patterns)):
+            raw_inputs = item['input']
+            for j in eval(item['qa_pairs']):
+                json_obj = {'Q':j['Q'], 'input': raw_inputs}
+                prompt = self.prompt_format.format(**json_obj)
+                # tokenized_prompt = self.tokenizer.encode(prompt)
+                # if len(tokenized_prompt) > max_length:
+                #     half = int(max_length/2)
+                #     prompt = self.tokenizer.decode(tokenized_prompt[:half])+ self.tokenizer.decode(tokenized_prompt[-half:])
+                #     tokenized_prompt = self.tokenizer.encode(prompt)
+                workload.append(
+                    {
+                        "text": prompt, 
+                        "output": j['A'],
+                        "sampling_params": {
+                            "temperature": 0,
+                        }
+                    }
+                )
+
+        def tokenize_workload(request):
+            input_ids = self.tokenizer(request["text"]).input_ids
+            max_new_tokens = len(self.tokenizer(request["output"]).input_ids)
+            request.pop("output")
+            if max_new_tokens > self.max_decode_loogle[self.loogle_dataset_type]:
+                max_new_tokens = self.max_decode_loogle[self.loogle_dataset_type]
+            request["sampling_params"]["max_new_tokens"] = max_new_tokens
+            request["input_ids"] = input_ids
+            if len(tokenized_prompt) > max_length:
+                half = int(max_length/2)
+                prompt = self.tokenizer.decode(tokenized_prompt[:half])+ self.tokenizer.decode(tokenized_prompt[-half:])
+                tokenized_prompt = self.tokenizer.encode(prompt)
+                request["text"] = prompt
+                request["input_ids"] = tokenized_prompt
+            return request
+
+        with ThreadPoolExecutor(128) as executor:
+            futures = []
+            for request in workload:
+                futures.append(executor.submit(tokenize_workload, request))
+            wait(futures)
+        random.shuffle(workload)
+        return workload
+
+
+@dataclass
+class LoogleOracle(CustomRuntimeSelector):
+    def __post_init__(self):
+        self.trace = {}
+        self.tbl = {}
+        self.counter = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+        match = re.search(r'(.*)Question:', text, re.DOTALL)
         if match:
             tool = match.group(1)
             if tool not in self.tbl:
