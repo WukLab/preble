@@ -90,7 +90,8 @@ def test_oracle_random_basic(
     load_distribution=LoadDistribution.EVEN,
     k=1.1,
 ):
-    num_requests = max(num_requests, int(rps * exp_time))
+    if exp_time != float('inf'):
+        num_requests = max(num_requests, int(rps * exp_time))
     loader = MultiNodeLoader()
     logging.debug(
         f"=====STARTING BENCHMARK OF {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
@@ -99,28 +100,29 @@ def test_oracle_random_basic(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
     start_time = time.time()
-    # dataloader = ToolBenchDataLoader(
-    #     "G1_workload_updated_input_output_lengths_4096.json",
-    #     num_workloads,
-    #     num_requests,
-    #     tokenizer,
-    #     load_dist=load_distribution,
-    # )
-    dataloader = RandomDataLoader(
+    dataloader = ToolBenchDataLoader(
+        "G1_workload_updated_input_output_lengths_4096.json",
         num_workloads,
         num_requests,
         tokenizer,
-        num_in_context_examples=7,
-        output_len=64,
+        load_dist=load_distribution,
     )
+    # dataloader = RandomDataLoader(
+    #     num_workloads,
+    #     num_requests,
+    #     tokenizer,
+    #     num_in_context_examples=7,
+    #     output_len=64,
+    # )
     requests = dataloader.generate_workload(k=k)
+
+    random.shuffle(requests)
     print("Data loading time", time.time() - start_time)
     def load_and_run_benchmark(policy, custom_policy=None):
         random.seed(10)
         logging.debug(
             f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
         )
-
         model_details = loader.load_model(
             model_name,
             gpu_configs=gpu_configs,
@@ -137,7 +139,7 @@ def test_oracle_random_basic(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=oracle,
                 )
-            elif custom_policy == CustomPolicyType.TBORACLE_B:
+            elif custom_policy == CustomPolicyType.TBORACLE:
                 oracle = TBOracle(num_nodes=len(model_details.runtimes))
                 model_details.update_runtime_selection_policy(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
@@ -191,14 +193,14 @@ def test_oracle_random_basic(
         time.sleep(5)
 
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
-    # load_and_run_benchmark(
-    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_B
-    # )
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    load_and_run_benchmark(
+        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
+    )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="testing.log")
+    logging.basicConfig(level=logging.DEBUG, filename="2_node_experiments.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -211,30 +213,34 @@ if __name__ == "__main__":
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
-        [ 100, 0.2, 1024, 8],
+        # [ 100, 0.2, 1024, 16],
+        [ 200, 0.2, 4096, 4],
+        # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
-        GPUConfig(gpu_id=0, url=None, use_ssh=False),
-        GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
-        #     "hostname": "192.168.1.18",
-        #     "username": "vikranth",
-        #     "port": 456,
-        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-        #     "node_name": "08",
-        # }),
-        # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
-        #     "hostname": "192.168.1.18",
-        #     "username": "vikranth",
-        #     "port": 456,
-        # }),
+        # GPUConfig(gpu_id=0, url=None, use_ssh=False),
+        # GPUConfig(gpu_id=1, url=None, use_ssh=False),
+        GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
+            "hostname": "192.168.1.18",
+            "username": "vikranth",
+            "port": 456,
+            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+            "node_name": "08",
+        }),
+        GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
+            "hostname": "192.168.1.18",
+            "username": "vikranth",
+            "port": 456,
+            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+            "node_name": "08",
+        }),
     ]
 
     for config in configurations_to_test:
         test_oracle_random_basic(
             *config,
-            exp_time=100,
+            exp_time=float('inf'),
             model_name=model_name,
             gpu_configs=gpu_configs,
             load_distribution=LoadDistribution.EVEN,

@@ -26,6 +26,7 @@ def stream_logger(node_name, stream):
             pattern = r"(GPU:\s+(\d+))"
             if node_name:
                 line = re.sub(pattern, rf"GPU: {node_name}_\2", line)
+                line = line.replace(f"INFO:model_rpc:", "")
             logger.info(f"{line.strip()}")
     finally:
         stream.close()
@@ -63,9 +64,9 @@ class SSHRuntimeManager:
         }
         python_process = self.ssh_config.get("python_process", "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python")
         command = f'setsid {python_process} -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
-        print("Running command", command)
+        print("Running command", command, "on gpu", self.gpu)
         transport = self.ssh_client.get_transport()
-        channel = transport.open_session()
+        channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel
         self.transport = transport
         self.transport.set_keepalive(30) # Send keepalive packets every 30 seconds
@@ -111,8 +112,8 @@ class SSHRuntimeManager:
         self.process_pid = pid
         self.port = port
 
-        # stderr_thread = threading.Thread(target=stream_logger, args=(self.node_name, stderr), daemon=True)
-        # stderr_thread.start()
+        stderr_thread = threading.Thread(target=stream_logger, args=(self.node_name, stderr), daemon=True)
+        stderr_thread.start()
         return port   
     
     def shutdown(self):
