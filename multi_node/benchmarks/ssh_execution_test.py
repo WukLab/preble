@@ -28,7 +28,7 @@ class SSHRuntime:
         print("Running command", command)
         transport = self.ssh_client.get_transport()
         transport.set_keepalive(30) # Send keepalive packets every 30 seconds
-        channel = transport.open_session()
+        channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel
         channel.update_environment(environment_variables)
         channel.exec_command(command)
