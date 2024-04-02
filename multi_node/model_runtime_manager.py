@@ -236,8 +236,12 @@ class ModelDetails:
             async for request in get_request(requests, request_rate):
                 task = asyncio.create_task(routine(**request))
                 tasks.append(task)
-            remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
-            done, pending = await asyncio.wait(tasks, timeout=remaining_time)
+
+            if exp_time != float("inf"):
+                remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
+                done, pending = await asyncio.wait(tasks, timeout=remaining_time)
+            else:
+                done, pending = await asyncio.wait(tasks)
             for task in pending:
                 task.cancel()
             return [task.result() for task in done]

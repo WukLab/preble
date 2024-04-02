@@ -41,7 +41,6 @@ class SSHRuntime:
             line = stdout.readline()  # Read line from stdout
             if not line:
                 line = stderr.readline()  # If stdout is empty, try to read from stderr
-            print(line, end='')  # Optional: print the line for debugging
             
             # Search for the port number in the line
             match = re.search(r"Server is on port (\d+) on host (.*) on pid (\d+)", line)
