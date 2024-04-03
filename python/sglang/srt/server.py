@@ -563,6 +563,9 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
     if router_init_state != "init ok" or detoken_init_state != "init ok":
         proc_router.kill()
         proc_detoken.kill()
+        with open("sglang_error.log", "a+") as f:
+            f.write(f"Failed to initialize the server. router init state: {router_init_state.strip()}")
+        logging.error(f"Failed to initialize the server. router init state: {router_init_state.strip()}, detoken init state: {detoken_init_state}")
         print("router init state:", router_init_state)
         print("detoken init state:", detoken_init_state)
         sys.exit(1)
@@ -622,6 +625,8 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
                 # print(f"Warmup done. model response: {res.json()['text']}")
                 # print("=" * 20, "Server is ready", "=" * 20, flush=True)
             except requests.exceptions.RequestException as e:
+                with open("sglang_error.log", "a+") as f:
+                    f.write(str(e))
                 if pipe_finish_writer is not None:
                     pipe_finish_writer.send(str(e))
                 else:

@@ -105,14 +105,15 @@ def test_oracle_random_basic(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
     start_time = time.time()
-    context_length = 32768
-    # dataloader = ToolBenchDataLoader(
-    #     "G1_workload_updated_input_output_lengths_4096.json",
-    #     num_workloads,
-    #     num_requests,
-    #     tokenizer,
-    #     load_dist=load_distribution,
-    # )
+    context_length = 4096
+    dataloader = ToolBenchDataLoader(
+        "G1_workload_updated_input_output_lengths_4096.json",
+        num_workloads,
+        num_requests,
+        tokenizer,
+        load_dist=load_distribution,
+    )
+    requests = dataloader.generate_workload(k=k)
     # dataloader = RandomDataLoader(
     #     num_workloads,
     #     num_requests,
@@ -120,15 +121,14 @@ def test_oracle_random_basic(
     #     num_in_context_examples=7,
     #     output_len=64,
     # )
-    # requests = dataloader.generate_workload(k=k)
-    dataloader_short = LooGLEDataset(
-        loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
-        num_patterns=num_workloads, 
-        total_num_requests=num_requests, 
-        tokenizer=tokenizer, 
-        load_dist=LoadDistribution.ALL, 
-        crop_max_decode=True)
-    requests = dataloader_short.generate_workload(max_length=32768)
+    # dataloader_short = LooGLEDataset(
+    #     loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
+    #     num_patterns=num_workloads, 
+    #     total_num_requests=num_requests, 
+    #     tokenizer=tokenizer, 
+    #     load_dist=LoadDistribution.ALL, 
+    #     crop_max_decode=True)
+    # requests = dataloader_short.generate_workload(max_length=32768)
     random.shuffle(requests)
     print("Data loading time", time.time() - start_time)
     def load_and_run_benchmark(policy, custom_policy=None):
@@ -213,16 +213,16 @@ def test_oracle_random_basic(
 
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
-    # load_and_run_benchmark(
-    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
-    # )
     load_and_run_benchmark(
-        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE
+        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
     )
+    # load_and_run_benchmark(
+    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE
+    # )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="loogle_verify.log")
+    logging.basicConfig(level=logging.DEBUG, filename="2_node_experiments_verify2.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -236,27 +236,28 @@ if __name__ == "__main__":
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
-        [8, 0.2, 200, .5],
+        [200, 0.2, 4096, 6],
+        [200, 0.2, 4096, 4],
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
         GPUConfig(gpu_id=0, url=None, use_ssh=False),
         GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
-            "hostname": "192.168.1.18",
-            "username": "vikranth",
-            "port": 456,
-            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-            "node_name": "08",
-        }),
-        GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
-            "hostname": "192.168.1.18",
-            "username": "vikranth",
-            "port": 456,
-            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-            "node_name": "08",
-        }),
+        # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
+        #     "hostname": "192.168.1.18",
+        #     "username": "vikranth",
+        #     "port": 456,
+        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+        #     "node_name": "08",
+        # }),
+        # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
+        #     "hostname": "192.168.1.18",
+        #     "username": "vikranth",
+        #     "port": 456,
+        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+        #     "node_name": "08",
+        # }),
     ]
 
     for config in configurations_to_test:
