@@ -18,6 +18,7 @@ from data_parallel_request_cache import (
 )
 from transformers import AutoTokenizer
 from metrics_based_scheduler import LongestPrefixMatchSelector, GlobalLongestPrefixMatch
+from global_policy_lp import LPScheduler
 from parameterized import parameterized
 from benchmark_workload_gen import (
     ToolBenchDataLoader,
@@ -82,6 +83,8 @@ class CustomPolicyType(Enum):
 
     LOOGLE_ORACLE = auto()
 
+    LP_SCHEDULER = auto()
+
 
 
 def test_oracle_random_basic(
@@ -105,15 +108,15 @@ def test_oracle_random_basic(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
     start_time = time.time()
-    context_length = 4096
-    dataloader = ToolBenchDataLoader(
-        "G1_workload_updated_input_output_lengths_4096.json",
-        num_workloads,
-        num_requests,
-        tokenizer,
-        load_dist=load_distribution,
-    )
-    requests = dataloader.generate_workload(k=k)
+    # context_length = 4096
+    # dataloader = ToolBenchDataLoader(
+    #     "G1_workload_updated_input_output_lengths_4096.json",
+    #     num_workloads,
+    #     num_requests,
+    #     tokenizer,
+    #     load_dist=load_distribution,
+    # )
+    # requests = dataloader.generate_workload(k=k)
     # dataloader = RandomDataLoader(
     #     num_workloads,
     #     num_requests,
@@ -121,14 +124,15 @@ def test_oracle_random_basic(
     #     num_in_context_examples=7,
     #     output_len=64,
     # )
-    # dataloader_short = LooGLEDataset(
-    #     loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
-    #     num_patterns=num_workloads, 
-    #     total_num_requests=num_requests, 
-    #     tokenizer=tokenizer, 
-    #     load_dist=LoadDistribution.ALL, 
-    #     crop_max_decode=True)
-    # requests = dataloader_short.generate_workload(max_length=32768)
+    context_length = 32768
+    dataloader_short = LooGLEDataset(
+        loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
+        num_patterns=num_workloads, 
+        total_num_requests=num_requests, 
+        tokenizer=tokenizer, 
+        load_dist=LoadDistribution.ALL, 
+        crop_max_decode=True)
+    requests = dataloader_short.generate_workload(max_length=32768)
     random.shuffle(requests)
     print("Data loading time", time.time() - start_time)
     def load_and_run_benchmark(policy, custom_policy=None):
@@ -186,6 +190,12 @@ def test_oracle_random_basic(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=glpm,
                 )
+            elif custom_policy == CustomPolicyType.LP_SCHEDULER:
+                lp_scheduler = LPScheduler(num_nodes=len(model_details.runtimes), depth_limit=3, update_interval=5)
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=lp_scheduler,
+                )
         else:
             model_details.update_runtime_selection_policy(policy)
 
@@ -211,10 +221,13 @@ def test_oracle_random_basic(
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    # load_and_run_benchmark(
+    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
+    # )
     load_and_run_benchmark(
-        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
+        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
     )
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE
@@ -222,7 +235,7 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="2_node_experiments_verify2.log")
+    logging.basicConfig(level=logging.DEBUG, filename="lp_scheduler_loogle_4_node.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -235,29 +248,30 @@ if __name__ == "__main__":
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
-        # [ 100, 0.2, 1024, 16],
-        [200, 0.2, 4096, 6],
-        [200, 0.2, 4096, 4],
+        # [ 100, 0.2, 1024, 4],
+        # [200, 0.2, 4096, 4],
+        # [200, 0.2, 4096, 8],
+        [4, 0, 100, 0.5]
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
         GPUConfig(gpu_id=0, url=None, use_ssh=False),
         GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
-        #     "hostname": "192.168.1.18",
-        #     "username": "vikranth",
-        #     "port": 456,
-        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-        #     "node_name": "08",
-        # }),
-        # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
-        #     "hostname": "192.168.1.18",
-        #     "username": "vikranth",
-        #     "port": 456,
-        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-        #     "node_name": "08",
-        # }),
+        GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
+            "hostname": "192.168.1.18",
+            "username": "vikranth",
+            "port": 456,
+            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+            "node_name": "08",
+        }),
+        GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
+            "hostname": "192.168.1.18",
+            "username": "vikranth",
+            "port": 456,
+            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+            "node_name": "08",
+        }),
     ]
 
     for config in configurations_to_test:
