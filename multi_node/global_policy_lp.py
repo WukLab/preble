@@ -9,17 +9,17 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Tuple
 from data_parallel_request_cache import CustomRuntimeSelector
-
+from uuid import uuid4
 import torch
 
-class TreeNode:
+class LPTreeNode:
     def __init__(self):
-        self.children = defaultdict(TreeNode)
+        self.id = uuid4()  
+        self.children = defaultdict(LPTreeNode)
         self.parent = None
         self.value = None
         self.ref_counter = 0
         self.last_access_time = time.time()
-        self.gpus_to_schedule = []
         self.gpu_selections = set()
 
     @property
@@ -28,7 +28,14 @@ class TreeNode:
         
     def __lt__(self, other):
         return self.last_access_time < other.last_access_time
+    
+    def __eq__(self, other):
+        if isinstance(other, LPTreeNode):
+            return self.id == other.id  # Compare nodes based on their unique ID
+        return False
 
+    def __hash__(self):
+        return hash(self.id)  # Use the unique ID for hashing
 
 def match(key, seq):
     i = 0
@@ -47,38 +54,52 @@ class LPRadixCache:
     ##### Public API #####
 
     def reset(self):
-        self.root_node = TreeNode()
+        self.root_node = LPTreeNode()
         self.root_node.value = []
         self.root_node.ref_counter = 1
         self.evictable_size_ = 0
 
-    def match_prefix(self, key):
+    def match_prefix_get_gpu_selection(self, key):
         if self.disable:
             return [], self.root_node
 
         value = []
-        last_node = [self.root_node]
-        self._match_prefix_helper(self.root_node, key, value, last_node)
-        if value:
-            if isinstance(value[0], torch.Tensor):
-                value = torch.concat(value)
-            else:
-                concatenated_value = []
-                for v in value:
-                    concatenated_value.extend(v)  # Assuming each element in value is a list itself
-                value = concatenated_value
-        return value, last_node[0]
+        current_gpu_selection = self.root_node.gpu_selections
+        current_gpu_selection = self._match_prefix_helper_gpu_selection(self.root_node, key, value, current_gpu_selection)
+        return current_gpu_selection
+
+    def _match_prefix_helper_gpu_selection(self, node, key, value, current_gpu_selection):
+        node.last_access_time = time.time()
+        child: LPTreeNode
+        for c_key, child in node.children.items():
+            prefix_len = match(c_key, key)
+            if prefix_len != 0:
+                text = tokenizer.decode(child.value)
+                if child.gpu_selections:
+                    current_gpu_selection = child.gpu_selections
+                if prefix_len < len(c_key):
+                    assert False
+                    new_node = self._split_node(c_key, child, prefix_len, new_nodes_created=new_nodes_created)
+                    value.append(new_node.value)
+                    # last_node[0] = new_node
+                else:
+                    value.append(child.value)
+                    # last_node[0] = child
+                    return self._match_prefix_helper_gpu_selection(child, key[prefix_len:], value, current_gpu_selection)
+        return current_gpu_selection
 
     def match_prefix_return_str(self, key):
         return "".join(self.match_prefix(key)[0])
 
-    def insert(self, key, value=None):
+    def insert(self, key, value=None, node_map=None):
+        if node_map is None:
+            node_map = {}
         if self.disable:
             return len(key)
 
         if value is None:
             value = [x for x in key]
-        return self._insert_helper(self.root_node, key, value)
+        return self._insert_helper(self.root_node, key, value, node_map=node_map)
 
     def pretty_print(self):
         self._print_helper(self.root_node, 0)
@@ -132,36 +153,39 @@ class LPRadixCache:
     def evictable_size(self):
         return self.evictable_size_
 
-    ##### Internal Helper Functions #####
-    def _match_prefix_helper(self, node, key, value, last_node):
-        node.last_access_time = time.time()
-        for c_key, child in node.children.items():
-            prefix_len = match(c_key, key)
-            if prefix_len != 0:
-                if prefix_len < len(c_key):
-                    new_node = self._split_node(c_key, child, prefix_len)
-                    value.append(new_node.value)
-                    last_node[0] = new_node
-                else:
-                    value.append(child.value)
-                    last_node[0] = child
-                    self._match_prefix_helper(child, key[prefix_len:], value, last_node)
-                break
-
-    def _split_node(self, key, child, split_len):
+    def _split_node(self, key, child, split_len, node_map):
         # new_node -> child
-        new_node = TreeNode()
-        new_node.children = {key[split_len:]: child}
+        is_initial_code_in_node_map = child in node_map
+        if is_initial_code_in_node_map:
+            lp_node = node_map[child]
+
+        new_node = LPTreeNode()
+        new_node.gpu_selections = copy.deepcopy(child.gpu_selections)
+        new_node.children = {
+            key[split_len:]: child
+        }
         new_node.parent = child.parent
         new_node.ref_counter = child.ref_counter
+
         new_node.value = child.value[:split_len]
         child.parent = new_node
         child.value = child.value[split_len:]
+
         new_node.parent.children[key[:split_len]] = new_node
         del new_node.parent.children[key]
+
+        if is_initial_code_in_node_map:
+            # NODE Map is updated because splitting the nodes needs to preserve solver state
+            node_map[child] = lp_node
+            node_map[new_node] = lp_node
+            # Potentionally pop the previous entry
+
+        if is_initial_code_in_node_map:
+            assert child in node_map
+            assert new_node in node_map
         return new_node
 
-    def _insert_helper(self, node, key, value):
+    def _insert_helper(self, node, key, value, node_map):
         node.last_access_time = time.time()
         node.ref_counter += 1
         for c_key, child in node.children.items():
@@ -174,16 +198,17 @@ class LPRadixCache:
                 else:
                     key = key[prefix_len:]
                     value = value[prefix_len:]
-                    return prefix_len + self._insert_helper(child, key, value)
+                    return prefix_len + self._insert_helper(child, key, value, node_map=node_map)
 
             if prefix_len:
-                new_node = self._split_node(c_key, child, prefix_len)
+                new_node = self._split_node(c_key, child, prefix_len, node_map)
                 return prefix_len + self._insert_helper(
-                    new_node, key[prefix_len:], value[prefix_len:]
+                    new_node, key[prefix_len:], value[prefix_len:], node_map=node_map
                 )
 
         if len(key):
-            new_node = TreeNode()
+            new_node = LPTreeNode()
+            new_node.gpu_selections = copy.deepcopy(node.gpu_selections)
             new_node.parent = node
             new_node.value = value
             new_node.ref_counter = 1
@@ -225,6 +250,7 @@ class LPRadixCache:
         dfs_(self.root_node)
         return ret_list
 
+
 # %%
 import time
 from mip import Model, xsum, BINARY, MINIMIZE, OptimizationStatus, minimize, INTEGER, GUROBI
@@ -239,20 +265,23 @@ class LpNode:
     def __init__(self, node_id, num_gpus):
         self.node_id = node_id
         self.variables = [None] * num_gpus  # Will be initialized as binary variables in the model
-
+        self.children_token_cost_at_max_depth = 0 # Issue is that depth_limit will cut off the tokens for children and that will treat it as free
+    
 class LPTreeTraversal:
     def __init__(self, num_gpus):
         self.num_gpus = num_gpus
-        self.node_map: Dict[TreeNode, LpNode] = {}  # Maps PrefixTreeNode to LpNode
-        self.depth_limit = 4
+        self.node_map = {}
+        self.depth_limit = 5
+        self.model = Model(sense=MINIMIZE, solver_name=GUROBI)
 
-    def _traverse_tree(self, current_prefix_node, parent_lp_node=None, depth=0):
+    def _traverse_tree(self, current_prefix_node:LPTreeNode, parent_lp_node: LpNode=None, depth=0):
         if depth == self.depth_limit:
+            assert parent_lp_node is not None
+            parent_lp_node.children_token_cost_at_max_depth = self._calculate_children_token_cost(current_prefix_node)
             return
         self.counter += 1
         current_lp_node = LpNode(self.counter, self.num_gpus)
         self.node_map[current_prefix_node] = current_lp_node
-
         # Initialize binary variables for the LP node
         for gpu in range(self.num_gpus):
             current_lp_node.variables[gpu] = self.model.add_var(f"node_{self.counter}_{gpu}",var_type=BINARY)
@@ -266,7 +295,19 @@ class LPTreeTraversal:
                 self.model += current_lp_node.variables[gpu] <= parent_lp_node.variables[gpu]
 
         for child_prefix_node in current_prefix_node.children.values():
-            self._traverse_tree(child_prefix_node, current_lp_node, depth=depth + 1)
+            self._traverse_tree(current_prefix_node=child_prefix_node, parent_lp_node=current_lp_node, depth=depth + 1,)
+
+    def _calculate_children_token_cost(self, node):
+        """
+        Recursively calculate the total number of tokens for all children of a given node,
+        effectively aggregating the tokens for nodes that are beyond the depth limit.
+        """
+        if node is None:
+            return 0
+        total_tokens = node.num_tokens
+        for child in node.children.values():
+            total_tokens += self._calculate_children_token_cost(child)
+        return total_tokens
 
     def add_parent_child_gpu_constraints(self):
         for parent_prefix_node, parent_lp_node in self.node_map.items():
@@ -285,7 +326,8 @@ class LPTreeTraversal:
     def traverse_and_optimize(self, prefix_tree_root, existing_cost={}):
         start_time = time.time()
 
-        self.model = Model(sense=MINIMIZE, solver_name=GUROBI)  # Re-initialize the model for a new optimization problem
+        # self.model.reset()  # Re-initialize the model for a new optimization problem
+        self.model = Model(sense=MINIMIZE, solver_name=GUROBI)
         self.model.verbose = 0
 
         self.node_map = {}
@@ -298,36 +340,34 @@ class LPTreeTraversal:
         total_cost = []
         per_gpu_cost = [[] for _ in range(self.num_gpus)]
         initial_solution = []
+        total_cost_saved = 0
         for prefix_node, lp_node in self.node_map.items():
             node_costs = existing_cost.get(prefix_node, {})
+            # children token cost is to account for depth cutoff
+            num_tokens_total = prefix_node.num_tokens + lp_node.children_token_cost_at_max_depth
             for gpu_index, var in enumerate(lp_node.variables):
                 previous_gpu_selected = existing_cost.get(prefix_node, {}).get(gpu_index, 0) 
-                initial_solution.append((var, previous_gpu_selected))
+                if previous_gpu_selected:
+                    initial_solution.append((var, previous_gpu_selected))
+                    total_cost_saved += previous_gpu_selected * num_tokens_total
 
-                memory_cost = var * prefix_node.num_tokens - var * previous_gpu_selected * prefix_node.num_tokens
-                
-                total_cost.append(memory_cost)
-                per_gpu_cost[gpu_index].append(memory_cost)
+                total_cost.append(var * num_tokens_total - var * previous_gpu_selected * num_tokens_total)
+                per_gpu_cost[gpu_index].append(var * num_tokens_total)
 
         max_per_gpu_cost = self.model.add_var(name='per_gpu_cost_lim', var_type=INTEGER)
         for i in range(self.num_gpus):
             self.model += xsum(per_gpu_cost[i]) <= max_per_gpu_cost
-        # max_mip_gap gap .1
-        # time_limit 1
-        # threads 64
+        total_cost_var = self.model.add_var(name='total_cost', var_type=INTEGER)
+        self.model += xsum(total_cost) == total_cost_var
+    
         self.model.start = initial_solution
         self.model.threads = -1
-        self.model.max_mip_gap = 0.02
-        self.model.objective = minimize(xsum(total_cost) + max_per_gpu_cost)
+        self.model.max_mip_gap = 0.01
+        setup_time = time.time() - start_time
+        start_time = time.time()
+        self.model.objective = minimize(total_cost_var + max_per_gpu_cost)
         status = self.model.optimize()
-        # if status == OptimizationStatus.OPTIMAL:
-        #     print('Optimal solution found.')
-        # elif status == OptimizationStatus.FEASIBLE:
-        #     print('Feasible solution found, but not necessarily optimal.')
-        # else:
-        #     print('No feasible solution found.')
-
-        print(f"Setup and solving time: {time.time() - start_time}s")
+        print(f"Solving time: {time.time() - start_time}s Setup Time {setup_time}s")
 
     def get_exisiting_cost(self):
         existing_cost = {}
@@ -335,7 +375,10 @@ class LPTreeTraversal:
             for gpu_id, var in enumerate(lp_node.variables):
                 if prefix_node not in existing_cost:
                     existing_cost[prefix_node] = {}
-                existing_cost[prefix_node][gpu_id] = int(var.x)
+                if var.x >= 0.99:
+                    existing_cost[prefix_node][gpu_id] = 1
+                else:
+                    existing_cost[prefix_node][gpu_id] = 0
         return existing_cost
 
     def calculate_tokens_per_gpu(self):
@@ -348,14 +391,13 @@ class LPTreeTraversal:
                     load_to_gpu[i] += prefix_node.ref_counter
         return tokens_per_gpu, load_to_gpu
 
+
     def pretty_print(self, prefix_node):
         # This method will call pretty_print_helper and then print additional information
         # Adjustments are mainly in handling variable values using .x in MIP
         self.pretty_print_helper(prefix_node)
         tokens_per_gpu, load_to_gpu = self.calculate_tokens_per_gpu()
         print(f"Tokens per GPU: {tokens_per_gpu} {load_to_gpu}")
-        # Memory cost and load cost prints would depend on how these costs are calculated and tracked
-        # For example, if these were objective components, you would access the objective value like so:
         print(f"Objective value: {self.model.objective_value}")
 
     def pretty_print_helper(self, prefix_node, indent="", depth=0):
@@ -364,7 +406,8 @@ class LPTreeTraversal:
         lp_node = self.node_map.get(prefix_node)
         if lp_node:
             selected_gpus = [i for i, var in enumerate(lp_node.variables) if var.x >= 0.99]  # Adjust threshold as needed, using .x for variable value
-            print(f"{indent}Node {lp_node.node_id} (Tokens: {prefix_node.num_tokens}, Refs: {prefix_node.ref_counter}): GPUs {selected_gpus}")
+            # if lp_node.node_id == 4 or True:
+            print(f"{indent}Node {lp_node.node_id} (Tokens: {len(prefix_node.value)}): GPUs {selected_gpus}")
         else:
             print(f"{indent}Node (Prefix: {len(prefix_node.value)}) has no LP Node mapping")
 
@@ -377,42 +420,55 @@ class LPTreeTraversal:
             for gpu_id, var in enumerate(lp_node.variables):
                 if var.x >= 0.99:
                     prefix_node.gpu_selections.add(gpu_id)
+
     
-class LPScheduler(CustomRuntimeSelector):
-    def __init__(self, num_nodes: int, depth_limit=3):
+class LPScheduler:
+    def __init__(self, num_nodes: int, depth_limit=4, update_interval=5):
         self.num_nodes = num_nodes
         self.tree_cache = LPRadixCache()
-        self.lp_tree_traversal = LPTreeTraversal(3)
+        self.shadow_cache = LPRadixCache()
+        self.lp_tree_traversal = LPTreeTraversal(num_nodes)
         self.lp_tree_traversal.depth_limit = depth_limit
         self.metrics_dict = []
-        
+        self.counter = 0
+        self.update_interval=update_interval
+
     def runtime_selector(self, text: str=None, request_id: str=None, input_ids=None, ):
         # Tokenize the text
         start_time = time.time()
-        self.tree_cache.insert(tuple(input_ids))
-        self.lp_tree_traversal.traverse_and_optimize(self.tree_cache.root_node)
-        self.lp_tree_traversal.update_nodes_with_solution()
 
-        node = self.tree_cache.match_prefix(input_ids)[1]
-        while not node.gpu_selections:
-            node = node.parent
+        node_map = self.lp_tree_traversal.node_map
+        self.tree_cache.insert(tuple(input_ids), node_map=node_map)
+        if self.counter < self.update_interval or self.counter % self.update_interval == 0:
+            # Note this can be done in a background thread
+            existing_cost = self.lp_tree_traversal.get_exisiting_cost()
+            self.lp_tree_traversal.traverse_and_optimize(self.tree_cache.root_node, existing_cost=existing_cost)
+            self.lp_tree_traversal.update_nodes_with_solution()
 
-        gpu_selections = node.gpu_selections
+        self.counter += 1
+        gpu_selections = self.tree_cache.match_prefix_get_gpu_selection(input_ids)
+
         # Randomly select a node from gpu selections
+        mode = "not_random"
+        if len(gpu_selections) == 0 or len(gpu_selections) == self.num_nodes:
+            gpu_selections = set(range(self.num_nodes))
+            mode = "random"
+
         runtime_selected = random.choice(list(gpu_selections))
         # Insert the tokenized text into the radix cache
 
         self.metrics_dict.append({
-            "text": text[:15],
+            "text": text,
             "rid": request_id,
             "selected_runtime": runtime_selected,
-            "overhead": time.time() - start_time
+            "overhead": time.time() - start_time,
+            "mode": mode
         })
         return runtime_selected
 
 
 if __name__ == "__main__":
-    # Example usage (you would need to define the structure of PrefixTreeNode and provide a valid prefix_tree_root):
+    # Example usage (you would need to define the structure of PrefixLPTreeNode and provide a valid prefix_tree_root):
     import sys
     import os
     import pandas as pd
@@ -431,26 +487,10 @@ if __name__ == "__main__":
     print(f"Workload length: {len(workload)}")
     scheduler = LPScheduler(3, depth_limit=4)
     runtime_selected = []
-    for i in range(20):
-        runtime = scheduler.runtime_selector(input_ids=workload[i]["input_ids"]["input_ids"], text=workload[i]["text"])
+    for i in range(5):
+        runtime = scheduler.runtime_selector(input_ids=workload[i]["input_ids"], text=workload[i]["text"])
         runtime_selected.append(runtime)
-    
-    print(scheduler.metrics_dict)
-    # times = []
-    # interval = 3
-    # depth_limit = 4
-    # lp_tree_traversal = LPTreeTraversal(3)
-    # lp_tree_traversal.depth_limit = depth_limit
-    # cache = LPRadixCache()
-    # random.shuffle(workload)
-    # for i in range(interval):
-    #     for item in workload[i*interval:(i+1)*interval]:
-    #         cache.insert(tuple(item["input_ids"]["input_ids"]))
-    #     start_time = time.time()
-    #     lp_tree_traversal.traverse_and_optimize(cache.root_node, existing_cost=lp_tree_traversal.get_exisiting_cost())
-    #     times.append({"num_nodes": len(lp_tree_traversal.node_map), "time": time.time() - start_time, "total": (i+1)*10})
-    # print("Time taken", time.time() - start_time)
-    # lp_tree_traversal.pretty_print(cache.root_node)
+    print(runtime_selected)
 
 # %%
 
