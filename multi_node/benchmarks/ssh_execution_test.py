@@ -2,6 +2,7 @@ import paramiko
 import re, time
 import requests
 
+
 class SSHRuntime:
     def __init__(self, model_path, ssh_config, gpu, **kwargs):
         self.model_path = model_path
@@ -23,17 +24,17 @@ class SSHRuntime:
 
     def start_remote_runtime(self, **kwargs):
         cli_args = self.kwargs_to_cli_args(**kwargs)
-        environment_variables = {'CUDA_VISIBLE_DEVICES': str(self.gpu)}
-        command = f'setsid /mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
+        environment_variables = {"CUDA_VISIBLE_DEVICES": str(self.gpu)}
+        command = f"setsid /mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0"
         print("Running command", command)
         transport = self.ssh_client.get_transport()
-        transport.set_keepalive(30) # Send keepalive packets every 30 seconds
+        transport.set_keepalive(30)  # Send keepalive packets every 30 seconds
         channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel
         channel.update_environment(environment_variables)
         channel.exec_command(command)
-        stdout = channel.makefile('r', -1)
-        stderr = channel.makefile_stderr('r', -1)
+        stdout = channel.makefile("r", -1)
+        stderr = channel.makefile_stderr("r", -1)
         timeout = 40
         end_time = time.time() + timeout
         port = None
@@ -41,9 +42,11 @@ class SSHRuntime:
             line = stdout.readline()  # Read line from stdout
             if not line:
                 line = stderr.readline()  # If stdout is empty, try to read from stderr
-            
+
             # Search for the port number in the line
-            match = re.search(r"Server is on port (\d+) on host (.*) on pid (\d+)", line)
+            match = re.search(
+                r"Server is on port (\d+) on host (.*) on pid (\d+)", line
+            )
             if match:
                 port = match.group(1)  # Capture the port number
                 pid = match.group(3)
@@ -53,7 +56,9 @@ class SSHRuntime:
                 time.sleep(1)  # Wait before trying to read more output
 
         if not port:
-            raise Exception("Failed to detect server startup within the timeout period.")
+            raise Exception(
+                "Failed to detect server startup within the timeout period."
+            )
         self.url = f"http://{self.ssh_config['hostname']}:{port}"
 
         # Wait for the /model_info to return valid json for 5 attempts
@@ -70,13 +75,16 @@ class SSHRuntime:
         self.process_pid = pid
         self.port = port
 
-        return port   
-# Wait for the output to be available and read the PID
-    
+        return port
+
+    # Wait for the output to be available and read the PID
+
     def shutdown(self):
         if self.ssh_client:
             self.ssh_client.exec_command(f"pkill -f {self.port}")
-            self.ssh_client.exec_command(f"pkill -f sglang") # TODO check this. this might kill if two people run exp4eriments together
+            self.ssh_client.exec_command(
+                f"pkill -f sglang"
+            )  # TODO check this. this might kill if two people run exp4eriments together
             self.ssh_client.close()
 
     def kwargs_to_cli_args(self, **kwargs):
@@ -87,7 +95,8 @@ class SSHRuntime:
                     args.append(f"--{key.replace('_', '-')}")
             else:
                 args.append(f"--{key.replace('_', '-')} {value}")
-        return ' '.join(args)
+        return " ".join(args)
+
 
 if __name__ == "__main__":
     ssh_config = {
@@ -99,4 +108,3 @@ if __name__ == "__main__":
     print(f"Running on port {runtime.port}")
     time.sleep(30)
     runtime.shutdown()
-    

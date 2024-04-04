@@ -135,21 +135,18 @@ class ModelDetails:
                     ssh_config=config.ssh_config,
                     gpu=gpu_id,
                     cuda_devices=gpu_id,
-                    # context_length=4096,
                     **kwargs
                 )
             elif config.url:
                 runtime = URLRuntime(
                     config.url, 
                     cuda_devices=[gpu_id],
-                    # context_length=4096,
                     **kwargs)
             else:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
                     cuda_devices=[gpu_id],
                     gpu=gpu_id,
-                    # context_length=4096,
                     **kwargs,
                 )
             self.runtimes.append(runtime)
@@ -318,9 +315,7 @@ class ModelDetails:
                 output.success = False
                 exc_info = sys.exc_info()
                 output.error = "".join(traceback.format_exception(*exc_info))
-                print
         #  throughput as token generated per second
-        # print(f"{id} finishes")
         return output
 
 def remove_prefix(text: str, prefix: str) -> str:
