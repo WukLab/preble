@@ -258,7 +258,7 @@ class ToolBenchDataLoader(DataLoader):
                     workload.append(
                         {
                             "text": e['prompt'], 
-                            'input_ids': self.tokenizer(e['prompt']),
+                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len
