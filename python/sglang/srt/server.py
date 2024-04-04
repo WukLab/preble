@@ -623,8 +623,6 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
                 # print(f"Warmup done. model response: {res.json()['text']}")
                 # print("=" * 20, "Server is ready", "=" * 20, flush=True)
             except requests.exceptions.RequestException as e:
-                with open("sglang_error.log", "a+") as f:
-                    f.write(str(e))
                 if pipe_finish_writer is not None:
                     pipe_finish_writer.send(str(e))
                 else:
