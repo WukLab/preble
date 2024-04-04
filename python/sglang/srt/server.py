@@ -665,6 +665,7 @@ class Runtime:
         cuda_devices: Optional[List[int]] = None,
         freeze: bool = False,
         log_prefix_hit: bool = False,
+        simulate: bool = False
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
         # host = "127.0.0.1"

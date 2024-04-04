@@ -14,7 +14,8 @@ class GPUConfig:
         self.ssh_config = ssh_config
 
 class MultiNodeLoader:
-    def __init__(self) -> None:
+    def __init__(self, simulate = False) -> None:
+        self.simulate = simulate
         self.models_allocated = []
         self.gpus_to_model_allocated: DefaultDict[int, List[ModelDetails]] = (
             defaultdict(list)
@@ -36,7 +37,7 @@ class MultiNodeLoader:
         Note: Could manage this directly in python but SGLang uses global variables
         There's also a question on how to unload memory
         """
-        model_details = ModelDetails(model_path, gpu_configs)
+        model_details = ModelDetails(model_path, gpu_configs, self.simulate)
         model_details.load_runtimes(model_path=model_path, gpu_configs=gpu_configs, **kwargs)
         # TODO verify if the memory is available
         self.models_allocated.append(model_details)

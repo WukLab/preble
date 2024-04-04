@@ -42,7 +42,7 @@ class DataParallelRequestRouter:
         self.total_nodes = total_nodes
         self.model_selection_stats = []
 
-    def select_runtime(self, text, experiment_id, request_id, input_ids=None) -> str:
+    def select_runtime(self, text, experiment_id, request_id, input_ids=None) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:

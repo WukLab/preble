@@ -1,8 +1,49 @@
 from dataclasses import dataclass
 from typing import List, Dict
-from model_runtime_manager import RequestFuncOutput
 import numpy as np
 import logging
+import uuid
+from dataclasses import field
+import json
+
+@dataclass
+class RequestFuncOutput:
+    generated_text: str = ""
+    success: bool = False
+    request_latency: float = 0
+    ttft: float = 0  # Time to first token
+    itl: List[float] = field(default_factory=list)  # List of inter-token latencies
+    prompt_len: int = 0
+    error: str = ""
+    global_time: float = 0
+    output_len: float = None
+    tpot: float = None
+    prefill_decode_ratio: float = None
+    send_out_time: float = 0.0
+    route_dest: int = None
+
+    def update_metrics(
+        self,
+        tokenizer,
+    ):
+        # In simulation this will be set
+        if not self.output_len:
+            self.output_len = len(tokenizer(self.generated_text).input_ids)
+        # print(self.output_len, self.generated_text, self.success, self.error)
+        if self.output_len > 1:
+            self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
+        self.prefill_decode_ratio = self.ttft / self.request_latency
+
+    @property
+    def total_tokens(self):
+        return self.prompt_len + self.output_len
+
+    @property
+    def overall_throughput(self):
+        return self.total_tokens / self.request_latency
+
+    def to_json(self):
+        return json.dumps(self.__dict__)
 
 @dataclass
 class BenchmarkMetrics:

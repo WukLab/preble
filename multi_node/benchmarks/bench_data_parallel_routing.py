@@ -33,7 +33,7 @@ from benchmark_workload_gen import (
 from benchmark_utils import BenchmarkMetrics
 
 import random
-from model_runtime_manager import GPUConfig
+from sglang.srt.managers.router.model_runner import GPUConfig
 
 random.seed(10)
 import datetime
@@ -94,18 +94,19 @@ def test_oracle_random_basic(
     model_name="mistralai/Mistral-7B-v0.1",
     load_distribution=LoadDistribution.EVEN,
     k=1.1,
+    simulate=False,
 ):
     if exp_time != float('inf'):
-        num_requests = max(num_requests, int(rps * exp_time))
-    loader = MultiNodeLoader()
+        num_requests = min(num_requests, int(rps * exp_time))
+    loader = MultiNodeLoader(simulate)
     logging.debug(
-        f"=====STARTING BENCHMARK OF {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
+        f"=====STARTING BENCHMARK OF {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
     logging.debug(f"Using load distribution of {load_distribution}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
     start_time = time.time()
-    context_length = 32768
+    context_length = 2048
     # dataloader = ToolBenchDataLoader(
     #     "G1_workload_updated_input_output_lengths_4096.json",
     #     num_workloads,
@@ -113,28 +114,28 @@ def test_oracle_random_basic(
     #     tokenizer,
     #     load_dist=load_distribution,
     # )
-    # dataloader = RandomDataLoader(
-    #     num_workloads,
-    #     num_requests,
-    #     tokenizer,
-    #     num_in_context_examples=7,
-    #     output_len=64,
-    # )
-    # requests = dataloader.generate_workload(k=k)
-    dataloader_short = LooGLEDataset(
-        loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
-        num_patterns=num_workloads, 
-        total_num_requests=num_requests, 
-        tokenizer=tokenizer, 
-        load_dist=LoadDistribution.ALL, 
-        crop_max_decode=True)
-    requests = dataloader_short.generate_workload(max_length=32768)
+    dataloader = RandomDataLoader(
+        num_workloads,
+        num_requests,
+        tokenizer,
+        num_in_context_examples=4,
+        output_len=64,
+    )
+    requests = dataloader.generate_workload(k=k)
+    # dataloader_short = LooGLEDataset(
+    #     loogle_dataset_type=LooGLEDatasetType.SHORT_QA, 
+    #     num_patterns=num_workloads, 
+    #     total_num_requests=num_requests, 
+    #     tokenizer=tokenizer, 
+    #     load_dist=LoadDistribution.ALL, 
+    #     crop_max_decode=True)
+    # requests = dataloader_short.generate_workload(max_length=32768)
     random.shuffle(requests)
     print("Data loading time", time.time() - start_time)
     def load_and_run_benchmark(policy, custom_policy=None):
         random.seed(10)
         logging.debug(
-            f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s ====="
+            f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
         )
         model_details = loader.load_model(
             model_name,
@@ -143,6 +144,7 @@ def test_oracle_random_basic(
             # mem_fraction_static=0.42,
             mem_fraction_static=0.8,
             context_length=context_length,
+            load_format='dummy',
         )
 
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
@@ -190,13 +192,8 @@ def test_oracle_random_basic(
             model_details.update_runtime_selection_policy(policy)
 
         tic_benchmark = time.time()
-        results: List[RequestFuncOutput] = asyncio.run(
-            model_details.async_generate_batch_request_per_sec(
-                requests,
-                rps,
-                model_details.async_send_request,
-                exp_time,
-            )
+        results: List[RequestFuncOutput] = model_details.get_experiment_results(
+            requests, rps, exp_time
         )
         overall_latency = time.time() - tic_benchmark
         counts = model_details.request_router.get_model_selection_counts()
@@ -212,17 +209,17 @@ def test_oracle_random_basic(
         time.sleep(5)
 
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
     # )
-    load_and_run_benchmark(
-        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE
-    )
+    # load_and_run_benchmark(
+    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE
+    # )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="loogle_verify.log")
+    logging.basicConfig(level=logging.DEBUG, filename="ref_for_simulator_react_random_oracle_3min.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -230,42 +227,48 @@ if __name__ == "__main__":
     start_date = datetime.datetime.utcnow()
     start_time = time.time()
     logging.debug(f"Starting Experiment at {start_date}")
-    model_name = "mistralai/Mistral-7B-v0.1"
+    # model_name = "mistralai/Mistral-7B-v0.1"
     # model_name = "lmsys/vicuna-13b-v1.5"
+    model_name = "meta-llama/Llama-2-7b-hf"
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
-        [8, 0.2, 200, .5],
+        # [8, 0.2, 200, .5],
+        [100, 0.2, 4096, 4]
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
         GPUConfig(gpu_id=0, url=None, use_ssh=False),
         GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
-            "hostname": "192.168.1.18",
-            "username": "vikranth",
-            "port": 456,
-            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-            "node_name": "08",
-        }),
-        GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
-            "hostname": "192.168.1.18",
-            "username": "vikranth",
-            "port": 456,
-            "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-            "node_name": "08",
-        }),
+        # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config={
+        #     "hostname": "192.168.1.18",
+        #     "username": "vikranth",
+        #     "port": 456,
+        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+        #     "node_name": "08",
+        # }),
+        # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config={
+        #     "hostname": "192.168.1.18",
+        #     "username": "vikranth",
+        #     "port": 456,
+        #     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+        #     "node_name": "08",
+        # }),
     ]
+    for config in gpu_configs:
+        config.regist_simulator_config(None, 25 << 30) # Llama 2-7b, 0.8 A6000
 
     for config in configurations_to_test:
         test_oracle_random_basic(
             *config,
-            exp_time=float('inf'),
+            # exp_time=float('inf'),
+            exp_time=180,
             model_name=model_name,
             gpu_configs=gpu_configs,
             load_distribution=LoadDistribution.EVEN,
             k=1.1,
+            simulate=False,
         )
     logging.debug(f"Total Experiment Time: {time.time() - start_time}")
