@@ -282,8 +282,8 @@ class ToolBenchDataLoader(DataLoader):
                     output_len = len(self.tokenizer(e["output"]).input_ids)
                     workload.append(
                         {
-                            "text": e["prompt"],
-                            "input_ids": self.tokenizer(e["prompt"]),
+                            "text": e['prompt'], 
+                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len,
