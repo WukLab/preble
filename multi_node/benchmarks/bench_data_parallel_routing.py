@@ -21,6 +21,7 @@ from benchmark_workload_gen import (
     LooGLEDataset,
     LooGLEDatasetType,
     LoogleOracle,
+    LPScheduler
 )
 from benchmark_utils import BenchmarkMetrics
 

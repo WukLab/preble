@@ -65,7 +65,7 @@ class SSHRuntimeManager:
         }
         python_process = self.ssh_config.get("python_process", "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python")
         command = f'setsid env CUDA_VISIBLE_DEVICES={self.gpu} {python_process} -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
-        logging.debug(f"Running command {command} on gpu {self.gpu}")
+        logging.info(f"Running command {command} on gpu {self.gpu}")
         transport = self.ssh_client.get_transport()
         channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel

@@ -95,6 +95,10 @@ class BenchmarkMetrics:
             gpu_counts=gpu_counts,
         )
 
+    @property
+    def num_sucessful_requests(self):
+        return sum([1 if result.success else 0 for result in self.all_results])
+
     def to_json(self):
         all_reqs = [result.to_json() for result in self.all_results]
         return {
