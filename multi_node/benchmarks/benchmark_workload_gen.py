@@ -131,10 +131,12 @@ share_gpt_dataset = None
 
 
 # Add ShareGPTDataset
-def generate_random_workload():
+def generate_random_workload(random_workload_path):
     global share_gpt_dataset
     if not share_gpt_dataset:
-        with open("ShareGPT_V3_unfiltered_cleaned_split.json") as f:
+        if not random_workload_path:
+            random_workload_path = "ShareGPT_V3_unfiltered_cleaned_split.json"
+        with open(random_workload_path) as f:
             data = json.load(f)
         share_gpt_dataset = data
 
@@ -192,6 +194,7 @@ class RandomDataLoader(DataLoader):
         distribution_of_non_shared: float = 0.0,
         output_len: int = 1,
         num_in_context_examples: int = 4,
+        random_workload_path=None
     ):
         super().__init__(
             "random", num_patterns, total_num_requests, tokenizer, load_dist
@@ -199,6 +202,7 @@ class RandomDataLoader(DataLoader):
         self.distribution_of_non_shared = distribution_of_non_shared
         self.output_len = output_len
         self.num_in_context_examples = num_in_context_examples
+        self.random_workload_path=random_workload_path
 
     def generate_workload(self, k):
         num_prefixed_shared = int(
@@ -222,7 +226,7 @@ class RandomDataLoader(DataLoader):
                     "sampling_params": copy.deepcopy(sampling_params),
                 }
             )
-        random_workload = generate_random_workload()
+        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
             prompt = random.choice(random_workload)
             workload.append(

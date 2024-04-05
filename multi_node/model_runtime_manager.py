@@ -18,6 +18,7 @@ import paramiko
 import sys, traceback
 from ssh_runtime import SSHRuntimeManager
 from dataclasses import field
+import logging
 
 class GPUConfig:
     def __init__(self, gpu_id, url=None, use_ssh=False, ssh_config={}) -> None:
@@ -125,7 +126,7 @@ class ModelDetails:
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
     # Send context-length like params from input
     def load_runtimes(self, model_path, gpu_configs, **kwargs):
-        print(kwargs)
+        logging.info(kwargs)
         def load_runtime(config: GPUConfig):
             runtime: EndpointRuntimeInterface
             gpu_id = config.gpu_id

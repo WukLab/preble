@@ -6,7 +6,7 @@ from typing import Tuple
 from uuid import uuid4  
 import copy
 import torch
-
+import logging
 class TreeNode:
     def __init__(self):
         self.id = uuid4()  
@@ -72,6 +72,8 @@ class RadixCache:
                 if child.gpu_selections:
                     current_gpu_selection = child.gpu_selections
                 if prefix_len < len(c_key):
+                    logging.warning(f"New node found when trying to match prefix using parent current gpu selection")
+                    return current_gpu_selection
                     assert False
                     new_node = self._split_node(c_key, child, prefix_len, new_nodes_created=new_nodes_created)
                     value.append(new_node.value)
@@ -244,6 +246,40 @@ class RadixCache:
         dfs_(self.root_node)
         return ret_list
 
+
+    def match_prefix(self, key):
+        if self.disable:
+            return [], self.root_node
+
+        value = []
+        last_node = [self.root_node]
+        self._match_prefix_helper(self.root_node, key, value, last_node)
+        if value:
+            if isinstance(value[0], torch.Tensor):
+                value = torch.concat(value)
+            else:
+                concatenated_value = []
+                for v in value:
+                    concatenated_value.extend(v)  # Assuming each element in value is a list itself
+                value = concatenated_value
+        return value, last_node[0]
+
+    ##### Internal Helper Functions #####
+    def _match_prefix_helper(self, node, key, value, last_node):
+        node.last_access_time = time.time()
+
+        for c_key, child in node.children.items():
+            prefix_len = match(c_key, key)
+            if prefix_len != 0:
+                if prefix_len < len(c_key):
+                    new_node = self._split_node(c_key, child, prefix_len)
+                    value.append(new_node.value)
+                    last_node[0] = new_node
+                else:
+                    value.append(child.value)
+                    last_node[0] = child
+                    self._match_prefix_helper(child, key[prefix_len:], value, last_node)
+                break
 import time
 from mip import Model, xsum, BINARY, MINIMIZE, OptimizationStatus, minimize, INTEGER, GUROBI
 import random
@@ -394,34 +430,27 @@ class LPTreeTraversal:
         return tokens_per_gpu, load_to_gpu
 
 
-    def pretty_print(self, prefix_node):
+    def pretty_print(self, prefix_node, tokenizer=None):
         # This method will call pretty_print_helper and then print additional information
         # Adjustments are mainly in handling variable values using .x in MIP
-        self.pretty_print_helper(prefix_node)
+        self.pretty_print_helper(prefix_node, tokenizer=tokenizer)
         # tokens_per_gpu, load_to_gpu = self.calculate_tokens_per_gpu()
         # print(f"Tokens per GPU: {tokens_per_gpu} {load_to_gpu}")
         # print(f"Objective value: {self.model.objective_value}")
 
-    def pretty_print_helper(self, prefix_node, indent="", depth=0):
+    def pretty_print_helper(self, prefix_node, indent="", depth=0, tokenizer=None):
         if depth == self.depth_limit:
             return
         lp_node = self.node_map.get(prefix_node)
         if lp_node:
             selected_gpus = [i for i, var in enumerate(lp_node.variables) if var.x >= 0.99]  # Adjust threshold as needed, using .x for variable value
-            # if lp_node.node_id == 4 or True:
-
-            def get_tool(workload_item):
-                text = tokenizer.decode(workload_item)
-                if ":" in text:
-                    return text.split(":")[0].strip().replace("\n", " ")
-                else:
-                    return text[:60].strip().replace("\n", "")
-            print(f"{indent}Node {lp_node.node_id} (Tokens: {get_tool(prefix_node.value)}, {len(prefix_node.value)}): GPUs {selected_gpus}")
+            token_name = str(tokenizer.decode(prefix_node.value))[:30] if tokenizer else prefix_node.value[:10]
+            print(f"{indent}Node {lp_node.node_id} (Tokens: {token_name}, {len(prefix_node.value)}): GPUs {selected_gpus}")
         else:
             print(f"{indent}Node (Prefix: {len(prefix_node.value)}) has no LP Node mapping")
 
         for child in prefix_node.children.values():
-            self.pretty_print_helper(child, indent + "  ", depth=depth + 1)
+            self.pretty_print_helper(child, indent + "  ", depth=depth + 1, tokenizer=tokenizer)
 
     def update_nodes_with_solution(self):
         for prefix_node, lp_node in self.node_map.items():

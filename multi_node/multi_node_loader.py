@@ -2,7 +2,6 @@ from gpu_stats_profiling import get_gpu_profile
 from model_runtime_manager import ModelDetails
 from typing import DefaultDict, List
 from collections import defaultdict
-from model_runtime_manager import ExtendedSGLangRuntime, EndpointRuntimeInterface
 import signal
 import sys
 
@@ -13,13 +12,14 @@ class GPUConfig:
         self.use_ssh = use_ssh
         self.ssh_config = ssh_config
 
+    def __repr__(self) -> str:
+        return f"GPUConfig(gpu_id={self.gpu_id}, url={self.url}, use_ssh={self.use_ssh}, ssh_config={self.ssh_config})"
 class MultiNodeLoader:
     def __init__(self) -> None:
         self.models_allocated = []
         self.gpus_to_model_allocated: DefaultDict[int, List[ModelDetails]] = (
             defaultdict(list)
         )
-        self.current_gpu_memory_usage = get_gpu_profile()
         signal.signal(signal.SIGINT, self.runtime_cleanup_handler)
 
     def runtime_cleanup_handler(self, sig, frame):
@@ -59,6 +59,3 @@ class MultiNodeLoader:
         model_details.runtimes = []
         # model_details.gpus = []
         return model_details
-
-    def update_gpu_memory_usage(self, gpu):
-        self.current_gpu_memory_usage[gpu] = get_gpu_profile()[gpu]
