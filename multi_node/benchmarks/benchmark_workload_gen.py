@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 import logging
-# from datasets import load_dataset
+from datasets import load_dataset
 import re
 
 random.seed(10)
@@ -131,10 +131,12 @@ share_gpt_dataset = None
 
 
 # Add ShareGPTDataset
-def generate_random_workload():
+def generate_random_workload(random_workload_path):
     global share_gpt_dataset
     if not share_gpt_dataset:
-        with open("ShareGPT_V3_unfiltered_cleaned_split.json") as f:
+        if not random_workload_path:
+            random_workload_path = "ShareGPT_V3_unfiltered_cleaned_split.json"
+        with open(random_workload_path) as f:
             data = json.load(f)
         share_gpt_dataset = data
 
@@ -155,12 +157,14 @@ def generate_random_workload():
     return prompts
     # print(sum(avg)/len(avg))
 
+
 class LoadDistribution(Enum):
     EVEN = auto()
     ALL = auto()
     ZIPF = auto()
     NORMAL = auto()
-    
+
+
 class DataLoader:
     def __init__(
         self,
@@ -168,7 +172,7 @@ class DataLoader:
         num_patterns: int,
         total_num_requests: int,
         tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
-        load_dist: LoadDistribution = LoadDistribution.EVEN
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
     ):
         self.data_path = data_path
         self.num_patterns = num_patterns
@@ -178,7 +182,8 @@ class DataLoader:
 
     def generate_workload(self):
         raise NotImplementedError()
-    
+
+
 class RandomDataLoader(DataLoader):
     def __init__(
         self,
@@ -188,15 +193,21 @@ class RandomDataLoader(DataLoader):
         load_dist: LoadDistribution = LoadDistribution.EVEN,
         distribution_of_non_shared: float = 0.0,
         output_len: int = 1,
-        num_in_context_examples: int = 4
+        num_in_context_examples: int = 4,
+        random_workload_path=None
     ):
-        super().__init__("random", num_patterns, total_num_requests, tokenizer, load_dist)
+        super().__init__(
+            "random", num_patterns, total_num_requests, tokenizer, load_dist
+        )
         self.distribution_of_non_shared = distribution_of_non_shared
         self.output_len = output_len
         self.num_in_context_examples = num_in_context_examples
-    
+        self.random_workload_path=random_workload_path
+
     def generate_workload(self, k):
-        num_prefixed_shared = int(self.total_num_requests * (1 - self.distribution_of_non_shared))
+        num_prefixed_shared = int(
+            self.total_num_requests * (1 - self.distribution_of_non_shared)
+        )
         num_non_shared = int(self.total_num_requests * self.distribution_of_non_shared)
         workload = []
         sampling_params = {
@@ -207,14 +218,16 @@ class RandomDataLoader(DataLoader):
         }
         for i in range(num_prefixed_shared):
             workload_num = i % self.num_patterns
-            prompt = get_react_workload(f"Workload {workload_num} ", num_examples=self.num_in_context_examples)
+            prompt = get_react_workload(
+                f"Workload {workload_num} ", num_examples=self.num_in_context_examples
+            )
             workload.append(
                 {
                     "text": prompt,
                     "sampling_params": copy.deepcopy(sampling_params),
                 }
             )
-        random_workload = generate_random_workload()
+        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
             prompt = random.choice(random_workload)
             workload.append(
@@ -224,9 +237,11 @@ class RandomDataLoader(DataLoader):
                 }
             )
         random.shuffle(workload)
+
         def get_token_ids(request):
             input_ids = self.tokenizer(request["text"]).input_ids
             request["input_ids"] = input_ids
+
         with ThreadPoolExecutor(128) as executor:
             futures = []
             for request in workload:
@@ -234,36 +249,50 @@ class RandomDataLoader(DataLoader):
             wait(futures)
         prompt_lens = [len(p["input_ids"]) for p in workload]
         plt.hist(prompt_lens)
-        plt.savefig(f"react_prompt_length.png") 
+        plt.savefig(f"react_prompt_length.png")
         return workload
-    
+
+
 class ToolBenchDataLoader(DataLoader):
-    def __init__(self, data_path: str, num_patterns: int, total_num_requests: int, tokenizer, load_dist: LoadDistribution = LoadDistribution.EVEN):
-        super().__init__(data_path, num_patterns, total_num_requests, tokenizer, load_dist)
+    def __init__(
+        self,
+        data_path: str,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer,
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
+    ):
+        super().__init__(
+            data_path, num_patterns, total_num_requests, tokenizer, load_dist
+        )
         self.data = self.read_data()
-        
+
     def read_data(self):
-        data = json.load(open(self.data_path, 'r'))
+        data = json.load(open(self.data_path, "r"))
         return data
-    
-    def generate_workload(self, k = None):
+
+    def generate_workload(self, k=None):
         workload = []
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
-            selected_prefixs = np.random.choice(prefix_stats, self.num_patterns, replace=False)
+            selected_prefixs = np.random.choice(
+                prefix_stats, self.num_patterns, replace=False
+            )
             for p in selected_prefixs:
-                selected_instances = np.random.choice(self.data[p], load_threshold, replace=False)
+                selected_instances = np.random.choice(
+                    self.data[p], load_threshold, replace=False
+                )
                 for e in selected_instances:
-                    output_len = len(self.tokenizer(e['output']).input_ids)
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
                     workload.append(
                         {
                             "text": e['prompt'], 
-                            'input_ids': self.tokenizer(e['prompt']),
+                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
-                                "max_new_tokens": output_len
-                            }
+                                "max_new_tokens": output_len,
+                            },
                         }
                     )
 
@@ -272,25 +301,31 @@ class ToolBenchDataLoader(DataLoader):
         #         for item in items:
         #             output_len = len(self.tokenizer(item['output']).input_ids)
         #             workload.append((
-        #                 e['prompt'], 
+        #                 e['prompt'],
         #                 {
         #                     "temperature": 0,
         #                     "max_new_tokens": output_len
         #                 }))
         elif self.load_dist == LoadDistribution.ZIPF:
             assert k is not None
-            prefix_stats = sorted([(p, len(l)) for p, l in self.data.items()], key=lambda x: x[1], reverse=True)[:self.num_patterns]
+            prefix_stats = sorted(
+                [(p, len(l)) for p, l in self.data.items()],
+                key=lambda x: x[1],
+                reverse=True,
+            )[: self.num_patterns]
             # ZIPF distribution
             # sample hit to each selected prefix with the given distribution
             hist = []
             while len(hist) < self.total_num_requests:
-                tool_uses = np.random.zipf(a=k, size=self.num_patterns) - 1 # sampled index start from 1, but previous result is still valid
+                tool_uses = (
+                    np.random.zipf(a=k, size=self.num_patterns) - 1
+                )  # sampled index start from 1, but previous result is still valid
                 valid_tool_uses = [t for t in tool_uses if t < self.num_patterns]
-                hist.extend(valid_tool_uses[:self.total_num_requests - len(hist)])
+                hist.extend(valid_tool_uses[: self.total_num_requests - len(hist)])
 
             # Normal distribution
             # x = np.arange(0, self.num_patterns)
-            # xU, xL = x + 0.5, x - 0.5 
+            # xU, xL = x + 0.5, x - 0.5
             # prob = ss.norm.cdf(xU, scale = 3, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = 3, loc=self.num_patterns//2)
             # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
             # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
@@ -303,29 +338,38 @@ class ToolBenchDataLoader(DataLoader):
             workload = []
             for tool_index, num_requests in tool_usage.items():
                 prefix = prefix_stats[tool_index][0]
-                selected_instances = np.random.choice(self.data[prefix], num_requests, replace=True)
+                selected_instances = np.random.choice(
+                    self.data[prefix], num_requests, replace=True
+                )
                 for e in selected_instances:
-                    output_len = len(self.tokenizer(e['output']).input_ids)
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
                     workload.append(
                         {
-                            "text": e['prompt'], 
-                            'input_ids': self.tokenizer(e['prompt']),
+                            "text": e["prompt"],
+                            "input_ids": self.tokenizer(e["prompt"]),
                             "sampling_params": {
                                 "temperature": 0,
-                                "max_new_tokens": output_len
-                            }
+                                "max_new_tokens": output_len,
+                            },
                         }
                     )
         elif self.load_dist == LoadDistribution.NORMAL:
             assert k is not None
-            prefix_stats = sorted([(p, len(l)) for p, l in self.data.items()], key=lambda x: x[1], reverse=True)[:self.num_patterns]
+            prefix_stats = sorted(
+                [(p, len(l)) for p, l in self.data.items()],
+                key=lambda x: x[1],
+                reverse=True,
+            )[: self.num_patterns]
             # Normal distribution
             x = np.arange(0, self.num_patterns)
-            xU, xL = x + 0.5, x - 0.5 
-            prob = ss.norm.cdf(xU, scale = k, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = k, loc=self.num_patterns//2)
+            xU, xL = x + 0.5, x - 0.5
+            prob = ss.norm.cdf(xU, scale=k, loc=self.num_patterns // 2) - ss.norm.cdf(
+                xL, scale=k, loc=self.num_patterns // 2
+            )
             prob = prob / prob.sum()
-            hist = np.random.choice(x, size = self.total_num_requests, p = prob)
+            hist = np.random.choice(x, size=self.total_num_requests, p=prob)
             import matplotlib.pyplot as plt
+
             plt.hist(hist, bins=self.num_patterns)
             plt.savefig(f"normal_distribution_{k}.png")
             tool_usage = defaultdict(int)
@@ -334,17 +378,19 @@ class ToolBenchDataLoader(DataLoader):
             workload = []
             for tool_index, num_requests in tool_usage.items():
                 prefix = prefix_stats[tool_index][0]
-                selected_instances = np.random.choice(self.data[prefix], num_requests, replace=True)
+                selected_instances = np.random.choice(
+                    self.data[prefix], num_requests, replace=True
+                )
                 for e in selected_instances:
-                    output_len = len(self.tokenizer(e['output']).input_ids)
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
                     workload.append(
                         {
-                            "text": e['prompt'], 
-                            'input_ids': self.tokenizer(e['prompt']),
+                            "text": e["prompt"],
+                            "input_ids": self.tokenizer(e["prompt"]),
                             "sampling_params": {
                                 "temperature": 0,
-                                "max_new_tokens": output_len
-                            }
+                                "max_new_tokens": output_len,
+                            },
                         }
                     )
         else:
@@ -352,8 +398,10 @@ class ToolBenchDataLoader(DataLoader):
         print(len(workload))
         random.shuffle(workload)
         # save to json
-        with open(f"workload_{self.num_patterns}_{self.total_num_requests}.json", 'w') as f:
-            json.dump([{"text": item['text']} for item in workload], f)
+        with open(
+            f"workload_{self.num_patterns}_{self.total_num_requests}.json", "w"
+        ) as f:
+            json.dump([{"text": item["text"]} for item in workload], f)
         return workload
 
 
@@ -415,36 +463,48 @@ class LooGLEDatasetType(Enum):
     SHORT_CLOZE = auto()
     SHORT_QA = auto()
 
+
 class LooGLEDataset(DataLoader):
-    def __init__(self, 
-                 loogle_dataset_type: LooGLEDatasetType, 
-                 num_patterns: int, 
-                 total_num_requests: int, 
-                 tokenizer, 
-                 load_dist, crop_max_decode=True):
-        super().__init__("loogle", num_patterns, total_num_requests, tokenizer=tokenizer, load_dist=load_dist)
+    def __init__(
+        self,
+        loogle_dataset_type: LooGLEDatasetType,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer,
+        load_dist,
+        crop_max_decode=True,
+    ):
+        super().__init__(
+            "loogle",
+            num_patterns,
+            total_num_requests,
+            tokenizer=tokenizer,
+            load_dist=load_dist,
+        )
         self.prompt_format = {
             LooGLEDatasetType.SHORT_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
             LooGLEDatasetType.LONG_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
         }
         self.loogle_dataset_type = loogle_dataset_type
         self.data = self.read_data(loogle_dataset_type)
-        self.max_decode_loogle = { # based on filtring 1.5x IQR on dataset
+        self.max_decode_loogle = {  # based on filtring 1.5x IQR on dataset
             LooGLEDatasetType.SHORT_QA: 35,
             LooGLEDatasetType.LONG_QA: 28,
         }
         if not crop_max_decode:
-            self.max_decode_loogle = { # based on filtring 1.5x IQR on dataset
-                LooGLEDatasetType.SHORT_QA: float('inf'),
-                LooGLEDatasetType.LONG_QA: float('inf'),
+            self.max_decode_loogle = {  # based on filtring 1.5x IQR on dataset
+                LooGLEDatasetType.SHORT_QA: float("inf"),
+                LooGLEDatasetType.LONG_QA: float("inf"),
             }
-        # Short QA has about 
+        # Short QA has about
 
-    def read_data(self, LooGLE_dataset_type: LooGLEDatasetType = LooGLEDatasetType.SHORT_QA):
+    def read_data(
+        self, LooGLE_dataset_type: LooGLEDatasetType = LooGLEDatasetType.SHORT_QA
+    ):
         if LooGLE_dataset_type == LooGLEDatasetType.LONG_QA:
-            data = load_dataset('bigainlco/LooGLE', 'longdep_qa', split='test')
+            data = load_dataset("bigainlco/LooGLE", "longdep_qa", split="test")
         elif LooGLE_dataset_type == LooGLEDatasetType.SHORT_QA:
-            data = load_dataset('bigainlco/LooGLE', 'shortdep_qa', split='test')
+            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test")
         self.data = data
         self.prompt_format = self.prompt_format[LooGLE_dataset_type]
         return data
@@ -454,13 +514,15 @@ class LooGLEDataset(DataLoader):
         max_num_patterns = len(self.data)
         logging.debug(f"Total patterns available {max_num_patterns}")
         if self.num_patterns > max_num_patterns:
-            logging.warning(f"num_patterns {self.num_patterns} is larger than the number of patterns in the dataset {max_num_patterns}.")
+            logging.warning(
+                f"num_patterns {self.num_patterns} is larger than the number of patterns in the dataset {max_num_patterns}."
+            )
             self.num_patterns = max_num_patterns
-        
+
         for item in self.data.shuffle().select(range(self.num_patterns)):
-            raw_inputs = item['input']
-            for j in eval(item['qa_pairs']):
-                json_obj = {'Q':j['Q'], 'input': raw_inputs}
+            raw_inputs = item["input"]
+            for j in eval(item["qa_pairs"]):
+                json_obj = {"Q": j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
                 # tokenized_prompt = self.tokenizer.encode(prompt)
                 # if len(tokenized_prompt) > max_length:
@@ -469,11 +531,11 @@ class LooGLEDataset(DataLoader):
                 #     tokenized_prompt = self.tokenizer.encode(prompt)
                 workload.append(
                     {
-                        "text": prompt, 
-                        "output": j['A'],
+                        "text": prompt,
+                        "output": j["A"],
                         "sampling_params": {
                             "temperature": 0,
-                        }
+                        },
                     }
                 )
 
@@ -486,8 +548,10 @@ class LooGLEDataset(DataLoader):
             request["sampling_params"]["max_new_tokens"] = max_new_tokens
             request["input_ids"] = input_ids
             if len(tokenized_prompt) > max_length:
-                half = int(max_length/2)
-                prompt = self.tokenizer.decode(tokenized_prompt[:half])+ self.tokenizer.decode(tokenized_prompt[-half:])
+                half = int(max_length / 2)
+                prompt = self.tokenizer.decode(
+                    tokenized_prompt[:half]
+                ) + self.tokenizer.decode(tokenized_prompt[-half:])
                 tokenized_prompt = self.tokenizer.encode(prompt)
                 request["text"] = prompt
                 request["input_ids"] = tokenized_prompt
@@ -510,7 +574,7 @@ class LoogleOracle(CustomRuntimeSelector):
         self.counter = 0
 
     def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
-        match = re.search(r'(.*)Question:', text, re.DOTALL)
+        match = re.search(r"(.*)Question:", text, re.DOTALL)
         if match:
             tool = match.group(1)
             if tool not in self.tbl:

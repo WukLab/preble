@@ -1,11 +1,9 @@
-import hashlib
 from consistent_hash_router import ConsistentHashingWithRadixCache
 import random
 from enum import Enum, auto
 from typing import List, Optional
 from dataclasses import dataclass
 random.seed(10)
-import time
 import pandas as pd
 
 @dataclass

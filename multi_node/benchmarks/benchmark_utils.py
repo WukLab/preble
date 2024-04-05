@@ -45,6 +45,7 @@ class RequestFuncOutput:
     def to_json(self):
         return json.dumps(self.__dict__)
 
+
 @dataclass
 class BenchmarkMetrics:
     num_finished_requests: int
@@ -65,30 +66,44 @@ class BenchmarkMetrics:
     requests_per_sec: float
     gpu_counts: Dict[int, int]
 
-    def gen_benchmark_metrics(tokenizer, 
-                              req_func_outputs: List[RequestFuncOutput], 
-                              overall_latency:float, 
-                              time_limit: int = 100,
-                              gpu_counts={}):
+    def gen_benchmark_metrics(
+        tokenizer,
+        req_func_outputs: List[RequestFuncOutput],
+        overall_latency: float,
+        time_limit: int = 100,
+        gpu_counts={},
+    ):
         for result in req_func_outputs:
-            result.update_metrics(tokenizer) # Computes the generated output tokens
-        
+            result.update_metrics(tokenizer)  # Computes the generated output tokens
+
         ttfts = [result.ttft for result in req_func_outputs]
         tpots = [result.tpot for result in req_func_outputs if result.tpot is not None]
         overall_latency = overall_latency
         request_latencies = [result.request_latency for result in req_func_outputs]
-        throughput_tok_sec = sum([result.total_tokens for result in req_func_outputs]) / overall_latency
+        throughput_tok_sec = (
+            sum([result.total_tokens for result in req_func_outputs]) / overall_latency
+        )
         all_results = req_func_outputs
 
         num_finished_requests = sum(
-            [result.global_time <= time_limit for result in req_func_outputs if result.success]
+            [
+                result.global_time <= time_limit
+                for result in req_func_outputs
+                if result.success
+            ]
         )
-        average_finished_tpot =  np.average([
-            result.tpot for result in req_func_outputs if result.tpot is not None and result.global_time <= time_limit and result.success
-        ])
-        prefill_decode_ratio = np.average([
-            result.prefill_decode_ratio for result in req_func_outputs
-        ])
+        average_finished_tpot = np.average(
+            [
+                result.tpot
+                for result in req_func_outputs
+                if result.tpot is not None
+                and result.global_time <= time_limit
+                and result.success
+            ]
+        )
+        prefill_decode_ratio = np.average(
+            [result.prefill_decode_ratio for result in req_func_outputs]
+        )
 
         average_request_latency, std_request_latency, average_p90 = (
             np.mean(request_latencies),
@@ -104,7 +119,6 @@ class BenchmarkMetrics:
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
             average_finished_topt=average_finished_tpot,
-
             ttfts=ttfts,
             tpots=tpots,
             throughput_tok_sec=throughput_tok_sec,
@@ -112,19 +126,20 @@ class BenchmarkMetrics:
             average_request_latency=average_request_latency,
             overall_latency=overall_latency,
             std_request_latency=std_request_latency,
-
             average_p90=average_p90,
             max_latency=max_latency,
             p99_latency=p99_latency,
-
             average_ttft=average_ttft,
             average_topt=average_topt,
-
             prefill_decode_ratio=prefill_decode_ratio,
             requests_per_sec=requests_per_sec,
-            gpu_counts = gpu_counts
+            gpu_counts=gpu_counts,
         )
-    
+
+    @property
+    def num_sucessful_requests(self):
+        return sum([1 if result.success else 0 for result in self.all_results])
+
     def to_json(self):
         all_reqs = [result.to_json() for result in self.all_results]
         return {
@@ -142,13 +157,11 @@ class BenchmarkMetrics:
             "average_topt": self.average_topt,
             "throughput_tok_sec": self.throughput_tok_sec,
             "all_reqs": all_reqs,
-            "prefill_decode_ratio": self.prefill_decode_ratio
+            "prefill_decode_ratio": self.prefill_decode_ratio,
         }
 
     def to_log_file(self, exp_params):
-        logging.debug(
-            f"Params=({exp_params}) Overall Latency: {self.overall_latency}"
-        )
+        logging.debug(f"Params=({exp_params}) Overall Latency: {self.overall_latency}")
         logging.debug(
             f"Params=({exp_params}) Overall Throughput: {self.requests_per_sec}"
         )
@@ -167,6 +180,4 @@ class BenchmarkMetrics:
         logging.debug(
             f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"
         )
-        logging.debug(
-            f"Params=({exp_params}) Counts: {self.gpu_counts}"
-        )
+        logging.debug(f"Params=({exp_params}) Counts: {self.gpu_counts}")

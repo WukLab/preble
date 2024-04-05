@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
 # Load JSON data
-file_name = '/mnt/ssd1/alm-os/sglang_multi_model/test_basic_metrics_server_DataParallelRuntimeSelectionPolicy.CUSTOM_200_0.2_8192_200.json'
+file_name = 'metrics_lp_scheduler.json'
 with open(file_name, 'r') as file:
     data = json.load(file)
 
@@ -78,9 +78,14 @@ plt.show()
 runtime_selection = {}
 correct_predictions = 0
 ignore_items = 0
+import re
 
 for entry in data:
-    first_10_chars = entry['text'][:15]
+    text = entry['text']
+    match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
+    if match:
+        tool = match.group(1)
+    first_10_chars = tool
     selected_runtime = entry['selected_runtime']
     if "Workload" not in first_10_chars:
         ignore_items += 1

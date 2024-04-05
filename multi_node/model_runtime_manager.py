@@ -23,6 +23,7 @@ from simulator import ServerRuntimeSimulator, Simulation
 from benchmarks.benchmark_utils import RequestFuncOutput
 from sglang.srt.managers.router.infer_batch import Batch
 import torch
+import logging
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)
@@ -96,7 +97,7 @@ class ModelDetails:
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
     # Send context-length like params from input
     def load_runtimes(self, model_path, gpu_configs, **kwargs):
-        print(kwargs)
+        logging.info(kwargs)
         def load_runtime(config: GPUConfig):
             runtime: EndpointRuntimeInterface
             gpu_id = config.gpu_id
@@ -130,21 +131,18 @@ class ModelDetails:
                     ssh_config=config.ssh_config,
                     gpu=gpu_id,
                     cuda_devices=gpu_id,
-                    # context_length=4096,
                     **kwargs
                 )
             elif config.url:
                 runtime = URLRuntime(
                     config.url, 
                     cuda_devices=[gpu_id],
-                    # context_length=4096,
                     **kwargs)
             else:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
                     cuda_devices=[gpu_id],
                     gpu=gpu_id,
-                    # context_length=4096,
                     **kwargs,
                 )
             self.runtimes.append(runtime)
@@ -336,9 +334,7 @@ class ModelDetails:
                 output.success = False
                 exc_info = sys.exc_info()
                 output.error = "".join(traceback.format_exception(*exc_info))
-                print
         #  throughput as token generated per second
-        # print(f"{id} finishes")
         return output
 
 def remove_prefix(text: str, prefix: str) -> str:

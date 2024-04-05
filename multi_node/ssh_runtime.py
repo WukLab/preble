@@ -3,6 +3,7 @@ import re, time
 import requests
 import threading
 import logging
+import select
 
 logger = logging.getLogger('SSHRuntimeLogger')
 logger.setLevel(logging.INFO)
@@ -63,8 +64,8 @@ class SSHRuntimeManager:
             'LOGLEVEL': 'DEBUG'
         }
         python_process = self.ssh_config.get("python_process", "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python")
-        command = f'setsid {python_process} -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
-        print("Running command", command, "on gpu", self.gpu)
+        command = f'setsid env CUDA_VISIBLE_DEVICES={self.gpu} {python_process} -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
+        logging.info(f"Running command {command} on gpu {self.gpu}")
         transport = self.ssh_client.get_transport()
         channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel
@@ -75,14 +76,23 @@ class SSHRuntimeManager:
         channel.exec_command(command)
         stdout = channel.makefile('r', -1)
         stderr = channel.makefile_stderr('r', -1)
-        timeout = 40
-        end_time = time.time() + timeout
+        timeout = 120
+        start_time = time.time()
         port = None
-        while time.time() < end_time:
-            line = stdout.readline()  # Read line from stdout
-            if not line:
-                line = stderr.readline()  # If stdout is empty, try to read from stderr
-            
+        while time.time()  - start_time < timeout:
+            ready_channels, _, _ = select.select([channel], [], [], timeout)
+            if channel in ready_channels:
+                # Here, you need to check if there's data on stdout or stderr
+                while channel.recv_ready():
+                    line = stdout.readline()
+                    print(line, end='')
+                while channel.recv_stderr_ready():
+                    line = stderr.readline()
+                    print(line, end='')
+            else:
+                print("No data received")
+                time.sleep(1)
+                continue
             # Search for the port number in the line
             match = re.search(r"Server is on port (\d+) on host (.*) on pid (\d+)", line)
             if match:
