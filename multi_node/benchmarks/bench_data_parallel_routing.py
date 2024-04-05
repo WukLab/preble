@@ -144,7 +144,6 @@ def test_oracle_random_basic(
             # mem_fraction_static=0.42,
             mem_fraction_static=0.8,
             context_length=context_length,
-            load_format='dummy',
         )
 
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
@@ -219,7 +218,7 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="ref_for_simulator_react_random_oracle_3min.log")
+    logging.basicConfig(level=logging.DEBUG, filename="ref_for_sim_2048.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -235,7 +234,8 @@ if __name__ == "__main__":
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
         # [8, 0.2, 200, .5],
-        [100, 0.2, 4096, 4]
+        [200, 0.2, 450, 2.5],
+        [100, 0.2, 4096, 4],
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]

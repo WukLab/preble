@@ -360,8 +360,8 @@ class ModelStepEvent(SimulationEvent):
         next_step_input = list(runtime.manager_recv_reqs)
         runtime.manager_recv_reqs = []
         step_time, out_pyobjs = runtime.simulate_step(next_step_input)
-        # sleep_time = 0.0006
-        sleep_time = 0.01
+        sleep_time = 0.0006
+        # sleep_time = 0.01
         if len(out_pyobjs) != 0:
             has_finished = any([obj.finished for obj in out_pyobjs])
             if has_finished:

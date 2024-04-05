@@ -202,7 +202,8 @@ class RandomDataLoader(DataLoader):
         sampling_params = {
             "experiment_id": f"random_experiment_{self.num_patterns}_{self.distribution_of_non_shared}_{self.total_num_requests}",
             "temperature": 0,
-            "max_new_tokens": self.output_len
+            "max_new_tokens": self.output_len,
+            "ignore_eos": True, # For better micro-benchmark
         }
         for i in range(num_prefixed_shared):
             workload_num = i % self.num_patterns

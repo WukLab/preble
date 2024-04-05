@@ -27,7 +27,7 @@ class RequestFuncOutput:
         tokenizer,
     ):
         # In simulation this will be set
-        if not self.output_len:
+        if self.output_len is None:
             self.output_len = len(tokenizer(self.generated_text).input_ids)
         # print(self.output_len, self.generated_text, self.success, self.error)
         if self.output_len > 1:
