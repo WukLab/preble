@@ -27,6 +27,7 @@ from sglang.srt.managers.router.radix_cache import RadixCache
 from sglang.srt.managers.router.scheduler import Scheduler
 from sglang.srt.model_config import ModelConfig
 from sglang.srt.server_args import PortArgs, ServerArgs
+from sglang.srt.managers.router.model_runner import GPUConfig
 from sglang.srt.utils import (
     get_exception_traceback,
     get_int_token_logit_bias,
@@ -46,6 +47,8 @@ class ModelRpcServer:
         tp_rank: int,
         server_args: ServerArgs,
         port_args: PortArgs,
+        simulate: bool = False,
+        gpu_config: GPUConfig = None,
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
 
@@ -70,7 +73,7 @@ class ModelRpcServer:
             "enable_flashinfer": server_args.enable_flashinfer,
             "attention_reduce_in_fp32": server_args.attention_reduce_in_fp32,
         }
-
+        
         self.model_runner = ModelRunner(
             model_config=self.model_config,
             mem_fraction_static=server_args.mem_fraction_static,
@@ -80,6 +83,8 @@ class ModelRpcServer:
             load_format=server_args.load_format,
             trust_remote_code=server_args.trust_remote_code,
             server_args_dict=server_args_dict,
+            simulate=simulate,
+            gpu_config=gpu_config,
         )
         if is_multimodal_model(server_args.model_path):
             self.processor = get_processor(
@@ -257,12 +262,12 @@ class ModelRpcServer:
         return ret
 
     @torch.inference_mode()
-    def forward_step(self):
+    def forward_step(self, forward_simulation=None):
         new_batch = self.get_new_fill_batch()
-
+        forward_time = 0
         if new_batch is not None:
             # Run new fill batch
-            self.forward_fill_batch(new_batch)
+            forward_time += self.forward_fill_batch(new_batch, forward_simulation)
 
             if not new_batch.is_empty():
                 if self.running_batch is None:
@@ -274,7 +279,7 @@ class ModelRpcServer:
             if self.running_batch is not None:
                 # Run a few decode batches continuously for reducing overhead
                 for _ in range(10):
-                    self.forward_decode_batch(self.running_batch)
+                    forward_time += self.forward_decode_batch(self.running_batch, forward_simulation)
 
                     if self.running_batch.is_empty():
                         self.running_batch = None
@@ -307,7 +312,8 @@ class ModelRpcServer:
                         f"available_size={available_size}, max_total_num_token={self.max_total_num_token}\n"
                         "KV cache pool leak detected!"
                     )
-
+        return forward_time
+    
     def handle_generate_request(
         self,
         recv_req: TokenizedGenerateReqInput,
@@ -479,25 +485,34 @@ class ModelRpcServer:
         with open(path, 'w') as f:
             json.dump(self.prefix_hit_trace, f)        
 
-    def forward_fill_batch(self, batch: Batch):
+    def forward_fill_batch(self, batch: Batch, forward_simulation=None):
         # Build batch tensors
         batch.prepare_for_extend(
             self.model_config.vocab_size, self.int_token_logit_bias
         )
 
         logprobs = None
+        forward_time = 0
         if batch.extend_num_tokens != 0:
-            # Forward
-            logits, (
-                prefill_logprobs,
-                normalized_logprobs,
-                last_logprobs,
-            ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
-            if prefill_logprobs is not None:
-                logprobs = prefill_logprobs.cpu().tolist()
-                normalized_logprobs = normalized_logprobs.cpu().tolist()
+            if forward_simulation is None:
+                # Forward
+                logits, (
+                    prefill_logprobs,
+                    normalized_logprobs,
+                    last_logprobs,
+                ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
+                if prefill_logprobs is not None:
+                    logprobs = prefill_logprobs.cpu().tolist()
+                    normalized_logprobs = normalized_logprobs.cpu().tolist()
 
-            next_token_ids, _ = batch.sample(logits)
+                next_token_ids, _ = batch.sample(logits)
+            else:
+                vocab_size = self.model_config.vocab_size
+                logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+                next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+                forward_time = forward_simulation(batch)
+                _ = batch.sample(logits)
+                logprobs = normalized_logprobs = last_logprobs = None
             next_token_ids = next_token_ids.cpu().tolist()
         else:
             next_token_ids = [self.tokenizer.eos_token_id] * len(batch.reqs)
@@ -532,8 +547,9 @@ class ModelRpcServer:
                 pt += req.extend_input_len
 
         self.handle_finished_requests(batch)
+        return forward_time
 
-    def forward_decode_batch(self, batch: Batch):
+    def forward_decode_batch(self, batch: Batch, forward_simulation=None):
         # check if decode out of memory
         if not batch.check_decode_mem():
             old_ratio = self.new_token_ratio
@@ -577,11 +593,20 @@ class ModelRpcServer:
         self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
         batch.prepare_for_decode()
 
+        forward_time = 0
         # Forward
-        logits, (_, _, last_logprobs) = self.model_runner.forward(
-            batch, ForwardMode.DECODE
-        )
-        next_token_ids, _ = batch.sample(logits)
+        if forward_simulation is None :
+            logits, (_, _, last_logprobs) = self.model_runner.forward(
+                batch, ForwardMode.DECODE
+            )
+            next_token_ids, _ = batch.sample(logits)
+        else:
+            vocab_size = self.model_config.vocab_size
+            logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+            next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+            forward_time = forward_simulation(batch)
+            _ = batch.sample(logits)
+            last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()
 
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
@@ -601,6 +626,7 @@ class ModelRpcServer:
                 req.token_logprob.append((next_tok_id, last_logprobs[i]))
 
         self.handle_finished_requests(batch)
+        return forward_time
 
     def handle_finished_requests(self, batch: Batch):
         output_rids = []

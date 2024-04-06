@@ -114,6 +114,12 @@ class BatchTokenIDOut:
     skip_special_tokens: List[bool]
     meta_info: List[Dict]
     finished: List[bool]
+    
+    def brief(self):
+        return {
+            "finished": self.finished,
+            "output_tokens": [len(tokens) for tokens in self.output_tokens],
+        }
 
 
 @dataclass
