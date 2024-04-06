@@ -107,11 +107,7 @@ class ModelDetails:
                     gpu_config=config,
                     **kwargs,
                 )
-                # TODO: refactor this mess
-                vocab_size = runtime.model_rpc.model_config.vocab_size
                 def forward_simulation(batch: Batch):
-                    logitis = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
-                    new_toks = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
                     num_batched_tokens = batch.input_ids.shape[0]
                     num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
                     
@@ -123,7 +119,7 @@ class ModelDetails:
                         forward_time = 26.06523603
                     forward_time += num_attention_tokens / 2048 * 1.663659159
                     forward_time /= 1e3 # to seconds
-                    return logitis, new_toks, forward_time
+                    return forward_time
                 config.regist_simulator_config(forward_simulation, config.kv_cache_memory)
             elif config.use_ssh:
                 runtime = SSHRuntime(

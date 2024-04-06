@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import time
 from data_parallel_request_cache import (
     DataParallelRuntimeSelectionPolicy,
+    CustomPolicyType,
 )
 from transformers import AutoTokenizer
 from metrics_based_scheduler import LongestPrefixMatchSelector, GlobalLongestPrefixMatch
@@ -28,7 +29,6 @@ from benchmark_utils import BenchmarkMetrics
 import random
 from sglang.srt.managers.router.model_runner import GPUConfig
 
-random.seed(10)
 import datetime
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -61,21 +61,6 @@ logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 log = logging.getLogger(__name__)
 
-
-class CustomPolicyType(Enum):
-    ORACLE = auto()
-
-    TBORACLE = auto()
-    TBORACLE_B = auto()
-
-    LPM = auto()
-    GLPM = auto()
-
-    LOOGLE_ORACLE = auto()
-
-    LP_SCHEDULER = auto()
-
-
 def test_oracle_random_basic(
     num_workloads,
     distribution_of_non_shared,
@@ -89,7 +74,7 @@ def test_oracle_random_basic(
     simulate=False,
 ):
     if exp_time != float('inf'):
-        num_requests = min(num_requests, int(rps * exp_time))
+        num_requests = int(rps * exp_time)
     loader = MultiNodeLoader(simulate)
     logging.debug(
         f"=====STARTING BENCHMARK OF {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
@@ -236,7 +221,6 @@ def test_oracle_random_basic(
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, filename="merge_resolve.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
-    logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
     start_date = datetime.datetime.utcnow()

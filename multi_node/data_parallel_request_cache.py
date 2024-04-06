@@ -24,6 +24,18 @@ class DataParallelRuntimeSelectionPolicy(Enum):
     CONSISTENT_HASH = auto()
     CUSTOM = auto()
 
+class CustomPolicyType(Enum):
+    ORACLE = auto()
+
+    TBORACLE = auto()
+    TBORACLE_B = auto()
+
+    LPM = auto()
+    GLPM = auto()
+
+    LOOGLE_ORACLE = auto()
+
+    LP_SCHEDULER = auto()
 
 class DataParallelRequestRouter:
     def __init__(

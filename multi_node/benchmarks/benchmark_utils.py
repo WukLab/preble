@@ -1,10 +1,57 @@
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 import logging
 import uuid
 from dataclasses import field
 import json
+import sys, os
+
+# Add the parent directory of the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from sglang.srt.managers.router.model_runner import GPUConfig
+from benchmark_workload_gen import (
+    DataLoader,
+    ToolBenchDataLoader,
+    RandomDataLoader,
+    LoadDistribution,
+    Oracle,
+    TBOracle,
+    TBOracleB,
+    LooGLEDataset,
+    LooGLEDatasetType,
+    LoogleOracle,
+)
+from sglang.srt.server_args import ServerArgs
+
+@dataclass
+class WorkloadConfig:
+    num_prefix_patterns: int
+    random_ratio: float
+    num_requests: int
+    request_rate: float
+    requests: List[Dict]
+    dataloader: DataLoader
+    exp_time: Optional[float] = float("inf")
+
+    def __repr__(self) -> str:
+        return (
+            f"=====STARTING BENCHMARK OF {self.num_prefix_patterns} WORKLOADS, "
+            f'{self.random_ratio} NON-SHARED, '
+            f'{self.num_requests} REQUESTS, '
+            f'{self.request_rate} REQ/s, '
+            f'{self.exp_time} seconds ====='
+        )
+
+@dataclass
+class MajorExperimentArgs:
+    runtime_args: Dict
+    workload_configs: List[WorkloadConfig]
+    gpu_configs: List[GPUConfig]
+    simulate: bool
+    log_file_path: str
+    selector_configs: List
 
 @dataclass
 class RequestFuncOutput:

@@ -24,8 +24,6 @@ import logging
 from datasets import load_dataset
 import re
 
-random.seed(10)
-np.random.seed(10)
 
 ReActWorkloadEx1 = """
 Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
