@@ -18,6 +18,11 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 from multi_node_loader import MultiNodeLoader
 from model_runtime_manager import RequestFuncOutput, ModelDetails
 from benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig
+from benchmarks.exp_configs.react_simulator_config import exp_args
+from benchmark_workload_gen import *
+from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
+from metrics_based_scheduler import LongestPrefixMatchSelector, GlobalLongestPrefixMatch
+from global_policy_lp import LPScheduler
 
 import logging
 import torch
@@ -44,10 +49,65 @@ logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 log = logging.getLogger(__name__)
 
+def regist_selector(policy, custom_policy, model_details: ModelDetails, workload_config: WorkloadConfig):
+    if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
+        if custom_policy == CustomPolicyType.ORACLE:
+            oracle = Oracle(
+                num_nodes=len(model_details.runtimes), 
+                num_workloads=workload_config.num_prefix_patterns,
+            )
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=oracle,
+            )
+        elif custom_policy == CustomPolicyType.TBORACLE:
+            oracle = TBOracle(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=oracle,
+            )
+        elif custom_policy == CustomPolicyType.TBORACLE_B:
+            oracle = TBOracleB(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=oracle,
+            )
+        elif custom_policy == CustomPolicyType.LPM:
+            lpm = LongestPrefixMatchSelector(
+                num_nodes=len(model_details.runtimes),
+                runtimes=model_details.runtimes,
+            )
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=lpm,
+            )
+        elif custom_policy == CustomPolicyType.LOOGLE_ORACLE:
+            oracle = LoogleOracle(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=oracle,
+            )
+        elif custom_policy == CustomPolicyType.GLPM:
+            glpm = GlobalLongestPrefixMatch(
+                num_nodes=len(model_details.runtimes), model_name=model_name
+            )
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=glpm,
+            )
+        elif custom_policy == CustomPolicyType.LP_SCHEDULER:
+            lp_scheduler = LPScheduler(num_nodes=len(model_details.runtimes), depth_limit=4, update_interval=5)
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=lp_scheduler,
+            )
+    else:
+        model_details.update_runtime_selection_policy(policy)
+
 def load_and_run_benchmark(
     model_details: ModelDetails, 
     workload_config: WorkloadConfig, 
-    policy, custom_policy=None, custom_selector=None
+    policy, custom_policy=None,
 ):
     num_workloads = workload_config.num_prefix_patterns
     distribution_of_non_shared = workload_config.random_ratio
@@ -60,7 +120,7 @@ def load_and_run_benchmark(
     logging.debug(
         f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
-    model_details.update_runtime_selection_policy(policy, custom_selector)
+    regist_selector(policy, custom_policy, model_details, workload_config)
     
     tic_benchmark = time.time()
     results: List[RequestFuncOutput] = model_details.get_experiment_results(
@@ -87,7 +147,7 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
         logging.debug(f"Using load distribution of {workload_config.dataloader.load_dist}")
         # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
         for selector_config in exp_args.selector_configs:
-            model_details = loader.load_model(**exp_args.runtime_args)
+            model_details = loader.load_model(**exp_args.runtime_args) # TODO: clear cache instead of reload
             load_and_run_benchmark(model_details, workload_config, *selector_config)
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
@@ -96,17 +156,6 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--exp-config', type=str, required=True, help='Path to the experiment configuration file'
-    )
-    args = parser.parse_args()
-    module_name = args.exp_config.split('/')[-1].split('.')[0]
-    spec = importlib.util.spec_from_file_location(module_name, args.exp_config)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    exp_args = module.exp_args
     logging.basicConfig(level=logging.DEBUG, filename=exp_args.log_file_path)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file

@@ -5,6 +5,7 @@ from typing import List, Optional
 from dataclasses import dataclass
 random.seed(10)
 import pandas as pd
+from sglang.srt.managers.router.model_runner import GPUConfig
 
 @dataclass
 class CustomRuntimeSelector:
@@ -18,7 +19,7 @@ class CustomRuntimeSelector:
     num_nodes: int
     def runtime_selector(self, text: InputText, request_id: str, input_ids: List) -> NodeID:
         pass
-
+    
 class DataParallelRuntimeSelectionPolicy(Enum):
     RANDOM = auto()
     CONSISTENT_HASH = auto()

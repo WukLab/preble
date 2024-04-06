@@ -181,7 +181,6 @@ class DataLoader:
     def generate_workload(self):
         raise NotImplementedError()
 
-
 class RandomDataLoader(DataLoader):
     def __init__(
         self,
@@ -454,7 +453,7 @@ class TBOracleB(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
-
+    
 
 class LooGLEDatasetType(Enum):
     LONG_QA = auto()
