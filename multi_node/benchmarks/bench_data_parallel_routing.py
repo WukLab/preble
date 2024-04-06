@@ -20,9 +20,9 @@ from benchmark_workload_gen import (
     TBOracleB,
     LooGLEDataset,
     LooGLEDatasetType,
-    LoogleOracle,
-    LPScheduler
+    LoogleOracle
 )
+from global_policy_lp import LPScheduler
 from benchmark_utils import BenchmarkMetrics
 
 import random
