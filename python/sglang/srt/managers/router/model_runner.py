@@ -257,6 +257,17 @@ def initialize_dummy_weights(
         if torch.is_floating_point(param):
             param.data.uniform_(low, high)
 
+class GPUConfig:
+    def __init__(self, gpu_id, url=None, use_ssh=False, ssh_config={}) -> None:
+        self.gpu_id = gpu_id
+        self.url = url
+        self.use_ssh = use_ssh
+        self.ssh_config = ssh_config
+    
+    def regist_simulator_config(self, forward_simulation, kv_cache_memory):
+        self.forward_simulation = forward_simulation
+        self.kv_cache_memory = kv_cache_memory
+        
 
 class ModelRunner:
     def __init__(
@@ -269,6 +280,8 @@ class ModelRunner:
         load_format="auto",
         trust_remote_code=True,
         server_args_dict: dict = {},
+        simulate: bool = False,
+        gpu_config: GPUConfig = None,
     ):
         self.model_config = model_config
         self.mem_fraction_static = mem_fraction_static
@@ -277,30 +290,36 @@ class ModelRunner:
         self.nccl_port = nccl_port
         self.load_format = load_format
         self.trust_remote_code = trust_remote_code
+        self.simulate = simulate
+        self.gpu_config = gpu_config
 
         global global_server_args_dict
         global_server_args_dict = server_args_dict
 
-        # Init torch distributed
-        torch.cuda.set_device(self.tp_rank)
-        torch.distributed.init_process_group(
-            backend="nccl",
-            world_size=self.tp_size,
-            rank=self.tp_rank,
-            init_method=f"tcp://127.0.0.1:{self.nccl_port}",
-        )
+        if not self.simulate:
+            # Init torch distributed
+            torch.cuda.set_device(self.tp_rank)
+            torch.distributed.init_process_group(
+                backend="nccl",
+                world_size=self.tp_size,
+                rank=self.tp_rank,
+                init_method=f"tcp://127.0.0.1:{self.nccl_port}",
+            )
 
-        # A small all_reduce for warmup.
-        if self.tp_size > 1:
-            torch.distributed.all_reduce(torch.zeros(1).cuda())
-        initialize_model_parallel(tensor_model_parallel_size=self.tp_size)
+            # A small all_reduce for warmup.
+            if self.tp_size > 1:
+                torch.distributed.all_reduce(torch.zeros(1).cuda())
+            initialize_model_parallel(tensor_model_parallel_size=self.tp_size)
 
-        total_gpu_memory = get_available_gpu_memory(
-            self.tp_rank, distributed=self.tp_size > 1
-        ) * (1 << 30)
-        self.load_model()
-        self.init_memory_pool(total_gpu_memory)
-
+            total_gpu_memory = get_available_gpu_memory(
+                self.tp_rank, distributed=self.tp_size > 1
+            ) * (1 << 30)
+            self.load_model()
+            self.max_total_num_token = self.profile_max_num_token(total_gpu_memory)
+        else:
+            self.max_total_num_token = self.profile_simulated_num_token(gpu_config)
+        self.init_memory_pool()
+        
         self.is_multimodal_model = is_multimodal_model(self.model_config)
 
     def load_model(self):
@@ -365,10 +384,18 @@ class ModelRunner:
         )
         max_num_token = int(rest_memory // cell_size)
         return max_num_token
+    
+    # TODO: check if this is correct with tensor parallelism
+    def profile_simulated_num_token(self, gpu_config: GPUConfig):
+        head_dim = self.model_config.head_dim
+        head_num = self.model_config.num_key_value_heads // self.tp_size
+        cell_size = head_num * head_dim * self.model_config.num_hidden_layers * 2 * 2
+        logger.info(f'kv one token size: {head_num} * {head_dim} * {self.model_config.num_hidden_layers} * 2 * 2 = {cell_size} bytes')
+        max_num_token = int(gpu_config.kv_cache_memory // cell_size)
+        return max_num_token
+        
 
-    def init_memory_pool(self, total_gpu_memory):
-        self.max_total_num_token = self.profile_max_num_token(total_gpu_memory)
-
+    def init_memory_pool(self):
         if self.max_total_num_token <= 0:
             raise RuntimeError(
                 "Not enought memory. " "Please try to increase --mem-fraction-static."
@@ -384,6 +411,7 @@ class ModelRunner:
             head_num=self.model_config.num_key_value_heads // self.tp_size,
             head_dim=self.model_config.head_dim,
             layer_num=self.model_config.num_hidden_layers,
+            simulate=self.simulate
         )
 
     @torch.inference_mode()

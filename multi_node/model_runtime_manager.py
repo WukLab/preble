@@ -18,48 +18,15 @@ import paramiko
 import sys, traceback
 from ssh_runtime import SSHRuntimeManager
 from dataclasses import field
+from sglang.srt.managers.router.model_runner import GPUConfig
+from simulator import ServerRuntimeSimulator, Simulation
+from benchmarks.benchmark_utils import RequestFuncOutput
+from sglang.srt.managers.router.infer_batch import Batch
+import torch
 import logging
 
-class GPUConfig:
-    def __init__(self, gpu_id, url=None, use_ssh=False, ssh_config={}) -> None:
-        self.gpu_id = gpu_id
-        self.url = url
-        self.use_ssh = use_ssh
-        self.ssh_config = ssh_config
-@dataclass
-class RequestFuncOutput:
-    generated_text: str = ""
-    success: bool = False
-    request_latency: float = 0
-    ttft: float = 0  # Time to first token
-    itl: List[float] = field(default_factory=list)  # List of inter-token latencies
-    prompt_len: int = 0
-    error: str = ""
-    global_time: float = 0
-    output_len: float = None
-    tpot: float = None
-    prefill_decode_ratio: float = None
-
-    def update_metrics(
-        self,
-        tokenizer,
-    ):
-        self.output_len = len(tokenizer(self.generated_text).input_ids)
-        # print(self.output_len, self.generated_text, self.success, self.error)
-        if self.output_len > 1:
-            self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
-        self.prefill_decode_ratio = self.ttft / self.request_latency
-
-    @property
-    def total_tokens(self):
-        return self.prompt_len + self.output_len
-
-    @property
-    def overall_throughput(self):
-        return self.total_tokens / self.request_latency
-
-    def to_json(self):
-        return json.dumps(self.__dict__)
+def random_uuid_string():
+    return str(uuid.uuid4().hex)
 
 @dataclass
 class EndpointRuntimeInterface:
@@ -93,13 +60,14 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
     def __init__(self, gpu, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.gpu = gpu
-
+    
 class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-def random_uuid_string():
-    return str(uuid.uuid4().hex)
+        
+class SimulationRuntime(ServerRuntimeSimulator, EndpointRuntimeInterface):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
 class ModelDetails:
@@ -108,7 +76,9 @@ class ModelDetails:
     """
 
     def __init__(
-        self, model_path, gpu_configs, runtime_selection_policy=DataParallelRuntimeSelectionPolicy.RANDOM
+        self, model_path, gpu_configs,
+        simulate=False,
+        runtime_selection_policy=DataParallelRuntimeSelectionPolicy.RANDOM,
     ) -> None:
         self.model_path = model_path
         self.weights = []
@@ -121,6 +91,7 @@ class ModelDetails:
         self.start_time = None
         self.request_sent_time = []
         self.current_experiment_state_time = None
+        self.simulate = simulate
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
@@ -130,7 +101,27 @@ class ModelDetails:
         def load_runtime(config: GPUConfig):
             runtime: EndpointRuntimeInterface
             gpu_id = config.gpu_id
-            if config.use_ssh:
+            if self.simulate:
+                runtime = SimulationRuntime(
+                    model_path=model_path,
+                    gpu_config=config,
+                    **kwargs,
+                )
+                def forward_simulation(batch: Batch):
+                    num_batched_tokens = batch.input_ids.shape[0]
+                    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+                    
+                    if num_batched_tokens >= 384:
+                        forward_time = 0.131*num_batched_tokens + 5.67
+                    elif num_batched_tokens >= 128:
+                        forward_time = 0.114*num_batched_tokens + 12.4
+                    else:
+                        forward_time = 26.06523603
+                    forward_time += num_attention_tokens / 2048 * 1.663659159
+                    forward_time /= 1e3 # to seconds
+                    return forward_time
+                config.regist_simulator_config(forward_simulation, config.kv_cache_memory)
+            elif config.use_ssh:
                 runtime = SSHRuntime(
                     model_path=model_path,
                     ssh_config=config.ssh_config,
@@ -207,6 +198,28 @@ class ModelDetails:
     def clear_kv_cache(self):
         for runtime in self.runtimes:
             requests.get(runtime.flush_cache_url)
+            
+    def get_experiment_results(
+        self,
+        requests: Iterable,
+        request_rate: float,
+        exp_time: float = 0.0,
+    ):
+        if self.simulate:
+            simulator = Simulation(self.runtimes, self.request_router)
+            simulator.initialize_all_request_with_rps(requests, request_rate, exp_time)
+            simulator.start_model_forwarding_loop()
+            return simulator.run()
+        else:
+            results: List[RequestFuncOutput] = asyncio.run(
+                self.async_generate_batch_request_per_sec(
+                    requests,
+                    request_rate,
+                    self.async_send_request,
+                    exp_time,
+                )
+            )
+        return results
 
     async def async_generate_batch_request_per_sec(
         self,
@@ -270,6 +283,7 @@ class ModelDetails:
         }
         output = RequestFuncOutput()
         output.prompt_len = len(input_ids)
+        output.send_out_time = start_time - self.current_experiment_state_time
 
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)

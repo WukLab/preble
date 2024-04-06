@@ -5,6 +5,7 @@ from typing import List, Optional
 from dataclasses import dataclass
 random.seed(10)
 import pandas as pd
+from sglang.srt.managers.router.model_runner import GPUConfig
 
 @dataclass
 class CustomRuntimeSelector:
@@ -18,12 +19,24 @@ class CustomRuntimeSelector:
     num_nodes: int
     def runtime_selector(self, text: InputText, request_id: str, input_ids: List) -> NodeID:
         pass
-
+    
 class DataParallelRuntimeSelectionPolicy(Enum):
     RANDOM = auto()
     CONSISTENT_HASH = auto()
     CUSTOM = auto()
 
+class CustomPolicyType(Enum):
+    ORACLE = auto()
+
+    TBORACLE = auto()
+    TBORACLE_B = auto()
+
+    LPM = auto()
+    GLPM = auto()
+
+    LOOGLE_ORACLE = auto()
+
+    LP_SCHEDULER = auto()
 
 class DataParallelRequestRouter:
     def __init__(
@@ -40,7 +53,7 @@ class DataParallelRequestRouter:
         self.total_nodes = total_nodes
         self.model_selection_stats = []
 
-    def select_runtime(self, text, experiment_id, request_id, input_ids=None) -> str:
+    def select_runtime(self, text, experiment_id, request_id, input_ids=None) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
