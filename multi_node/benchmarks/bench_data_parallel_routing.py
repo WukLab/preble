@@ -177,11 +177,12 @@ def test_oracle_random_basic(
                     custom_runtime_selector=glpm,
                 )
             elif custom_policy == CustomPolicyType.LP_SCHEDULER:
-                lp_scheduler = LPScheduler(num_nodes=len(model_details.runtimes), depth_limit=4, update_interval=5)
+                lp_scheduler = LPScheduler(num_nodes=len(model_details.runtimes), depth_limit=3, update_interval=1)
                 model_details.update_runtime_selection_policy(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=lp_scheduler,
                 )
+                
         else:
             model_details.update_runtime_selection_policy(policy)
 
@@ -206,6 +207,9 @@ def test_oracle_random_basic(
         )
         exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}, {exp_time}"
         bench_metrics.to_log_file(exp_params)
+        import pandas as pd
+        df = pd.DataFrame(lp_scheduler.metrics_dict)
+        df.to_csv("lp_scheduler_metrics.csv")
 
         loader.unload_model(model_details)
         torch.cuda.empty_cache()
@@ -240,7 +244,7 @@ if __name__ == "__main__":
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
-        [8, 0.2, 200, 0.5],
+        [4, 0.2, 200, 0.5],
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
