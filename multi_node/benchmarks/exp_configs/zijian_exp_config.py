@@ -42,6 +42,8 @@ server_args = {
     'context_length': 2048,
 }
 
+#==============================================================================
+# For Simulator, ignore this if not using it
 def forward_simulation(batch: Batch):
     num_batched_tokens = batch.input_ids.shape[0]
     num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
@@ -58,10 +60,10 @@ def forward_simulation(batch: Batch):
 
 for config in gpu_configs:
     config.regist_simulator_config(forward_simulation, 25 << 30) # Llama 2-7b, 0.8 A6000
+#==============================================================================
 
 workload_configs = []
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-
 for config in configurations_to_test:
     num_workloads, random_ratio, num_requests, request_rate = config
     if exp_time != float("inf"):
