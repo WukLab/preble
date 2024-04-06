@@ -23,8 +23,8 @@ from benchmark_workload_gen import (
     LooGLEDatasetType,
     LoogleOracle,
 )
-from global_policy_lp import LPScheduler
 from benchmark_utils import BenchmarkMetrics
+from global_policy_lp import LPScheduler
 
 import random
 from sglang.srt.managers.router.model_runner import GPUConfig
@@ -170,11 +170,12 @@ def test_oracle_random_basic(
                     custom_runtime_selector=glpm,
                 )
             elif custom_policy == CustomPolicyType.LP_SCHEDULER:
-                lp_scheduler = LPScheduler(num_nodes=len(model_details.runtimes), depth_limit=4, update_interval=5)
+                lp_scheduler = LPScheduler(num_nodes=len(model_details.runtimes), depth_limit=3, update_interval=1)
                 model_details.update_runtime_selection_policy(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=lp_scheduler,
                 )
+                
         else:
             model_details.update_runtime_selection_policy(policy)
 
@@ -219,6 +220,7 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG, filename="lp_scheduler_debug.log")
     logging.basicConfig(level=logging.DEBUG, filename="merge_resolve.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -233,6 +235,7 @@ if __name__ == "__main__":
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
+        [4, 0.2, 200, 0.5],
         # [8, 0.2, 200, .5],
         [200, 0.2, 450, 2.5],
         [100, 0.2, 4096, 4],
