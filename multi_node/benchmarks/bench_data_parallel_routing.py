@@ -97,6 +97,7 @@ def test_oracle_random_basic(
         tokenizer,
         num_in_context_examples=4,
         output_len=64,
+        random_workload_path="datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
     )
     requests = dataloader.generate_workload(k=k)
     # dataloader_short = LooGLEDataset(
@@ -228,9 +229,9 @@ if __name__ == "__main__":
     start_date = datetime.datetime.utcnow()
     start_time = time.time()
     logging.debug(f"Starting Experiment at {start_date}")
-    # model_name = "mistralai/Mistral-7B-v0.1"
+    model_name = "mistralai/Mistral-7B-v0.1"
     # model_name = "lmsys/vicuna-13b-v1.5"
-    model_name = "meta-llama/Llama-2-7b-hf"
+    # model_name = "meta-llama/Llama-2-7b-hf"
     logging.debug(f"Model Name: {model_name}")
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
