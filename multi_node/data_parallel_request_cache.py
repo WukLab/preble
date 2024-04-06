@@ -1,4 +1,3 @@
-from consistent_hash_router import ConsistentHashingWithRadixCache
 import random
 from enum import Enum, auto
 from typing import List, Optional
@@ -46,9 +45,6 @@ class DataParallelRequestRouter:
         custom_runtime_selector=None
     ):
         self.runtime_selection_policy = runtime_selection_policy
-        self.consistent_radix_hash = ConsistentHashingWithRadixCache(
-            num_nodes=total_nodes
-        )
         self.custom_selector: Optional[CustomRuntimeSelector] = custom_runtime_selector
         self.total_nodes = total_nodes
         self.model_selection_stats = []

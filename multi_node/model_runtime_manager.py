@@ -1,7 +1,6 @@
 import requests
 from data_parallel_request_cache import (
-    DataParallelRuntimeSelectionPolicy,
-    ConsistentHashingWithRadixCache,
+    DataParallelRuntimeSelectionPolicy
 )
 from data_parallel_request_cache import DataParallelRequestRouter
 import aiohttp
