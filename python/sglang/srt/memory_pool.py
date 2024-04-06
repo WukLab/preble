@@ -40,15 +40,19 @@ class ReqToTokenPool:
 
 
 class TokenToKVPool:
-    def __init__(self, size, dtype, head_num, head_dim, layer_num):
+    def __init__(self, size, dtype, head_num, head_dim, layer_num, simulate):
         self.mem_state = torch.zeros((size,), dtype=torch.int16, device="cuda")
         self.alloc_ct = 0
+        self.simulate = simulate
 
-        # [size, key/value, head_num, head_dim] for each layer
-        self.kv_data = [
-            torch.empty((size, 2, head_num, head_dim), dtype=dtype, device="cuda")
-            for _ in range(layer_num)
-        ]
+        if not self.simulate:
+            # [size, key/value, head_num, head_dim] for each layer
+            self.kv_data = [
+                torch.empty((size, 2, head_num, head_dim), dtype=dtype, device="cuda")
+                for _ in range(layer_num)
+            ]
+        else:
+            self.kv_data = None
 
     def get_key_buffer(self, layer_id):
         return self.kv_data[layer_id][:, 0]
