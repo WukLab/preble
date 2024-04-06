@@ -22,6 +22,7 @@ from benchmark_workload_gen import (
     LooGLEDatasetType,
     LoogleOracle,
 )
+from global_policy_lp import LPScheduler
 from benchmark_utils import BenchmarkMetrics
 from global_policy_lp import LPScheduler
 
