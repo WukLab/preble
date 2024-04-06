@@ -208,9 +208,6 @@ def test_oracle_random_basic(
         )
         exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}, {exp_time}"
         bench_metrics.to_log_file(exp_params)
-        import pandas as pd
-        df = pd.DataFrame(lp_scheduler.metrics_dict)
-        df.to_csv("lp_scheduler_metrics.csv")
 
         loader.unload_model(model_details)
         torch.cuda.empty_cache()
