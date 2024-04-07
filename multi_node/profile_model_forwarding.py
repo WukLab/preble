@@ -42,9 +42,38 @@ def profile_prefill(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_st
         forward_time += start.elapsed_time(end)
     return forward_time
 
+def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start):
+    model_server = model_client.model_server
+    sampling_params = SamplingParams(max_new_tokens=1)
+    pixel_values, image_hash, image_size = None, None, None
+    inflight = set()
+    for i in range(num_seqs):
+        input_ids = [token_id_start + i] * ctx_len
+        tokenized_obj = TokenizedGenerateReqInput(
+            rid=uuid.uuid4().hex,
+            input_text="",
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_hash=image_hash,
+            image_size=image_size,
+            sampling_params=sampling_params,
+            return_logprob=None,
+            logprob_start_len=None,
+            stream=False,
+        )
+        inflight.add(tokenized_obj.rid)
+        model_server.handle_generate_request(tokenized_obj)
+        
+    while inflight:
+        model_server.forward_step()
+        for output in model_server.out_pyobjs:
+            for rid in output.rids:
+                inflight.remove(rid)
+        model_server.out_pyobjs = []
+
 def profile_multi_query(model_client: ModelRpcClient, num_seqs, ctx_len, num_qs, token_id_start):
     cached_ctx_len = ctx_len - num_qs
-    profile_prefill(model_client, num_seqs, cached_ctx_len, token_id_start)
+    run_to_complete(model_client, num_seqs, cached_ctx_len, token_id_start)
     forward_time = profile_prefill(model_client, num_seqs, ctx_len, token_id_start)
     return forward_time
 
