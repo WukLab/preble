@@ -143,10 +143,11 @@ class ServerRuntimeSimulator:
     def simulate_step(self, recv_reqs) -> int:
         for recv_req in recv_reqs:
             self.model_rpc.handle_generate_request(recv_req)
-        step_time = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
+        forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
+        forward_time = sum(forward_times)
         ret = self.model_rpc.out_pyobjs
         self.model_rpc.out_pyobjs = []
-        return step_time, ret
+        return forward_time, ret
 
     class Process(Enum):
         TOKENIZER = 0
@@ -359,7 +360,7 @@ class ModelStepEvent(SimulationEvent):
         runtime = simulator.runtimes[self.runtime_id]
         next_step_input = list(runtime.manager_recv_reqs)
         runtime.manager_recv_reqs = []
-        step_time, out_pyobjs = runtime.simulate_step(next_step_input)
+        forward_time, out_pyobjs = runtime.simulate_step(next_step_input)
         sleep_time = 0.0006
         # sleep_time = 0.01
         if len(out_pyobjs) != 0:
@@ -367,7 +368,7 @@ class ModelStepEvent(SimulationEvent):
             if has_finished:
                 if GLOBAL_BACKEND_CONFIG.extend_dependency_time > 0:
                     sleep_time = GLOBAL_BACKEND_CONFIG.extend_dependency_time
-        overhead = time.time() - start + step_time + sleep_time
+        overhead = time.time() - start + forward_time + sleep_time
         self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.MANAGER)
         self.update_metric(simulator, out_pyobjs)
         # logging.debug(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock}, total {overhead}, overhead {overhead - step_time - sleep_time}, model {step_time}")

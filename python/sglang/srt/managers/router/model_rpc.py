@@ -264,10 +264,10 @@ class ModelRpcServer:
     @torch.inference_mode()
     def forward_step(self, forward_simulation=None):
         new_batch = self.get_new_fill_batch()
-        forward_time = 0
+        forward_time = []
         if new_batch is not None:
             # Run new fill batch
-            forward_time += self.forward_fill_batch(new_batch, forward_simulation)
+            forward_time.append(self.forward_fill_batch(new_batch, forward_simulation))
 
             if not new_batch.is_empty():
                 if self.running_batch is None:
@@ -279,7 +279,7 @@ class ModelRpcServer:
             if self.running_batch is not None:
                 # Run a few decode batches continuously for reducing overhead
                 for _ in range(10):
-                    forward_time += self.forward_decode_batch(self.running_batch, forward_simulation)
+                    forward_time.append(self.forward_decode_batch(self.running_batch, forward_simulation))
 
                     if self.running_batch.is_empty():
                         self.running_batch = None
@@ -496,11 +496,15 @@ class ModelRpcServer:
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
                 # Forward
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
                 logits, (
                     prefill_logprobs,
                     normalized_logprobs,
                     last_logprobs,
                 ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
+                end_event.record()
                 if prefill_logprobs is not None:
                     logprobs = prefill_logprobs.cpu().tolist()
                     normalized_logprobs = normalized_logprobs.cpu().tolist()
@@ -547,6 +551,8 @@ class ModelRpcServer:
                 pt += req.extend_input_len
 
         self.handle_finished_requests(batch)
+        if forward_simulation is None:
+            return start_event, end_event
         return forward_time
 
     def forward_decode_batch(self, batch: Batch, forward_simulation=None):
@@ -595,10 +601,14 @@ class ModelRpcServer:
 
         forward_time = 0
         # Forward
-        if forward_simulation is None :
+        if forward_simulation is None:
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()        
             logits, (_, _, last_logprobs) = self.model_runner.forward(
                 batch, ForwardMode.DECODE
             )
+            end_event.record()
             next_token_ids, _ = batch.sample(logits)
         else:
             vocab_size = self.model_config.vocab_size
@@ -626,6 +636,8 @@ class ModelRpcServer:
                 req.token_logprob.append((next_tok_id, last_logprobs[i]))
 
         self.handle_finished_requests(batch)
+        if forward_simulation is None:
+            return start_event, end_event
         return forward_time
 
     def handle_finished_requests(self, batch: Batch):
