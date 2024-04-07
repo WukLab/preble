@@ -329,9 +329,7 @@ class LPTreeTraversal:
         self.model_reset_counter = 100 # TODO FIXME there is currently a memory leak in the code due to max_per_gpu constraint. This is a temporary fix
 
     def _traverse_tree(self, current_prefix_node: TreeNode, parent_lp_node=None, depth=0, modified_nodes=None):
-        if modified_nodes is None:
-            modified_nodes = set()
-        if current_prefix_node not in modified_nodes:
+        if modified_nodes is not None and current_prefix_node not in modified_nodes:
             return # Skip nodes that have not been modified
 
         if depth == self.depth_limit:
@@ -369,10 +367,8 @@ class LPTreeTraversal:
         return total_tokens
 
     def add_parent_child_gpu_constraints(self, modified_nodes=None):
-        if modified_nodes is None:
-            modified_nodes = set()
         for parent_prefix_node, parent_lp_node in self.node_map.items():
-            if parent_prefix_node not in modified_nodes:
+            if modified_nodes is not None and parent_prefix_node not in modified_nodes:
                 continue
             if not parent_prefix_node.children:  # Skip leaf nodes
                 continue

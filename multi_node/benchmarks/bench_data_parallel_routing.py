@@ -124,6 +124,7 @@ def test_oracle_random_basic(
             # mem_fraction_static=0.42,
             mem_fraction_static=0.8,
             context_length=4096,
+            enable_flashinfer=True
         )
 
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
@@ -202,6 +203,9 @@ def test_oracle_random_basic(
         gc.collect()
         time.sleep(5)
 
+    load_and_run_benchmark(
+        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
+    )
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
     # load_and_run_benchmark(
@@ -212,9 +216,7 @@ def test_oracle_random_basic(
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
     # )
-    # load_and_run_benchmark(
-    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
-    # )
+
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE
     # )
@@ -236,10 +238,10 @@ if __name__ == "__main__":
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
-        [4, 0.2, 200, 0.5],
+        # [4, 0.2, 200, 0.5],
         # [8, 0.2, 200, .5],
-        [200, 0.2, 450, 2.5],
-        [100, 0.2, 4096, 4],
+        # [200, 0.2, 450, 2.5],
+        [200, 0.2, 4096, 16],
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
