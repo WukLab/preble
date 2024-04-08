@@ -16,23 +16,38 @@ from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, Cust
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
+
+def llama2_7b_A6000_vllm(batch: Batch):
+    num_batched_tokens = batch.input_ids.shape[0]
+    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+    
+    if num_batched_tokens >= 384:
+        forward_time = 0.131*num_batched_tokens + 5.67
+    elif num_batched_tokens >= 128:
+        forward_time = 0.114*num_batched_tokens + 12.4
+    else:
+        forward_time = 26.06523603
+    forward_time += num_attention_tokens / 2048 * 1.663659159
+    forward_time /= 1e3 # to seconds
+    return forward_time
+
+def mistral_7b_A6000_sglang(batch: Batch):
+    num_batched_tokens = batch.input_ids.shape[0]
+    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+    forward_time = 35
+    if num_batched_tokens >= 384:
+        forward_time += 0.13*num_batched_tokens - 19.32
+    elif num_batched_tokens >= 192:
+        forward_time += 0.103*num_batched_tokens - 11.62
+        
+    forward_time += num_attention_tokens / (64 * 2048) * 35
+    forward_time /= 1e3 # to seconds
+    return forward_time
+
 # For Simulator, ignore this if not using it
 def add_simulation_to_gpu_config(gpu_configs):
-    def forward_simulation(batch: Batch):
-        num_batched_tokens = batch.input_ids.shape[0]
-        num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        
-        if num_batched_tokens >= 384:
-            forward_time = 0.131*num_batched_tokens + 5.67
-        elif num_batched_tokens >= 128:
-            forward_time = 0.114*num_batched_tokens + 12.4
-        else:
-            forward_time = 26.06523603
-        forward_time += num_attention_tokens / 2048 * 1.663659159
-        forward_time /= 1e3 # to seconds
-        return forward_time
     for config in gpu_configs:
-        config.regist_simulator_config(forward_simulation, 25 << 30) # Llama 2-7b, 0.8 A6000
+        config.regist_simulator_config(mistral_7b_A6000_sglang, 131072 * 198516)
 
 def create_workload_configs(configurations_to_test):
     workload_configs = []
@@ -68,7 +83,7 @@ def create_workload_configs(configurations_to_test):
 # -----------------------------------------------------------------------------
 
 # Basic Configuration
-log_file_path = "logs/ref-4-node-flashinfer.log"
+log_file_path = "logs/from_base.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = 180
@@ -119,8 +134,8 @@ server_args = {
 configurations_to_test = [
     [200, 0.2, 450, 2.5],
     [200, 0.2, 4096, 4],
+    # [100, 0.2, 4096, 2],
     [300, 0.2, 4096, 8],
-    # [400, 0.2, 4096, 8],
 ]
 workload_configs = create_workload_configs(configurations_to_test)
 
@@ -134,7 +149,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

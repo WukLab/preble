@@ -180,7 +180,7 @@ class DataLoader:
 
     def generate_workload(self):
         raise NotImplementedError()
-
+    
 class RandomDataLoader(DataLoader):
     def __init__(
         self,
@@ -248,7 +248,6 @@ class RandomDataLoader(DataLoader):
         plt.hist(prompt_lens)
         plt.savefig(f"react_prompt_length.png")
         return workload
-
 
 class ToolBenchDataLoader(DataLoader):
     def __init__(

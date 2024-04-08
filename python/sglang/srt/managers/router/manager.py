@@ -45,11 +45,20 @@ class RouterManager:
         
         # Dict[uid -> migration url]
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}
+        self.local_start = None
 
     async def loop_for_forward(self):
         while True:
             next_step_input = list(self.recv_reqs)
             self.recv_reqs = []
+            if next_step_input and self.local_start is None:
+                self.local_start = 0
+            elif next_step_input and not self.local_start:
+                self.local_start = time.time()
+            if self.local_start:
+                gap = time.time() - self.local_start
+                if gap <= 30.0:
+                    logging.info(f"model step at: {time.time() - self.local_start}")
             out_pyobjs = await self.model_client.step(next_step_input)
 
             for obj in out_pyobjs:

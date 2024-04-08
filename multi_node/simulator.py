@@ -42,7 +42,7 @@ from sglang.srt.sampling_params import SamplingParams
 from sglang.srt.backend_config import GLOBAL_BACKEND_CONFIG
 from sglang.srt.managers.router.infer_batch import Batch
 from benchmarks.benchmark_workload_gen import RandomDataLoader
-from benchmarks.benchmark_utils import RequestFuncOutput
+from benchmarks.benchmark_utils import RequestFuncOutput, BenchmarkMetrics
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -139,7 +139,11 @@ class ServerRuntimeSimulator:
         self.tokenizer_clock = 0.0
         self.manager_clock = 0.0
     
-    # TODO: update based on ret
+    def reset_clock(self):
+        self.local_clock = 0.0
+        self.tokenizer_clock = 0.0
+        self.manager_clock = 0.0
+    
     def simulate_step(self, recv_reqs) -> int:
         for recv_req in recv_reqs:
             self.model_rpc.handle_generate_request(recv_req)
@@ -183,8 +187,8 @@ class SimulationEvent(ABC):
             simulator.global_clock = max(simulator.global_clock, runtime.local_clock)
             
     def wrapper_process_event(self, simulator: "Simulation"):
-        # runtime = simulator.runtimes[self.runtime_id]
-        # logging.debug(f"{self.runtime_id} processing {self.task} scheduled at {self.time}, global clock: {simulator.global_clock}, local lock: {runtime.local_clock}, {runtime.tokenizer_clock}, {runtime.manager_clock}")
+        runtime = simulator.runtimes[self.runtime_id]
+        logging.debug(f"{self.runtime_id} processing {self.task} scheduled at {self.time}, global clock: {simulator.global_clock}, local lock: {runtime.local_clock}, {runtime.tokenizer_clock}, {runtime.manager_clock}")
         self.process_event(simulator)
     
     @abstractclassmethod
@@ -208,8 +212,47 @@ class Simulation:
         
     def add_event(self, event: SimulationEvent):
         heapq.heappush(self.events, event)
+    
+    def reset_state(self):
+        self.global_clock = 0.0
+        self.events = []
+        self.request_output = {}
+        for runtime in self.runtimes:
+            runtime.reset_clock()
+    
+    def warm_up(self):
+        logging.info('--- Warm up started ---')
+        prompt = "Say this is a warmup request."
+        warm_up_request = {
+            "text": prompt,
+            "sampling_params": {
+                "temperature": 0,
+                "max_new_tokens": 16,
+            },
+            "input_ids": [0] * 9,
+        }
+        for i in range(len(self.runtimes)):
+            self.request_output[str(i)] = RequestFuncOutput(
+                prompt_len=len(warm_up_request['input_ids']), 
+                send_out_time=0.0,
+                route_dest=i,
+            )
+            generate_input = GenerateReqInput(
+                text=prompt,
+                sampling_params=warm_up_request['sampling_params'],
+                rid=str(i),
+                stream=True,
+            )
+            GenerateRequestEvent(0.0, generate_input, i).process_event(self)
+        while True:
+            if all(r.success for r in self.request_output.values()):
+                break
+            for i in range(len(self.runtimes)):
+                ModelStepEvent(0.0, i).process_event(self)
+        self.reset_state()
+        logging.info('--- Warm up finished ---')
         
-    def run(self):
+    def run(self) -> List[RequestFuncOutput]:
         while self.events:
             if self.global_clock > self.time_litmit:
                 break
@@ -220,6 +263,7 @@ class Simulation:
         with open("output.json", "w") as f:
             f.write(json.dumps(all_req_outputs, indent=4))
         return [rq for rq in self.request_output.values() if rq.success]
+        # return list(self.request_output.values())
     
     # requests: List[Dict[str, Dict, List]]
     def initialize_all_request_with_rps(self, requests, rps: float, time: float):
@@ -342,17 +386,18 @@ class ModelStepEvent(SimulationEvent):
         
     def update_metric(self, simulator: Simulation, out_pyobjs: List[BatchTokenIDOut]):
         if out_pyobjs:
-            # meta = '\n'.join(str(obj.brief()) for obj in out_pyobjs)
-            # logging.debug(f"{self.runtime_id}: {meta}")
+            runtime = simulator.runtimes[self.runtime_id]
+            meta = '\n'.join(str(obj.brief()) for obj in out_pyobjs)
+            logging.debug(f"{self.runtime_id} output obj: {meta}")
             for obj in out_pyobjs:
                 for rid, output_token_ids, finished in zip(obj.rids, obj.output_tokens, obj.finished):
                     request_output = simulator.request_output[rid]
                     if not request_output.ttft:
-                        request_output.ttft = simulator.runtimes[self.runtime_id].manager_clock - request_output.send_out_time
+                        request_output.ttft = runtime.manager_clock - request_output.send_out_time
                     if finished:
                         request_output.success = True
-                        request_output.request_latency = simulator.global_clock - request_output.send_out_time
-                        request_output.global_time = simulator.global_clock
+                        request_output.request_latency = runtime.manager_clock - request_output.send_out_time
+                        request_output.global_time = runtime.manager_clock
                         request_output.output_len = len(output_token_ids)
     
     def process_event(self, simulator: Simulation):
@@ -371,7 +416,7 @@ class ModelStepEvent(SimulationEvent):
         overhead = time.time() - start + forward_time + sleep_time
         self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.MANAGER)
         self.update_metric(simulator, out_pyobjs)
-        # logging.debug(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock}, total {overhead}, overhead {overhead - step_time - sleep_time}, model {step_time}")
+        logging.debug(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock}, total {overhead}, overhead {overhead - forward_time - sleep_time}, model {forward_time}")
         simulator.add_event(ModelStepEvent(runtime.manager_clock, self.runtime_id))
 
 if __name__ == "__main__":
@@ -382,35 +427,40 @@ if __name__ == "__main__":
         GPUConfig(gpu_id=0, url=None, use_ssh=False),
         GPUConfig(gpu_id=1, url=None, use_ssh=False)
     ]
-
+    def forward_simulation(batch: Batch):
+        return 1
     for config in gpu_configs:
-        config.regist_simulator_config(None, 1 << 30)
+        config.regist_simulator_config(forward_simulation, 1 << 30)
 
     model_name = "mistralai/Mistral-7B-v0.1"
     runtimes = [ServerRuntimeSimulator(gpu_config=config, model_path=model_name) for config in gpu_configs]
     vocab_size = runtimes[0].model_rpc.model_config.vocab_size
     
-    def forward_simulation(batch: Batch):
-        logitis = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
-        new_toks = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-        forward_time = 0.1
-        return logitis, new_toks, forward_time
-
-    for config in gpu_configs:
-        config.regist_simulator_config(forward_simulation, 1 << 30)
-    
     router = DataParallelRequestRouter(DataParallelRuntimeSelectionPolicy.RANDOM, total_nodes=2)
     simulator = Simulation(runtimes, router)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    rps, exp_time = 8, 30
+    num_requests = int(rps * exp_time)
+    num_workloads = 10
     dataloader = RandomDataLoader(
-        10,
-        5,
+        num_workloads,
+        num_requests,
         tokenizer,
-        num_in_context_examples=7,
+        num_in_context_examples=4,
         output_len=10,
     )
     requests = dataloader.generate_workload(k=1)
-    simulator.initialize_all_request_with_rps(requests, 1, 5)
+    simulator.initialize_all_request_with_rps(requests, 8, 30)
     simulator.start_model_forwarding_loop()
 
-    simulator.run()
+    results = simulator.run()
+    bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(
+        tokenizer=tokenizer,
+        req_func_outputs=results,
+        overall_latency=exp_time,
+        time_limit=exp_time,
+        gpu_counts=len(gpu_configs),
+    )
+    exp_params = f"{model_name}, {num_workloads}, {0}, {num_requests}, {rps}, {exp_time}"
+    bench_metrics.to_log_file(exp_params)
+    

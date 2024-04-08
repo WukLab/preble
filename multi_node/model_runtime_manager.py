@@ -192,6 +192,7 @@ class ModelDetails:
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
+            simulator.warm_up()
             simulator.initialize_all_request_with_rps(requests, request_rate, exp_time)
             simulator.start_model_forwarding_loop()
             return simulator.run()

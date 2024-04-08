@@ -71,6 +71,37 @@ def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_st
                 inflight.remove(rid)
         model_server.out_pyobjs = []
 
+def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, token_id_start):
+    model_server = model_client.model_server
+    sampling_params = SamplingParams(max_new_tokens=starting_ctx_len)
+    if sampling_params.max_new_tokens != 0:
+        sampling_params.normalize(model_server.tokenizer)
+        sampling_params.verify()
+    pixel_values, image_hash, image_size = None, None, None
+    for i in range(num_seqs):
+        input_ids = [token_id_start + i] * starting_ctx_len
+        tokenized_obj = TokenizedGenerateReqInput(
+            rid=uuid.uuid4().hex,
+            input_text="",
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_hash=image_hash,
+            image_size=image_size,
+            sampling_params=sampling_params,
+            return_logprob=None,
+            logprob_start_len=None,
+            stream=True,
+        )
+        model_server.handle_generate_request(tokenized_obj)
+        
+    while True:
+        model_server.forward_step()
+        if model_server.out_pyobjs:
+            print(len(model_server.out_pyobjs[-1].rids))
+        if model_server.out_pyobjs and len(model_server.out_pyobjs[-1].rids) == num_seqs:
+            break
+        model_server.out_pyobjs = []
+
 def profile_multi_query(model_client: ModelRpcClient, num_seqs, ctx_len, num_qs, token_id_start):
     cached_ctx_len = ctx_len - num_qs
     run_to_complete(model_client, num_seqs, cached_ctx_len, token_id_start)
@@ -78,8 +109,15 @@ def profile_multi_query(model_client: ModelRpcClient, num_seqs, ctx_len, num_qs,
     return forward_time
 
 def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start):
-    forward_time = profile_multi_query(model_client, num_seqs, ctx_len, 1, token_id_start)
-    return forward_time
+    run_to_scheduled(model_client, num_seqs, ctx_len, token_id_start)
+    model_server = model_client.model_server
+    forward_time_events = model_server.forward_step()
+    assert model_server.out_pyobjs and len(model_server.out_pyobjs[-1].rids) == num_seqs
+    forward_time = 0
+    for start, end in forward_time_events:
+        end.synchronize()
+        forward_time += start.elapsed_time(end)
+    return forward_time / len(forward_time_events)
     
     
 def main(args):

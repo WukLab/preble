@@ -117,7 +117,7 @@ def load_and_run_benchmark(
     requests = workload_config.requests
     tokenizer = workload_config.dataloader.tokenizer
         
-    logging.debug(
+    logging.info(
         f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
     regist_selector(policy, custom_policy, model_details, workload_config)
@@ -143,8 +143,8 @@ def load_and_run_benchmark(
 def test_oracle_random_basic(exp_args: MajorExperimentArgs):
     loader = MultiNodeLoader(exp_args.simulate)
     for workload_config in exp_args.workload_configs:
-        logging.debug(workload_config)
-        logging.debug(f"Using load distribution of {workload_config.dataloader.load_dist}")
+        logging.info(workload_config)
+        logging.info(f"Using load distribution of {workload_config.dataloader.load_dist}")
         # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
         for selector_config in exp_args.selector_configs:
             model_details = loader.load_model(**exp_args.runtime_args) # TODO: clear cache instead of reload
@@ -156,16 +156,16 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename=exp_args.log_file_path)
+    logging.basicConfig(level=logging.INFO, filename=exp_args.log_file_path)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
     start_date = datetime.datetime.utcnow()
     start_time = time.time()
-    logging.debug(f"Starting Experiment at {start_date}")
+    logging.info(f"Starting Experiment at {start_date}")
     # model_name = "mistralai/Mistral-7B-v0.1"
     # model_name = "lmsys/vicuna-13b-v1.5"
     model_name = exp_args.runtime_args['model_path']
-    logging.debug(f"Model Name: {model_name}")
+    logging.info(f"Model Name: {model_name}")
 
     test_oracle_random_basic(exp_args)
-    logging.debug(f"Total Experiment Time: {time.time() - start_time}")
+    logging.info(f"Total Experiment Time: {time.time() - start_time}")
