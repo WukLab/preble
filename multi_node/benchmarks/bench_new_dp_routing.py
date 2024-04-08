@@ -60,6 +60,15 @@ def regist_selector(policy, custom_policy, model_details: ModelDetails, workload
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=oracle,
             )
+        if custom_policy == CustomPolicyType.ORACLE_HOT_COLD:
+            oracle = OracleHotCold(
+                num_nodes=len(model_details.runtimes), 
+                num_workloads=workload_config.num_prefix_patterns,
+            )
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=oracle,
+            )
         elif custom_policy == CustomPolicyType.TBORACLE:
             oracle = TBOracle(num_nodes=len(model_details.runtimes))
             model_details.update_runtime_selection_policy(

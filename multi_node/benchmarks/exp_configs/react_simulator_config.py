@@ -39,10 +39,38 @@ def mistral_7b_A6000_sglang(batch: Batch):
         forward_time += 0.13*num_batched_tokens - 19.32
     elif num_batched_tokens >= 192:
         forward_time += 0.103*num_batched_tokens - 11.62
-        
-    forward_time += num_attention_tokens / (64 * 2048) * 35
+    if num_attention_tokens <= 8 * 2048:
+        forward_time += 2
+    elif num_attention_tokens <= 32 * 2048:
+        forward_time += 4
+    elif num_attention_tokens <= 48 * 2048:
+        forward_time += num_attention_tokens / (48 * 2048) * 14
+    else:
+        forward_time += num_attention_tokens / (64 * 2048) * 35
     forward_time /= 1e3 # to seconds
     return forward_time
+
+def _mistral_7b_A6000_sglang_tp(batch: Batch, k: int):
+    num_batched_tokens = batch.input_ids.shape[0]
+    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+    forward_time = 35
+    if num_batched_tokens >= 384:
+        forward_time += (0.13*num_batched_tokens - 19.32) / k
+    elif num_batched_tokens >= 192:
+        forward_time += (0.103*num_batched_tokens - 11.62) / k
+    if num_attention_tokens <= 8 * 2048:
+        forward_time += 2
+    elif num_attention_tokens <= 32 * 2048:
+        forward_time += 4
+    elif num_attention_tokens <= 48 * 2048:
+        forward_time += num_attention_tokens / (48 * 2048) * 14
+    else:
+        forward_time += num_attention_tokens / (64 * 2048) * 35
+    forward_time /= 1e3 # to seconds
+    return forward_time
+
+def mistral_7b_A6000_sglang_tp(k: int):
+    return lambda batch: _mistral_7b_A6000_sglang_tp(batch, k)
 
 # For Simulator, ignore this if not using it
 def add_simulation_to_gpu_config(gpu_configs):
@@ -62,6 +90,7 @@ def create_workload_configs(configurations_to_test):
             tokenizer,
             num_in_context_examples=4,
             output_len=64,
+            distribution_of_non_shared=random_ratio,
         )
         requests = dataloader.generate_workload(None)
         random.shuffle(requests)
@@ -83,7 +112,7 @@ def create_workload_configs(configurations_to_test):
 # -----------------------------------------------------------------------------
 
 # Basic Configuration
-log_file_path = "logs/from_base.log"
+log_file_path = "logs/base_hc.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = 180
@@ -92,34 +121,36 @@ exp_time = 180
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False),
     GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
-    GPUConfig(
-        gpu_id=0,
-        url=None,
-        use_ssh=True,
-        ssh_config={
-            "hostname": "192.168.1.16",
-            "username": "wuklab",
-            "port": 456,
-            "python_process": "/mnt/data/ssd/sglang_env/bin/python",
-            "node_name": "06",
-        },
-    ),
-    GPUConfig(
-        gpu_id=1,
-        url=None,
-        use_ssh=True,
-        ssh_config={
-            "hostname": "192.168.1.16",
-            "username": "wuklab",
-            "port": 456,
-            "python_process": "/mnt/data/ssd/sglang_env/bin/python",
-            "node_name": "06",
-        },
-    ),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    # GPUConfig(
+    #     gpu_id=0,
+    #     url=None,
+    #     use_ssh=True,
+    #     ssh_config={
+    #         "hostname": "192.168.1.16",
+    #         "username": "wuklab",
+    #         "port": 456,
+    #         "python_process": "/mnt/data/ssd/sglang_env/bin/python",
+    #         "node_name": "06",
+    #     },
+    # ),
+    # GPUConfig(
+    #     gpu_id=1,
+    #     url=None,
+    #     use_ssh=True,
+    #     ssh_config={
+    #         "hostname": "192.168.1.16",
+    #         "username": "wuklab",
+    #         "port": 456,
+    #         "python_process": "/mnt/data/ssd/sglang_env/bin/python",
+    #         "node_name": "06",
+    #     },
+    # ),
 ]
 add_simulation_to_gpu_config(gpu_configs)
+# for config in gpu_configs:
+#     config.regist_simulator_config(mistral_7b_A6000_sglang_tp(1.7), 65 << 30)
 
 # SGLang Runtime Configuration
 server_args = {
@@ -132,17 +163,22 @@ server_args = {
 
 # Workload Configuration
 configurations_to_test = [
-    [200, 0.2, 450, 2.5],
-    [200, 0.2, 4096, 4],
-    # [100, 0.2, 4096, 2],
-    [300, 0.2, 4096, 8],
+    # [200, 0.0, 450, 2.5],
+    # [200, 0.0, 4096, 4],
+    # [100, 0.0, 4096, 2],
+    # [300, 0.0, 4096, 8],
+    
+    # [300, 0.2, 4096, 8],
+    # [300, 0.2, 4096, 12],
+    [200, 0.5, 4096, 12],
 ]
 workload_configs = create_workload_configs(configurations_to_test)
 
 # Selector Configuration
 selectors_configs = [
     (DataParallelRuntimeSelectionPolicy.RANDOM, None),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD),
 ]
 
 exp_args = MajorExperimentArgs(
