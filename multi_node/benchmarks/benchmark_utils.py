@@ -208,23 +208,23 @@ class BenchmarkMetrics:
         }
 
     def to_log_file(self, exp_params):
-        logging.debug(f"Params=({exp_params}) Overall Latency: {self.overall_latency}")
-        logging.debug(
+        logging.info(f"Params=({exp_params}) Overall Latency: {self.overall_latency}")
+        logging.info(
             f"Params=({exp_params}) Overall Throughput: {self.requests_per_sec}"
         )
-        logging.debug(
+        logging.info(
             f"Params=({exp_params}) Overall Request Latency: {self.average_request_latency}, STD: {self.std_request_latency}, P90: {self.average_p90}"
         )
-        logging.debug(
+        logging.info(
             f"Params=({exp_params}) Average TTFT: {self.average_ttft}, Average TOPT: {self.average_topt}, Throughput ToksPerSec: {self.throughput_tok_sec}"
         )
-        logging.debug(
+        logging.info(
             f"Params=({exp_params}) Num Finished Requests: {self.num_finished_requests}, Finished Throughput ToksPerSec: {self.average_finished_topt}"
         )
-        logging.debug(
+        logging.info(
             f"Params=({exp_params}) Overall Max Latency: {self.max_latency}, P99: {self.p99_latency}"
         )
-        logging.debug(
+        logging.info(
             f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"
         )
-        logging.debug(f"Params=({exp_params}) Counts: {self.gpu_counts}")
+        logging.info(f"Params=({exp_params}) Counts: {self.gpu_counts}")

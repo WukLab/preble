@@ -391,7 +391,7 @@ class ModelRpcServer:
                     for r in self.running_batch.reqs
                 ]
             )
-
+        # logger.debug(f'free ratio: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}')
         for req in self.forward_queue:
             if req.return_logprob:
                 # Need at least two tokens to compute normalized logprob
@@ -493,6 +493,9 @@ class ModelRpcServer:
 
         logprobs = None
         forward_time = 0
+        num_batched_tokens = batch.input_ids.shape[0]
+        num_attention_tokens = batch.seq_lens.cpu().numpy().sum() 
+        logging.debug(f"batch.extend_num_tokens: {batch.extend_num_tokens}, input ids: {num_batched_tokens}, attention tokens: {num_attention_tokens}")
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
                 # Forward
@@ -599,6 +602,9 @@ class ModelRpcServer:
         self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
         batch.prepare_for_decode()
 
+        num_batched_tokens = batch.input_ids.shape[0]
+        num_attention_tokens = batch.seq_lens.cpu().numpy().sum() 
+        logging.debug(f"batch.num_reqs: {len(batch.reqs)}, input ids: {num_batched_tokens}, attention tokens: {num_attention_tokens}")
         forward_time = 0
         # Forward
         if forward_simulation is None:

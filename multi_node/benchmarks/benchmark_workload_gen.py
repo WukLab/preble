@@ -1,6 +1,7 @@
 import random
 import json
 import string
+import uuid
 
 import numpy as np
 import random
@@ -180,7 +181,7 @@ class DataLoader:
 
     def generate_workload(self):
         raise NotImplementedError()
-
+    
 class RandomDataLoader(DataLoader):
     def __init__(
         self,
@@ -224,9 +225,12 @@ class RandomDataLoader(DataLoader):
                     "sampling_params": copy.deepcopy(sampling_params),
                 }
             )
-        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
+        # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
-            prompt = random.choice(random_workload)
+            # prompt = random.choice(random_workload)
+            prompt = get_react_workload(
+                uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
+            )
             workload.append(
                 {
                     "text": prompt,
@@ -248,7 +252,6 @@ class RandomDataLoader(DataLoader):
         plt.hist(prompt_lens)
         plt.savefig(f"react_prompt_length.png")
         return workload
-
 
 class ToolBenchDataLoader(DataLoader):
     def __init__(
@@ -416,6 +419,21 @@ class Oracle(CustomRuntimeSelector):
 
         return random.randint(0, num_nodes - 1)
 
+@dataclass
+class OracleHotCold(CustomRuntimeSelector):
+    num_workloads: int
+    trace = {}
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+        num_nodes = self.num_nodes
+        if num_nodes == 1:
+            return 0
+        self.trace[request_id] = text[:50]
+        for i in range(self.num_workloads):
+            if text.startswith(f"Workload {i} "):
+                return i % (num_nodes - 1)
+
+        return num_nodes - 1
 
 @dataclass
 class TBOracle:
