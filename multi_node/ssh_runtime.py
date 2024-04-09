@@ -70,7 +70,7 @@ class SSHRuntimeManager:
         channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel
         self.transport = transport
-        self.transport.set_keepalive(30) # Send keepalive packets every 30 seconds
+        self.transport.set_keepalive(0) # Send keepalive packets every 30 seconds
 
         channel.update_environment(environment_variables)
         channel.exec_command(command)
@@ -123,7 +123,7 @@ class SSHRuntimeManager:
 
         stderr_thread = threading.Thread(target=stream_logger, args=(self.node_name, stderr), daemon=True)
         stderr_thread.start()
-        return port   
+        return port
     
     def shutdown(self):
         if self.ssh_client:

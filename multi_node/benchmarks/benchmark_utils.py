@@ -120,6 +120,7 @@ class BenchmarkMetrics:
         time_limit: int = 100,
         gpu_counts={},
     ):
+        req_func_outputs = [result for result in req_func_outputs if result.success]
         for result in req_func_outputs:
             result.update_metrics(tokenizer)  # Computes the generated output tokens
 

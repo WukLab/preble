@@ -3,6 +3,7 @@ import logging
 import random
 import numpy as np
 import uuid
+import torch
 
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import handle_port_init
@@ -11,9 +12,16 @@ from sglang.srt.managers.router.infer_batch import Batch
 from sglang.srt.sampling_params import SamplingParams
 from sglang.srt.managers.io_struct import TokenizedGenerateReqInput
 
+def get_sampling_params(max_new_tokens, tokenizer):
+    sampling_params = SamplingParams(max_new_tokens=max_new_tokens)
+    if sampling_params.max_new_tokens != 0:
+        sampling_params.normalize(tokenizer)
+        sampling_params.verify()
+    return sampling_params
+
 def profile_prefill(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start):
     model_server = model_client.model_server
-    sampling_params = SamplingParams(max_new_tokens=1)
+    sampling_params = get_sampling_params(1, model_server.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
     for i in range(num_seqs):
         input_ids = [token_id_start + i] * ctx_len
@@ -42,9 +50,9 @@ def profile_prefill(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_st
         forward_time += start.elapsed_time(end)
     return forward_time
 
-def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start):
+def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start, max_new_tokens=1):
     model_server = model_client.model_server
-    sampling_params = SamplingParams(max_new_tokens=1)
+    sampling_params = get_sampling_params(max_new_tokens, model_server.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
     inflight = set()
     for i in range(num_seqs):
@@ -73,10 +81,7 @@ def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_st
 
 def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, token_id_start):
     model_server = model_client.model_server
-    sampling_params = SamplingParams(max_new_tokens=starting_ctx_len)
-    if sampling_params.max_new_tokens != 0:
-        sampling_params.normalize(model_server.tokenizer)
-        sampling_params.verify()
+    sampling_params = get_sampling_params(starting_ctx_len, model_server.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
     for i in range(num_seqs):
         input_ids = [token_id_start + i] * starting_ctx_len
@@ -102,16 +107,21 @@ def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, t
             break
         model_server.out_pyobjs = []
 
-def profile_multi_query(model_client: ModelRpcClient, num_seqs, ctx_len, num_qs, token_id_start):
-    cached_ctx_len = ctx_len - num_qs
-    run_to_complete(model_client, num_seqs, cached_ctx_len, token_id_start)
-    forward_time = profile_prefill(model_client, num_seqs, ctx_len, token_id_start)
+def profile_multi_query(model_client: ModelRpcClient, num_prompt, num_mul, ctx_len, num_qs, token_id_start):
+    if num_mul > 0:
+        cached_ctx_len = ctx_len - num_qs
+        run_to_complete(model_client, num_mul, cached_ctx_len, token_id_start)
+    torch.cuda.cudart().cudaProfilerStart()
+    forward_time = profile_prefill(model_client, num_prompt + num_mul, ctx_len, token_id_start)
+    torch.cuda.cudart().cudaProfilerStop()
     return forward_time
 
 def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start):
     run_to_scheduled(model_client, num_seqs, ctx_len, token_id_start)
     model_server = model_client.model_server
+    torch.cuda.cudart().cudaProfilerStart()
     forward_time_events = model_server.forward_step()
+    torch.cuda.cudart().cudaProfilerStop()
     assert model_server.out_pyobjs and len(model_server.out_pyobjs[-1].rids) == num_seqs
     forward_time = 0
     for start, end in forward_time_events:
@@ -136,21 +146,17 @@ def main(args):
     model_client = ModelRpcClient(server_args, port_args)
     
     # Warm up
-    warm_up_prompts = 4
-    profile_prefill(model_client, warm_up_prompts, 2048, 0)
-    
-    if args.num_prompt > 0:
-        forward_time = profile_prefill(model_client, args.num_prompt, args.ctx_len, warm_up_prompts)
-        logging.info(f"Prefill: {args.num_prompt} x {args.ctx_len}: {forward_time:.2f} ms")
-        warm_up_prompts += args.num_prompt
+    warm_up_prompts = 16
+    run_to_complete(model_client, warm_up_prompts, 2048, 0, 64)
+    torch.cuda.synchronize()
     if args.num_gen > 0:
         forward_time = profile_decoding(model_client, args.num_gen, args.ctx_len, warm_up_prompts)
         logging.info(f"Normal Decoding: {args.num_gen} x 1: {forward_time:.2f} ms")
         warm_up_prompts += args.num_gen
-    if args.num_mul > 0:
-        forward_time = profile_multi_query(model_client, args.num_mul, args.ctx_len, args.mul_qs, warm_up_prompts)
-        logging.info(f"Multi Query Decoding: {args.num_mul} x {args.mul_qs}: {forward_time:.2f} ms")
-        warm_up_prompts += args.num_mul
+    if args.num_prompt + args.num_mul > 0:
+        forward_time = profile_multi_query(model_client, args.num_prompt, args.num_mul, args.ctx_len, args.mul_qs, warm_up_prompts)
+        logging.info(f"Multi Query Decoding: {args.num_prompt} x {args.ctx_len} + {args.num_mul} x {args.mul_qs}: {forward_time:.2f} ms")
+        warm_up_prompts += args.num_mul + args.num_prompt
     
 
 if __name__ == "__main__":
@@ -178,5 +184,7 @@ if __name__ == "__main__":
           f'num gen: {args.num_gen}\n',
           f'num mul: {args.num_mul}\n',
           f'queries per mul: {args.mul_qs}')
-    
+    # prompt + mul cannot be scheduled together with gen
+    if args.num_prompt + args.num_mul > 0 and args.num_gen > 0:
+        raise ValueError("Prompt and Multi Query cannot be scheduled together with normal decoding.")
     main(args)
