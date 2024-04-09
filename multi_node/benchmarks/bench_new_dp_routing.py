@@ -34,12 +34,6 @@ from typing import List, Dict
 import paramiko
 import importlib.util
 
-custom_download_dir = "/mnt/ssd1/cache/"
-
-# Set the HF_HOME environment variable
-os.environ["HF_HOME"] = custom_download_dir
-os.environ["TRANSFORMERS_CACHE"] = custom_download_dir
-
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -115,8 +109,8 @@ def regist_selector(policy, custom_policy, model_details: ModelDetails, workload
 
 def load_and_run_benchmark(
     model_details: ModelDetails, 
-    workload_config: WorkloadConfig, 
-    policy, custom_policy=None,
+    workload_config: WorkloadConfig,
+    policy, custom_policy=None, custom_msg="",
 ):
     num_workloads = workload_config.num_prefix_patterns
     distribution_of_non_shared = workload_config.random_ratio
@@ -127,7 +121,7 @@ def load_and_run_benchmark(
     tokenizer = workload_config.dataloader.tokenizer
         
     logging.info(
-        f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
+        f"=====STARTING Policy {policy}-{custom_policy}:{custom_msg}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
     regist_selector(policy, custom_policy, model_details, workload_config)
     
@@ -145,7 +139,7 @@ def load_and_run_benchmark(
         time_limit=exp_time,
         gpu_counts=counts,
     )
-    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}, {exp_time}"
+    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     bench_metrics.to_log_file(exp_params)
 
 
@@ -161,7 +155,7 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
             gc.collect()
-            time.sleep(5)
+            time.sleep(10)
 
 
 if __name__ == "__main__":

@@ -253,9 +253,13 @@ class Simulation:
         logging.info('--- Warm up finished ---')
         
     def run(self) -> List[RequestFuncOutput]:
+        previous_stamp = self.global_clock
         while self.events:
             if self.global_clock > self.time_litmit:
                 break
+            if self.global_clock - previous_stamp >= 10.0:
+                logging.info(f"------------ Global clock: {self.global_clock} ------------")
+                previous_stamp = self.global_clock
             event: SimulationEvent = heapq.heappop(self.events)
             event.advance_to_schedule_time(self)
             event.wrapper_process_event(self)

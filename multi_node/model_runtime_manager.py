@@ -23,6 +23,7 @@ from benchmarks.benchmark_utils import RequestFuncOutput
 from sglang.srt.managers.router.infer_batch import Batch
 import torch
 import logging
+from tqdm.asyncio import tqdm_asyncio
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)

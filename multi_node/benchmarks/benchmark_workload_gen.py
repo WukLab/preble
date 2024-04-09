@@ -431,9 +431,11 @@ class OracleHotCold(CustomRuntimeSelector):
         self.trace[request_id] = text[:50]
         for i in range(self.num_workloads):
             if text.startswith(f"Workload {i} "):
-                return i % (num_nodes - 1)
+                return i % (num_nodes // 2)
+                # return i % (num_nodes - 1)
 
-        return num_nodes - 1
+        # return num_nodes - 1 
+        return random.randint(num_nodes // 2, num_nodes - 1)
 
 @dataclass
 class TBOracle:
