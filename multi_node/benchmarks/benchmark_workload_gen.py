@@ -433,9 +433,11 @@ class OracleHotCold(CustomRuntimeSelector):
             if text.startswith(f"Workload {i} "):
                 return i % (num_nodes // 2)
                 # return i % (num_nodes - 1)
+                # return num_nodes - 1
 
         # return num_nodes - 1 
         return random.randint(num_nodes // 2, num_nodes - 1)
+        # return random.randint(0, 1)
 
 @dataclass
 class TBOracle:

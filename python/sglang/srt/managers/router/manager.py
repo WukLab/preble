@@ -12,6 +12,7 @@ from sglang.srt.managers.tokenizer_manager import ReqState
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
 from sglang.srt.managers.io_struct import SchedulingMetricsReqInput, MigrationReq, DumpTrace
+from sglang.srt.managers.router.model_runner import GPUConfig
 import time
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -152,6 +153,7 @@ def start_router_process(
     server_args: ServerArgs,
     port_args: PortArgs,
     pipe_writer,
+    gpu_config: GPUConfig = None,
 ):
     logging.basicConfig(
         level=getattr(logging, server_args.log_level.upper()),
@@ -159,7 +161,7 @@ def start_router_process(
     )
 
     try:
-        model_client = ModelRpcClient(server_args, port_args)
+        model_client = ModelRpcClient(server_args, port_args, gpu_config=gpu_config)
         router = RouterManager(model_client, port_args)
     except Exception:
         pipe_writer.send(get_exception_traceback())

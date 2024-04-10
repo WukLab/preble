@@ -79,7 +79,8 @@ class RequestFuncOutput:
         # print(self.output_len, self.generated_text, self.success, self.error)
         if self.output_len > 1:
             self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
-        self.prefill_decode_ratio = self.ttft / self.request_latency
+        if self.request_latency:
+            self.prefill_decode_ratio = self.ttft / self.request_latency
 
     @property
     def total_tokens(self):
@@ -97,6 +98,9 @@ class RequestFuncOutput:
 class BenchmarkMetrics:
     num_finished_requests: int
     average_finished_topt: float
+    p50_tpot: float
+    p90_tpot: float
+    p99_tpot: float
     ttfts: List[float]
     tpots: List[float]
     throughput_tok_sec: float
@@ -105,6 +109,8 @@ class BenchmarkMetrics:
     std_request_latency: float
     average_p90: float
     max_latency: float
+    p50_latency: float
+    p90_latency: float
     p99_latency: float
     average_ttft: float
     average_topt: float
@@ -120,14 +126,14 @@ class BenchmarkMetrics:
         time_limit: int = 100,
         gpu_counts={},
     ):
-        req_func_outputs = [result for result in req_func_outputs if result.success]
+        # req_func_outputs = [result for result in req_func_outputs if result.success]
         for result in req_func_outputs:
             result.update_metrics(tokenizer)  # Computes the generated output tokens
 
-        ttfts = [result.ttft for result in req_func_outputs]
-        tpots = [result.tpot for result in req_func_outputs if result.tpot is not None]
+        ttfts = [result.ttft for result in req_func_outputs if result.ttft]
+        tpots = [result.tpot for result in req_func_outputs if result.tpot]
         overall_latency = overall_latency
-        request_latencies = [result.request_latency for result in req_func_outputs]
+        request_latencies = [result.request_latency for result in req_func_outputs if result.request_latency]
         throughput_tok_sec = (
             sum([result.total_tokens for result in req_func_outputs]) / overall_latency
         )
@@ -140,33 +146,37 @@ class BenchmarkMetrics:
                 if result.success
             ]
         )
-        average_finished_tpot = np.average(
-            [
-                result.tpot
-                for result in req_func_outputs
-                if result.tpot is not None
-                and result.global_time <= time_limit
-                and result.success
-            ]
-        )
+        finished_tpot = [
+            result.tpot
+            for result in req_func_outputs
+            if result.tpot is not None
+            and result.global_time <= time_limit
+            and result.success
+        ]
+        average_finished_tpot = np.average(finished_tpot)
+        p50_tpot, p90_tpot, p99_tpot = np.percentile(tpots, [50, 90, 99])
+        
         prefill_decode_ratio = np.average(
-            [result.prefill_decode_ratio for result in req_func_outputs]
+            [result.prefill_decode_ratio for result in req_func_outputs if result.prefill_decode_ratio]
         )
 
+        finished_request_latencies = [result.request_latency for result in req_func_outputs if result.success and result.global_time <= time_limit]
         average_request_latency, std_request_latency, average_p90 = (
-            np.mean(request_latencies),
-            np.std(request_latencies),
-            np.percentile(request_latencies, 90),
+            np.mean(finished_request_latencies),
+            np.std(finished_request_latencies),
+            np.percentile(finished_request_latencies, 90),
         )
-        max_latency, p99_latency = np.max(request_latencies), np.percentile(
-            request_latencies, 99
-        )
+        max_latency = np.max(finished_request_latencies)
+        p50_latency, p90_latency, p99_latency = np.percentile(finished_request_latencies, [50, 90, 99])
         average_ttft = np.mean(ttfts)
         average_topt = np.mean(tpots)
-        requests_per_sec = len(req_func_outputs) / overall_latency
+        requests_per_sec = len([req for req in req_func_outputs if req.success]) / overall_latency
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
             average_finished_topt=average_finished_tpot,
+            p50_tpot=p50_tpot,
+            p90_tpot=p90_tpot,
+            p99_tpot=p99_tpot,
             ttfts=ttfts,
             tpots=tpots,
             throughput_tok_sec=throughput_tok_sec,
@@ -176,6 +186,8 @@ class BenchmarkMetrics:
             std_request_latency=std_request_latency,
             average_p90=average_p90,
             max_latency=max_latency,
+            p50_latency=p50_latency,
+            p90_latency=p90_latency,
             p99_latency=p99_latency,
             average_ttft=average_ttft,
             average_topt=average_topt,
@@ -224,6 +236,15 @@ class BenchmarkMetrics:
         )
         logging.info(
             f"Params=({exp_params}) Overall Max Latency: {self.max_latency}, P99: {self.p99_latency}"
+        )
+        logging.info(
+            f"Params=({exp_params}) TPOT p50, p90, p99: {self.p50_tpot:.2f}, {self.p90_tpot:.2f}, {self.p99_tpot:.2f}"
+        )
+        logging.info(
+            f"Params=({exp_params}) TTFT p50, p90, p99: {np.percentile(self.ttfts, 50):.2f}, {np.percentile(self.ttfts, 90):.2f}, {np.percentile(self.ttfts, 99):.2f}"
+        )
+        logging.info(
+            f"params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.2f}, {self.p90_latency:.2f}, {self.p99_latency:.2f}"
         )
         logging.info(
             f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"

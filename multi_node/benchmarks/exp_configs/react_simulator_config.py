@@ -60,25 +60,44 @@ def mistral_7b_A6000_sglang_extend(batch: Batch):
         forward_time = 35.0
     return forward_time / 1e3
 
-def mistrial_7b_A6000_sglang_decode(batch: Batch):
+def mistral_7b_A6000_sglang_extend_flashinfer(batch: Batch):
     num_batched_tokens = batch.input_ids.shape[0]
-    if num_batched_tokens >= 48 * 2048:
-        forward_time = num_batched_tokens * 4.5e-4 + 10
+    if num_batched_tokens >= 384:
+        forward_time = 0.128 * num_batched_tokens + 9.97
+    elif num_batched_tokens >= 192:
+        forward_time = 0.117 * num_batched_tokens + 17.3
+    else:
+        forward_time = 30
+    return forward_time / 1e3
+
+def mistrial_7b_A6000_sglang_decode(batch: Batch):
+    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+    if num_attention_tokens >= 48 * 2048:
+        forward_time = num_attention_tokens * 4.5e-4 + 10
     else:
         forward_time = 40.0
     return forward_time / 1e3
 
-def _mistral_7b_A6000_sglang_tp(batch: Batch, k: float):
-    forward_time = mistral_7b_A6000_sglang(batch) / k
-    return forward_time
+def mistrial_7b_A6000_sglang_decode_flashinfer(batch: Batch):
+    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+    if num_attention_tokens >= 64 * 2048:
+        forward_time = num_attention_tokens * 4e-4
+    else:
+        forward_time = 10.4 * num_attention_tokens**0.117
+    return forward_time / 1e3
 
-def mistral_7b_A6000_sglang_tp(k: float):
-    return lambda batch: _mistral_7b_A6000_sglang_tp(batch, k)
+def pipeline_parallelism(pp: int, forward_equation):
+    def pp_forward_time(*args):
+        return forward_equation(*args) / pp
+    return pp_forward_time
+
 
 # For Simulator, ignore this if not using it
 def add_simulation_to_gpu_config(gpu_configs):
     for config in gpu_configs:
-        config.regist_simulator_config([mistral_7b_A6000_sglang_extend, mistrial_7b_A6000_sglang_decode], 131072 * 198516)
+        config.regist_simulator_config(
+            [mistral_7b_A6000_sglang_extend_flashinfer, mistrial_7b_A6000_sglang_decode_flashinfer], 
+            131072 * 198516)
 
 def create_workload_configs(configurations_to_test):
     workload_configs = []
@@ -116,7 +135,14 @@ def create_workload_configs(configurations_to_test):
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "logs/debug_hc.log"
+# log_file_path = "logs/more_info_hc_600.log"
+# log_file_path = "logs/sim-sleep-flashinfer.log"
+
+log_file_path = "logs/sim_hot_cold_rps18_1800.log"
+# log_file_path = "logs/debug.log"
+
+# log_file_path = "logs/sim_hc_debug"
+
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = 1800
@@ -125,34 +151,38 @@ exp_time = 1800
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False),
     GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
-    GPUConfig(
-        gpu_id=0,
-        url=None,
-        use_ssh=True,
-        ssh_config={
-           "hostname": "192.168.1.16",
-           "username": "wuklab",
-            "port": 456,
-            "python_process": "/mnt/data/ssd/sglang_env/bin/python",
-            "node_name": "06",
-        },
-    ),
-    GPUConfig(
-        gpu_id=1,
-        url=None,
-        use_ssh=True,
-        ssh_config={
-            "hostname": "192.168.1.16",
-            "username": "wuklab",
-            "port": 456,
-            "python_process": "/mnt/data/ssd/sglang_env/bin/python",
-            "node_name": "06",
-        },
-    ),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    # GPUConfig(
+    #     gpu_id=0,
+    #     url=None,
+    #     use_ssh=True,
+    #     ssh_config={
+    #        "hostname": "192.168.1.16",
+    #        "username": "wuklab",
+    #         "port": 456,
+    #         "python_process": "/mnt/data/ssd/sglang_env/bin/python",
+    #         "node_name": "06",
+    #     },
+    # ),
+    # GPUConfig(
+    #     gpu_id=1,
+    #     url=None,
+    #     use_ssh=True,
+    #     ssh_config={
+    #         "hostname": "192.168.1.16",
+    #         "username": "wuklab",
+    #         "port": 456,
+    #         "python_process": "/mnt/data/ssd/sglang_env/bin/python",
+    #         "node_name": "06",
+    #     },
+    # ),
 ]
 add_simulation_to_gpu_config(gpu_configs)
+
+# pp_extend = pipeline_parallelism(2, mistral_7b_A6000_sglang_extend)
+# pp_decode = pipeline_parallelism(2, mistrial_7b_A6000_sglang_decode)
+# gpu_configs[-1].regist_simulator_config([pp_extend, pp_decode], 74 << 30)
 
 # for config in gpu_configs[2:]:
 #     config.regist_simulator_config(mistral_7b_A6000_sglang_tp(2.0), 75 << 30)
@@ -164,6 +194,7 @@ server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
     'context_length': 2048,
+    'enable_flashinfer': True,
 }
 
 # Workload Configuration
@@ -175,6 +206,7 @@ configurations_to_test = [
     
     # [300, 0.2, 4096, 8],
     # [300, 0.2, 4096, 12],
+    # [100, 0.2, 4096, 18],
     [200, 0.5, 4096, 18],
 ]
 workload_configs = create_workload_configs(configurations_to_test)
@@ -182,10 +214,11 @@ workload_configs = create_workload_configs(configurations_to_test)
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    # (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
+    (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_2h_2c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1ctp_2.0"),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_1hpp_2c"),
 ]
 
 exp_args = MajorExperimentArgs(

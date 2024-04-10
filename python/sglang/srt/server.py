@@ -57,6 +57,7 @@ from sglang.srt.utils import handle_port_init
 import logging
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from sglang.srt.managers.router.model_runner import GPUConfig
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 logger = logging.getLogger('server')
@@ -470,7 +471,7 @@ async def v1_chat_completions(raw_request: Request):
     return response
 
 
-def launch_server(server_args: ServerArgs, pipe_finish_writer):
+def launch_server(server_args: ServerArgs, pipe_finish_writer, gpu_config):
     global tokenizer_manager
     global chat_template_name
     logging.basicConfig(
@@ -543,6 +544,7 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer):
             server_args,
             port_args,
             pipe_router_writer,
+            gpu_config,
         ),
     )
     proc_router.start()
@@ -666,12 +668,13 @@ class Runtime:
         cuda_devices: Optional[List[int]] = None,
         freeze: bool = False,
         log_prefix_hit: bool = False,
-        simulate: bool = False
+        gpu_config: Optional[GPUConfig] = None,
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
         # host = "127.0.0.1"
         host = "0.0.0.0"
         port, additional_ports = handle_port_init(port, additional_ports, tp_size)
+        self.gpu_config = gpu_config
         self.server_args = ServerArgs(
             model_path=model_path,
             tokenizer_path=tokenizer_path,
@@ -706,7 +709,7 @@ class Runtime:
 
         self.pid = None
         pipe_reader, pipe_writer = mp.Pipe(duplex=False)
-        proc = mp.Process(target=launch_server, args=(self.server_args, pipe_writer))
+        proc = mp.Process(target=launch_server, args=(self.server_args, pipe_writer, gpu_config))
         proc.start()
         pipe_writer.close()
         self.pid = proc.pid

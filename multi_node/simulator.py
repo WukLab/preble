@@ -373,6 +373,7 @@ class GenerateRequestEvent(SimulationEvent):
             )
             overhead = time.time() - start
             self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
+            # self.update_lock(0, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
             # logging.debug(f"{self.runtime_id}: tokenized req added at {runtime.tokenizer_clock}, overhead {overhead}")
             runtime.manager_recv_reqs.append(tokenized_obj)
         else:
@@ -398,11 +399,11 @@ class ModelStepEvent(SimulationEvent):
                     request_output = simulator.request_output[rid]
                     if not request_output.ttft:
                         request_output.ttft = runtime.manager_clock - request_output.send_out_time
+                    request_output.request_latency = runtime.manager_clock - request_output.send_out_time
+                    request_output.output_len = len(output_token_ids)
                     if finished:
                         request_output.success = True
-                        request_output.request_latency = runtime.manager_clock - request_output.send_out_time
                         request_output.global_time = runtime.manager_clock
-                        request_output.output_len = len(output_token_ids)
     
     def process_event(self, simulator: Simulation):
         start = time.time()
