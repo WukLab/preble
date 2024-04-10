@@ -368,7 +368,6 @@ class ToolBenchDataLoader(DataLoader):
             )
             prob = prob / prob.sum()
             hist = np.random.choice(x, size=self.total_num_requests, p=prob)
-            import matplotlib.pyplot as plt
 
             plt.hist(hist, bins=self.num_patterns)
             plt.savefig(f"normal_distribution_{k}.png")

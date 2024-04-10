@@ -8,6 +8,8 @@ import time
 from collections import defaultdict
 from uuid import uuid4  
 import copy
+import random
+import threading
 
 class LpNode:
     def __init__(self, node_id, num_gpus):
@@ -100,7 +102,6 @@ class RadixCache:
         for c_key, child in node.children.items():
             prefix_len = match(c_key, key)
             if prefix_len != 0:
-                text = tokenizer.decode(child.value)
                 if child.gpu_selections:
                     current_gpu_selection = child.gpu_selections
                 if prefix_len < len(c_key):
@@ -319,15 +320,17 @@ class LPGurobiGreedyTraversal:
 
     def traverse_and_optimize(self, 
                               leaf_node: TreeNode,
-                              previous_cost={}, 
                               modified_nodes: set[TreeNode]=None, 
-                              load_cost=[]
+                              split_nodes = {}
                               ):
         start_time = time.time()
         
         self.model = gp.Model("LPTreeTraversal")
         self.model.setParam('OutputFlag', 0)  # Equivalent to verbose = 1 in python-mip
         self.model.setParam('LogToConsole', 0)
+
+        for key, value in split_nodes.items():
+            self.node_map[value] = self.node_map[key]
 
         self.max_per_gpu_cost_constr = []
 
@@ -348,6 +351,7 @@ class LPGurobiGreedyTraversal:
         decode_length = 16  # Assume decoding occurs for 20 tokens
         decoding_time = lambda x: 6.7 * x
         total_decode_time =  decoding_time(decode_length) 
+        # min_ref_counter = min([node.ref_counter for node in modified_nodes])
 
         for prefix_node in modified_nodes:
             num_tokens_total = 0
@@ -363,9 +367,10 @@ class LPGurobiGreedyTraversal:
                 previous_gpu_selected = gpu_index in self.node_map[prefix_node]
                 recomp_cost = var * (num_tokens_time - previous_gpu_selected * num_tokens_time)
                 total_cost += recomp_cost
-                per_gpu_mem_load_cost[gpu_index] += var * num_tokens_time
                 new_total_memory_cost[gpu_index] += (num_tokens_time - previous_gpu_selected * num_tokens_time)
                 # updated load cost
+                # if min_ref_counter > self.num_gpus:
+                per_gpu_mem_load_cost[gpu_index] += var * num_tokens_time
 
         for gpu_index in range(self.num_gpus):
             # Increment load by decoding time each time
@@ -386,6 +391,7 @@ class LPGurobiGreedyTraversal:
         self.model.setParam('MIPGap', 0.02)
 
         self.model.optimize()
+        self.model.update()
         if self.model.Status == GRB.OPTIMAL:
             # print('Optimal solution found.')
             pass
@@ -393,7 +399,8 @@ class LPGurobiGreedyTraversal:
             print('Infeasable solution found')
 
         else:
-            print('Feasible solution found.')
+            pass
+            # print('Feasible solution found.')
 
         # todo find placement
         selected_gpus = [gpu_id for gpu_id, var in enumerate(lp_node.variables) if var.X >= 0.99]
@@ -423,7 +430,7 @@ class LPGurobiGreedyTraversal:
         # print(f"Total number of variables: {num_vars}")
         # print(f"Total number of constraints: {num_constraints}")
 
-        print(f"Solving time: {(time.time() - start_time) * 1000}ms")
+        # print(f"Solving time: {(time.time() - start_time) * 1000}ms")
         return time.time() - start_time
 
     def pretty_print(self, prefix_node, depth_limit=4):
@@ -472,22 +479,21 @@ class GurobiGreedyLPScheduler:
         self.load = {
 
         }
+        self.lock = threading.Lock()
         self.modified_nodes = set()
 
     def runtime_selector(self, text: str=None, request_id: str=None, input_ids=None, ):
         # Tokenize the text
         start_time = time.time()
-
-        node_map = self.lp_tree_traversal.node_map
-        split_nodes = {}
-        self.tree_cache.insert(tuple(input_ids), node_map=node_map, all_modified_nodes=self.modified_nodes, depth_limit=self.lp_tree_traversal.depth_limit, split_nodes=split_nodes)
-        existing_cost = self.lp_tree_traversal.get_exisiting_cost(split_nodes)
-        self.lp_tree_traversal.traverse_and_optimize(self.tree_cache.root_node, existing_cost=existing_cost, modified_nodes=self.modified_nodes)
-        self.lp_tree_traversal.update_nodes_with_solution()
-        self.modified_nodes = set()
+        with self.lock:
+            node_map = self.lp_tree_traversal.node_map
+            split_nodes = {}
+            node = self.tree_cache.insert(tuple(input_ids), node_map=node_map, all_modified_nodes=self.modified_nodes, depth_limit=self.lp_tree_traversal.depth_limit, split_nodes=split_nodes)
+            self.lp_tree_traversal.traverse_and_optimize(node, modified_nodes=self.modified_nodes, split_nodes=split_nodes)
+            gpu_selections = node.gpu_selections
+            self.modified_nodes = set()
 
         self.counter += 1
-        gpu_selections, node = self.tree_cache.match_prefix_get_gpu_selection(input_ids)
         # Randomly select a node from gpu selections
         mode = "not_random"
         if len(gpu_selections) == 0 or len(gpu_selections) == self.num_nodes:
@@ -505,6 +511,10 @@ class GurobiGreedyLPScheduler:
         })
         return runtime_selected
 
+    # def finish_request(self, text: str=None, request_id: str=None, input_ids=None, func_output=None):
+    #     with self.lock:
+    #         pass
+            # self.lp_tree_traversal.completed_request(self.tree_cache, input_ids)
 
 if __name__ == "__main__":
     import random
@@ -558,35 +568,40 @@ if __name__ == "__main__":
     #     runtime_selected = scheduler.runtime_selector(text=texts[i], request_id=i, input_ids=input_ids[i])
     #     print(texts[i],runtime_selected)
 
-    # import sys
-    # import os
-    # import pandas as pd
-    # import copy
-    # import random
+    import sys
+    import os
+    import pandas as pd
+    import copy
+    import random
 
-    # # Add the parent directory of the 'src' directory to the Python path
-    # sys.path.append(os.path.abspath(os.path.join(os.path.dirname("."), "..")))
-    # from transformers import AutoTokenizer
-    # from benchmarks.benchmark_workload_gen import ToolBenchDataLoader, LoadDistribution
-    # cache = RadixCache()
+    # Add the parent directory of the 'src' directory to the Python path
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname("."), "..")))
+    from transformers import AutoTokenizer
+    from benchmarks.benchmark_workload_gen import ToolBenchDataLoader, LoadDistribution
+    cache = RadixCache()
 
-    # num_workloads = 100
-    # num_requests = 4096
-    # tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-    # dataloader = ToolBenchDataLoader('benchmarks/datasets/G1_workload_updated_input_output_lengths_4096_cropped_to_50.json', num_workloads, num_requests, tokenizer, LoadDistribution.EVEN)
-    # workload = dataloader.generate_workload(k=1.1)
+    num_workloads = 100
+    num_requests = 4096
+    tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+    dataloader = ToolBenchDataLoader('benchmarks/datasets/G1_workload_updated_input_output_lengths_4096_cropped_to_50.json', num_workloads, num_requests, tokenizer, LoadDistribution.EVEN)
+    workload = dataloader.generate_workload(k=1.1)
     # lp_tree_traversal = LPGurobiGreedyTraversal(2)
     # modified_nodes = set()
     # lp_tree_traversal.depth_limit = 64
-    # for i, item in enumerate(workload[:200]):
+    # for i, item in enumerate(workload[:2000]):
     #     node_map = lp_tree_traversal.node_map
     #     split_nodes = {}
     #     node = cache.insert(tuple(item["input_ids"]), node_map=node_map, all_modified_nodes=modified_nodes, depth_limit=lp_tree_traversal.depth_limit, split_nodes=split_nodes)
-    #     runtime = lp_tree_traversal.traverse_and_optimize(node, previous_cost={}, modified_nodes=modified_nodes)
+    #     runtime = lp_tree_traversal.traverse_and_optimize(node, modified_nodes=modified_nodes, split_nodes=split_nodes)
     #     modified_nodes = set()
     #     completed_request = workload
-    #     if i > 20:
-    #         completed_request = workload[i - 20]
+    #     if i > 100:
+    #         completed_request = workload[i - 100]
     #         lp_tree_traversal.completed_request(cache, completed_request["input_ids"]) 
 
     # lp_tree_traversal.pretty_print(cache.root_node, depth_limit=3)
+    scheduler = GurobiGreedyLPScheduler(2)
+    for i, item in enumerate(workload[:50]):
+        runtime_selected = scheduler.runtime_selector(text=item["text"], request_id=i, input_ids=item["input_ids"])
+        # print(item["text"], runtime_selected)
+    print(pd.DataFrame(scheduler.metrics_dict))

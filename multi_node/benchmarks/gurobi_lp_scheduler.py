@@ -1,9 +1,41 @@
 # %%
+import sys
+import os
+import pandas as pd
 import copy
 import random
 
 # Add the parent directory of the 'src' directory to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname("."), "..")))
+from transformers import AutoTokenizer
+from benchmark_workload_gen import ToolBenchDataLoader, LoadDistribution
+import asyncio
+import threading
 
+num_workloads = 100
+num_requests = 4096
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+dataloader = ToolBenchDataLoader('datasets/G1_workload_updated_input_output_lengths_4096_cropped_to_50.json', num_workloads, num_requests, tokenizer, LoadDistribution.EVEN)
+workload = dataloader.generate_workload(k=1.1)
+import re
+def get_tool(workload_item):
+    text = workload_item["text"]
+    match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
+    if match:
+        tool = match.group(1)
+        return tool
+get_tool(workload[0]), get_tool(workload[1])
+lorem_ipsum = """
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Sit amet purus gravida quis blandit turpis cursus. Sagittis nisl rhoncus mattis rhoncus urna neque viverra justo. Sapien et ligula ullamcorper malesuada proin libero nunc consequat. Sed velit dignissim sodales ut eu sem integer. Nulla aliquet enim tortor at auctor urna nunc id. Nulla aliquet enim tortor at auctor urna nunc id cursus. Tortor at risus viverra adipiscing at in tellus. Consequat nisl vel pretium lectus quam id. Rutrum quisque non tellus orci ac auctor. Natoque penatibus et magnis dis parturient.
+
+Nunc sed velit dignissim sodales ut eu sem integer. Sit amet consectetur adipiscing elit pellentesque. Lectus nulla at volutpat diam ut venenatis tellus in. Rhoncus mattis rhoncus urna neque viverra. A lacus vestibulum sed arcu non odio euismod lacinia at. Sem fringilla ut morbi tincidunt augue interdum velit. Massa ultricies mi quis hendrerit dolor magna eget. Mus mauris vitae ultricies leo. Aliquam purus sit amet luctus venenatis lectus magna. Ac feugiat sed lectus vestibulum mattis ullamcorper velit.
+
+Fringilla ut morbi tincidunt augue interdum. Tincidunt nunc pulvinar sapien et ligula ullamcorper. Consequat mauris nunc congue nisi vitae suscipit tellus mauris. Erat nam at lectus urna duis convallis convallis. Mauris nunc congue nisi vitae suscipit tellus mauris. Blandit massa enim nec dui nunc mattis enim. Velit dignissim sodales ut eu sem integer vitae. Semper viverra nam libero justo laoreet sit amet cursus sit. Urna condimentum mattis pellentesque id nibh tortor id aliquet. Dui nunc mattis enim ut tellus elementum sagittis. Facilisi nullam vehicula ipsum a arcu cursus vitae congue mauris. Aenean vel elit scelerisque mauris. Amet nulla facilisi morbi tempus iaculis. Nec feugiat nisl pretium fusce id velit ut tortor. Amet justo donec enim diam vulputate ut pharetra. Turpis cursus in hac habitasse platea. At auctor urna nunc id cursus metus.
+
+Auctor elit sed vulputate mi sit amet mauris. Rhoncus mattis rhoncus urna neque viverra justo. Cursus euismod quis viverra nibh cras pulvinar mattis nunc sed. Aliquam faucibus purus in massa tempor. Felis eget nunc lobortis mattis aliquam faucibus. Ullamcorper malesuada proin libero nunc consequat interdum varius. Vulputate eu scelerisque felis imperdiet proin fermentum leo vel. Mi ipsum faucibus vitae aliquet nec ullamcorper sit amet risus. Habitasse platea dictumst quisque sagittis purus sit amet. Felis eget velit aliquet sagittis id consectetur purus. Odio eu feugiat pretium nibh ipsum consequat. Laoreet non curabitur gravida arcu ac tortor dignissim. Mi in nulla posuere sollicitudin aliquam ultrices sagittis orci a. Molestie a iaculis at erat. Enim diam vulputate ut pharetra. Eu non diam phasellus vestibulum lorem sed.
+
+Scelerisque fermentum dui faucibus in ornare. Ut tellus elementum sagittis vitae et leo. Felis eget nunc lobortis mattis aliquam faucibus purus in massa. Amet tellus cras adipiscing enim eu turpis egestas. Dignissim enim sit amet venenatis urna cursus eget nunc scelerisque. Nisi lacus sed viverra tellus in hac. Nulla malesuada pellentesque elit eget. Purus in massa tempor nec feugiat nisl pretium fusce. Lectus nulla at volutpat diam ut venenatis tellus in. Neque ornare aenean euismod elementum nisi quis eleifend. Enim praesent elementum facilisis leo vel.
+"""
 
 # %%
 import heapq
@@ -448,7 +480,7 @@ class LPGurobiTreeTraversal:
     #             self.all_node_constraints[current_node.id].append(constr)
     #     return gpu_assignment_variables
 
-    def traverse_and_optimize(self, prefix_tree_root, previous_cost={}, modified_nodes=None, objective_only=False):
+    def traverse_and_optimize(self, prefix_tree_root, previous_cost={}, modified_nodes: set[TreeNode]=None, objective_only=False):
         start_time = time.time()
         
         for node in modified_nodes:
@@ -475,6 +507,7 @@ class LPGurobiTreeTraversal:
         total_cost = gp.LinExpr()
         per_gpu_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         per_gpu_mem_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
+        min_ref_counter = min([node.ref_counter for node in modified_nodes])
 
         initial_solution = []
         for prefix_node, lp_node in self.node_map.items():
@@ -494,7 +527,7 @@ class LPGurobiTreeTraversal:
                     load_cost = lp_node.load_variables[gpu_index] * decoding_time(decode_length) 
                     per_gpu_load_cost[gpu_index] += load_cost
                 # per_gpu_load_cost[gpu_index] += var * decoding_time(decode_length)
-                if prefix_node.ref_counter > 1: #Avoid double counting
+                if min_ref_counter > self.num_gpus: #Avoid double counting
                     per_gpu_mem_load_cost[gpu_index] += var * num_tokens_time
 
         for gpu_id, item in enumerate(per_gpu_load_cost):
@@ -520,9 +553,9 @@ class LPGurobiTreeTraversal:
             pass
         elif self.model.Status == GRB.INFEASIBLE:
             print('Infeasable solution found')
-
         else:
-            print('Feasible solution found.')
+            pass
+            # print('Feasible solution found.')
 
         # tokens_per_gpu, load_to_gpu = self.calculate_tokens_per_gpu()
         # print(f"Tokens per GPU: {tokens_per_gpu}, Load to GPU: {load_to_gpu}")
@@ -538,7 +571,7 @@ class LPGurobiTreeTraversal:
         # print(f"Total number of variables: {num_vars}")
         # print(f"Total number of constraints: {num_constraints}")
 
-        print(f"Solving time: {solving_time}s, Setup Time: {setup_time}s Total constraint_removal_time {constraint_removal_time}s, {constraint_removal_time2} modified nodes len {len(modified_nodes)}, {num_vars}, {num_constraints}")
+        # print(f"Solving time: {solving_time}s, Setup Time: {setup_time}s Total constraint_removal_time {constraint_removal_time}s, {constraint_removal_time2} modified nodes len {len(modified_nodes)}, {num_vars}, {num_constraints}")
         return time.time() - start_time
 
     def get_previous_cost(self, split_nodes={}):
@@ -587,7 +620,11 @@ class LPGurobiTreeTraversal:
         # pretty print node map
         for prefix_node, lp_node in self.node_map.items():
             for i, var in enumerate(lp_node.variables):
-                solved_var = var.X if var.X >= 0.99 else 0
+                try:
+                    solved_var = var.X if var.X >= 0.99 else 0
+                except Exception as e:
+                    print(prefix_node, var, lp_node)
+                    raise e
                 if solved_var:  # If GPU i is selected by this node, using .x for variable value in MIP
                     tokens_per_gpu[i] += prefix_node.num_tokens  # Accumulate tokens
                     load_to_gpu[i] += prefix_node.ref_counter
@@ -609,6 +646,8 @@ class LPGurobiTreeTraversal:
             else:
                 selected_gpus = [i for i, var in enumerate(lp_node.variables) if var and var.X >= 0.99]  # Adjust threshold as needed, using .x for variable value
             load_vars = [var.X if var else None for var in lp_node.load_variables]
+            if not any(load_vars):
+                load_vars = []
             common_load = lp_node.common_load.X if lp_node.common_load else 0
             def get_tool(workload_item):
                 text = tokenizer.decode(workload_item)
@@ -632,29 +671,33 @@ class LPGurobiTreeTraversal:
                     prefix_node.gpu_selections.add(gpu_id)
 
 class GurobiLPScheduler:
-    def __init__(self, num_nodes: int, depth_limit=4):
+    def __init__(self, num_nodes: int, depth_limit=4, update_interval=5):
         self.num_nodes = num_nodes
         self.tree_cache = RadixCache()
+        self.shadow_cache = RadixCache()
         self.lp_tree_traversal = LPGurobiTreeTraversal(num_nodes)
         self.lp_tree_traversal.depth_limit = depth_limit
         self.metrics_dict = []
         self.counter = 0
+        self.update_interval=update_interval
         self.load = {
 
         }
+        self.lock = threading.Lock()
         self.modified_nodes = set()
 
     def runtime_selector(self, text: str=None, request_id: str=None, input_ids=None, ):
         # Tokenize the text
         start_time = time.time()
-
-        node_map = self.lp_tree_traversal.node_map
-        split_nodes = {}
-        self.tree_cache.insert(tuple(input_ids), node_map=node_map, all_modified_nodes=self.modified_nodes, depth_limit=self.lp_tree_traversal.depth_limit, split_nodes=split_nodes)
-        existing_cost = self.lp_tree_traversal.get_exisiting_cost(split_nodes)
-        self.lp_tree_traversal.traverse_and_optimize(self.tree_cache.root_node, existing_cost=existing_cost, modified_nodes=self.modified_nodes)
-        self.lp_tree_traversal.update_nodes_with_solution()
-        self.modified_nodes = set()
+        with self.lock:
+            node_map = self.lp_tree_traversal.node_map
+            split_nodes = {}
+            self.tree_cache.insert(tuple(input_ids), node_map=node_map, all_modified_nodes=self.modified_nodes, depth_limit=self.lp_tree_traversal.depth_limit, split_nodes=split_nodes)
+            existing_cost = self.lp_tree_traversal.get_previous_cost(split_nodes=split_nodes)
+            if len(self.modified_nodes) != 0:
+                self.lp_tree_traversal.traverse_and_optimize(self.tree_cache.root_node, previous_cost=existing_cost, modified_nodes=self.modified_nodes)
+                self.lp_tree_traversal.update_nodes_with_solution()
+            self.modified_nodes = set()
 
         self.counter += 1
         gpu_selections, node = self.tree_cache.match_prefix_get_gpu_selection(input_ids)
@@ -675,3 +718,45 @@ class GurobiLPScheduler:
             "mode": mode
         })
         return runtime_selected
+
+
+
+# %%
+
+if __name__ == "__main__":
+    # %%
+    import random
+    scheduler = GurobiLPScheduler(2, depth_limit=4)
+    runtime_selected = []
+
+    # for i in range(5):
+    #     texts += ["Workload  1 ABCD " + lorem_ipsum]
+
+    # texts = ["1 sentence. A B C D", "3 sentence. A B C D", "4 sentencee. A B C D", "2 sentence. A B C D", "1 sentence. A B C D example 1", "1 sentence example 2", "2 sentence. A B C D E"]
+    for i, item in enumerate(workload[:200]):
+        print(f"Request {i}")
+        runtime = scheduler.runtime_selector(text=item["text"], request_id=0, input_ids=item["input_ids"])
+        # node_map = lp_tree_traversal.node_map
+        # split_nodes = {}
+        # cache.insert(tuple(item["input_ids"]), node_map=node_map, all_modified_nodes=modified_nodes, depth_limit=lp_tree_traversal.depth_limit, split_nodes=split_nodes)
+        # existing_cost = lp_tree_traversal.get_previous_cost(split_nodes=split_nodes)
+        # runtime = lp_tree_traversal.traverse_and_optimize(cache.root_node, previous_cost=existing_cost, modified_nodes=modified_nodes)
+        # tokens_per_gpu, load_to_gpu = lp_tree_traversal.calculate_tokens_per_gpu()
+        # # print(f"Tokens per GPU: {tokens_per_gpu} {load_to_gpu}")
+        # lp_tree_traversal.update_nodes_with_solution()
+        # modified_nodes = set()
+        # break
+    scheduler.lp_tree_traversal.pretty_print(scheduler.tree_cache.root_node)
+
+    # scheduler = LPScheduler(2)
+    # for i in range(4):
+    #     print(f"Request {i}")
+    #     cache.insert(tuple(input_ids[i]))
+    #     runtime_selected = scheduler.runtime_selector(text=texts[i], request_id=i, input_ids=input_ids[i])
+    #     print(texts[i],runtime_selected)
+
+
+    # %%
+
+
+

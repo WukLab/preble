@@ -439,7 +439,8 @@ class LPTreeTraversal:
             pass
             # print('Optimal solution found.')
         elif status == OptimizationStatus.FEASIBLE:
-            print('Feasible solution found, but not necessarily optimal.')
+            pass
+            # print('Feasible solution found, but not necessarily optimal.')
         else:
             print('No feasible solution found.')
         # print(f"Solving time: {time.time() - solving_time}s Setup Time {setup_time}s Tota")

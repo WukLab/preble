@@ -104,6 +104,20 @@ def regist_selector(policy, custom_policy, model_details: ModelDetails, workload
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=lp_scheduler,
             )
+        elif custom_policy == CustomPolicyType.GREEDY_LP_GUROBI_SCHEDULER:
+            from lp_greedy import GurobiGreedyLPScheduler
+            lp_scheduler = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=lp_scheduler,
+            )
+        elif custom_policy == CustomPolicyType.LP_GUROBI_SCHEDULER:
+            from gurobi_lp_scheduler import GurobiLPScheduler
+            lp_scheduler = GurobiLPScheduler(num_nodes=len(model_details.runtimes), depth_limit=3, update_interval=1)
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=lp_scheduler,
+            )
     else:
         model_details.update_runtime_selection_policy(policy)
 

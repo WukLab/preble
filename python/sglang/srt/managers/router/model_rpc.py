@@ -321,10 +321,10 @@ class ModelRpcServer:
             for start, end in forward_time:
                 end.synchronize()
                 total_forward_time += start.elapsed_time(end)
-            logger.info(
-                f'GPU: {self.current_gpu} '
-                f"forward time: {total_forward_time:.2f} ms"
-            )
+            # logger.info(
+            #     f'GPU: {self.current_gpu} '
+            #     f"forward time: {total_forward_time:.2f} ms"
+            # )
         return forward_time
     
     def handle_generate_request(
@@ -507,14 +507,14 @@ class ModelRpcServer:
         forward_time = 0
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        if self.tp_rank == 0:
-            logging.debug(
-                f"GPU: {self.current_gpu} "
-                f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
-                f"num reqs: {len(batch.reqs)}, "
-                f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}"
-            )
+        # if self.tp_rank == 0:
+        #     logging.debug(
+        #         f"GPU: {self.current_gpu} "
+        #         f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
+        #         f"num reqs: {len(batch.reqs)}, "
+        #         f"input ids: {num_batched_tokens}, "
+        #         f"attention tokens: {num_attention_tokens}"
+        #     )
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
                 # Forward
@@ -623,12 +623,12 @@ class ModelRpcServer:
 
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        if self.tp_rank == 0:
-            logging.debug(
-                f"GPU: {self.current_gpu} "
-                f"batch.num_reqs: {len(batch.reqs)}, "
-                f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}")
+        # if self.tp_rank == 0:
+            # logging.debug(
+            #     f"GPU: {self.current_gpu} "
+            #     f"batch.num_reqs: {len(batch.reqs)}, "
+            #     f"input ids: {num_batched_tokens}, "
+            #     f"attention tokens: {num_attention_tokens}")
         forward_time = 0
         # Forward
         if forward_simulation is None:

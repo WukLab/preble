@@ -84,22 +84,24 @@ def test_oracle_random_basic(
     # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
     start_time = time.time()
     context_length = 2048
-    # dataloader = ToolBenchDataLoader(
-    #     "G1_workload_updated_input_output_lengths_4096.json",
-    #     num_workloads,
-    #     num_requests,
-    #     tokenizer,
-    #     load_dist=load_distribution,
-    # )
-    dataloader = RandomDataLoader(
+    dataloader = ToolBenchDataLoader(
+        "datasets/G1_workload_updated_input_output_lengths_4096.json",
         num_workloads,
         num_requests,
         tokenizer,
-        num_in_context_examples=4,
-        output_len=64,
-        random_workload_path="datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
+        load_dist=LoadDistribution.ZIPF,
     )
     requests = dataloader.generate_workload(k=k)
+    # dataloader = RandomDataLoader(
+    #     num_workloads,
+    #     num_requests,
+    #     tokenizer,
+    #     num_in_context_examples=4,
+    #     output_len=64,
+    #     random_workload_path="datasets/ShareGPT_V3_unfiltered_cleaned_split.json",
+    #     load_dist=LoadDistribution.ZIPF
+    # )
+    # requests = dataloader.generate_workload(k=k)
     # dataloader_short = LooGLEDataset(
     #     loogle_dataset_type=LooGLEDatasetType.SHORT_QA,
     #     num_patterns=num_workloads,
@@ -177,7 +179,20 @@ def test_oracle_random_basic(
                     DataParallelRuntimeSelectionPolicy.CUSTOM,
                     custom_runtime_selector=lp_scheduler,
                 )
-                
+            elif custom_policy == CustomPolicyType.GREEDY_LP_GUROBI_SCHEDULER:
+                from lp_greedy import GurobiGreedyLPScheduler
+                lp_scheduler = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes))
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=lp_scheduler,
+                )
+            elif custom_policy == CustomPolicyType.LP_GUROBI_SCHEDULER:
+                from gurobi_lp_scheduler import GurobiLPScheduler
+                lp_scheduler = GurobiLPScheduler(num_nodes=len(model_details.runtimes), depth_limit=3, update_interval=1)
+                model_details.update_runtime_selection_policy(
+                    DataParallelRuntimeSelectionPolicy.CUSTOM,
+                    custom_runtime_selector=lp_scheduler,
+                )
         else:
             model_details.update_runtime_selection_policy(policy)
 
@@ -203,11 +218,15 @@ def test_oracle_random_basic(
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(
-        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
-    )
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    # load_and_run_benchmark(
+    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
+    # )
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_GUROBI_SCHEDULER)
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_GUROBI_SCHEDULER)
+
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
     # )
@@ -223,8 +242,8 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="lp_scheduler_debug.log")
-    logging.basicConfig(level=logging.DEBUG, filename="merge_resolve.log")
+    logging.basicConfig(level=logging.DEBUG, filename="logs/zipf_distribution_greedy_v2.log")
+    # logging.basicConfig(level=logging.DEBUG, filename="merge_resolve.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
@@ -241,7 +260,7 @@ if __name__ == "__main__":
         # [4, 0.2, 200, 0.5],
         # [8, 0.2, 200, .5],
         # [200, 0.2, 450, 2.5],
-        [200, 0.2, 4096, 16],
+        [200, 0.2, 2048, 4],
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
@@ -273,18 +292,18 @@ if __name__ == "__main__":
         #     },
         # ),
     ]
-    for config in gpu_configs:
-        config.regist_simulator_config(None, 25 << 30) # Llama 2-7b, 0.8 A6000
+    # for config in gpu_configs:
+    #     config.regist_simulator_config(None, 25 << 30) # Llama 2-7b, 0.8 A6000
 
     for config in configurations_to_test:
         test_oracle_random_basic(
             *config,
             # exp_time=float('inf'),
-            exp_time=180,
+            exp_time=100,
             model_name=model_name,
             gpu_configs=gpu_configs,
             load_distribution=LoadDistribution.EVEN,
             k=1.1,
-            simulate=True,
+            simulate=False,
         )
     logging.debug(f"Total Experiment Time: {time.time() - start_time}")
