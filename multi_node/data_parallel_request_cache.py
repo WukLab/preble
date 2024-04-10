@@ -26,6 +26,7 @@ class DataParallelRuntimeSelectionPolicy(Enum):
 
 class CustomPolicyType(Enum):
     ORACLE = auto()
+    ORACLE_HOT_COLD = auto()
 
     TBORACLE = auto()
     TBORACLE_B = auto()

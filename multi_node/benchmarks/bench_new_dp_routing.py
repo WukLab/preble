@@ -34,12 +34,6 @@ from typing import List, Dict
 import paramiko
 import importlib.util
 
-custom_download_dir = "/mnt/ssd1/cache/"
-
-# Set the HF_HOME environment variable
-os.environ["HF_HOME"] = custom_download_dir
-os.environ["TRANSFORMERS_CACHE"] = custom_download_dir
-
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -53,6 +47,15 @@ def regist_selector(policy, custom_policy, model_details: ModelDetails, workload
     if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
         if custom_policy == CustomPolicyType.ORACLE:
             oracle = Oracle(
+                num_nodes=len(model_details.runtimes), 
+                num_workloads=workload_config.num_prefix_patterns,
+            )
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=oracle,
+            )
+        if custom_policy == CustomPolicyType.ORACLE_HOT_COLD:
+            oracle = OracleHotCold(
                 num_nodes=len(model_details.runtimes), 
                 num_workloads=workload_config.num_prefix_patterns,
             )
@@ -106,8 +109,8 @@ def regist_selector(policy, custom_policy, model_details: ModelDetails, workload
 
 def load_and_run_benchmark(
     model_details: ModelDetails, 
-    workload_config: WorkloadConfig, 
-    policy, custom_policy=None,
+    workload_config: WorkloadConfig,
+    policy, custom_policy=None, custom_msg="",
 ):
     num_workloads = workload_config.num_prefix_patterns
     distribution_of_non_shared = workload_config.random_ratio
@@ -117,8 +120,8 @@ def load_and_run_benchmark(
     requests = workload_config.requests
     tokenizer = workload_config.dataloader.tokenizer
         
-    logging.debug(
-        f"=====STARTING Policy {policy}-{custom_policy}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
+    logging.info(
+        f"=====STARTING Policy {policy}-{custom_policy}:{custom_msg}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
     regist_selector(policy, custom_policy, model_details, workload_config)
     
@@ -136,15 +139,15 @@ def load_and_run_benchmark(
         time_limit=exp_time,
         gpu_counts=counts,
     )
-    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}, {exp_time}"
+    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     bench_metrics.to_log_file(exp_params)
 
 
 def test_oracle_random_basic(exp_args: MajorExperimentArgs):
     loader = MultiNodeLoader(exp_args.simulate)
     for workload_config in exp_args.workload_configs:
-        logging.debug(workload_config)
-        logging.debug(f"Using load distribution of {workload_config.dataloader.load_dist}")
+        logging.info(workload_config)
+        logging.info(f"Using load distribution of {workload_config.dataloader.load_dist}")
         # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
         for selector_config in exp_args.selector_configs:
             model_details = loader.load_model(**exp_args.runtime_args) # TODO: clear cache instead of reload
@@ -152,20 +155,20 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
             gc.collect()
-            time.sleep(5)
+            time.sleep(10)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename=exp_args.log_file_path)
+    logging.basicConfig(level=logging.INFO, filename=exp_args.log_file_path)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file
     start_date = datetime.datetime.utcnow()
     start_time = time.time()
-    logging.debug(f"Starting Experiment at {start_date}")
+    logging.info(f"Starting Experiment at {start_date}")
     # model_name = "mistralai/Mistral-7B-v0.1"
     # model_name = "lmsys/vicuna-13b-v1.5"
     model_name = exp_args.runtime_args['model_path']
-    logging.debug(f"Model Name: {model_name}")
+    logging.info(f"Model Name: {model_name}")
 
     test_oracle_random_basic(exp_args)
-    logging.debug(f"Total Experiment Time: {time.time() - start_time}")
+    logging.info(f"Total Experiment Time: {time.time() - start_time}")

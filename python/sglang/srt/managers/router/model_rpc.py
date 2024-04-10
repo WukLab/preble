@@ -51,7 +51,7 @@ class ModelRpcServer:
         gpu_config: GPUConfig = None,
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
-
+        self.gpu_config = gpu_config
         # Copy arguments
         self.tp_rank = tp_rank
         self.tp_size = server_args.tp_size
@@ -164,6 +164,10 @@ class ModelRpcServer:
         self.log_prefix_hit = server_args.log_prefix_hit
         self.prefix_hit_trace = []
         self.last_batch_schedule_time = time.time()
+        if not self.gpu_config:
+            self.current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
+        else:
+            self.current_gpu = self.gpu_config.gpu_id
 
     def flush_cache(self):
         if len(self.forward_queue) == 0 and (
@@ -264,10 +268,10 @@ class ModelRpcServer:
     @torch.inference_mode()
     def forward_step(self, forward_simulation=None):
         new_batch = self.get_new_fill_batch()
-        forward_time = 0
+        forward_time = []
         if new_batch is not None:
             # Run new fill batch
-            forward_time += self.forward_fill_batch(new_batch, forward_simulation)
+            forward_time.append(self.forward_fill_batch(new_batch, forward_simulation))
 
             if not new_batch.is_empty():
                 if self.running_batch is None:
@@ -279,7 +283,7 @@ class ModelRpcServer:
             if self.running_batch is not None:
                 # Run a few decode batches continuously for reducing overhead
                 for _ in range(10):
-                    forward_time += self.forward_decode_batch(self.running_batch, forward_simulation)
+                    forward_time.append(self.forward_decode_batch(self.running_batch, forward_simulation))
 
                     if self.running_batch.is_empty():
                         self.running_batch = None
@@ -312,6 +316,15 @@ class ModelRpcServer:
                         f"available_size={available_size}, max_total_num_token={self.max_total_num_token}\n"
                         "KV cache pool leak detected!"
                     )
+        if forward_simulation is None and forward_time:
+            total_forward_time = 0
+            for start, end in forward_time:
+                end.synchronize()
+                total_forward_time += start.elapsed_time(end)
+            logger.info(
+                f'GPU: {self.current_gpu} '
+                f"forward time: {total_forward_time:.2f} ms"
+            )
         return forward_time
     
     def handle_generate_request(
@@ -391,7 +404,7 @@ class ModelRpcServer:
                     for r in self.running_batch.reqs
                 ]
             )
-
+        # logger.debug(f'free ratio: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}')
         for req in self.forward_queue:
             if req.return_logprob:
                 # Need at least two tokens to compute normalized logprob
@@ -448,9 +461,8 @@ class ModelRpcServer:
             tree_cache_hit_rate = (
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
-            current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
             logger.info(
-                f"GPU: {current_gpu} "
+                f"GPU: {self.current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
                 f"#new_token: {new_batch_input_tokens}. "
@@ -493,14 +505,28 @@ class ModelRpcServer:
 
         logprobs = None
         forward_time = 0
+        num_batched_tokens = batch.input_ids.shape[0]
+        num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        if self.tp_rank == 0:
+            logging.debug(
+                f"GPU: {self.current_gpu} "
+                f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
+                f"num reqs: {len(batch.reqs)}, "
+                f"input ids: {num_batched_tokens}, "
+                f"attention tokens: {num_attention_tokens}"
+            )
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
                 # Forward
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
                 logits, (
                     prefill_logprobs,
                     normalized_logprobs,
                     last_logprobs,
                 ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
+                end_event.record()
                 if prefill_logprobs is not None:
                     logprobs = prefill_logprobs.cpu().tolist()
                     normalized_logprobs = normalized_logprobs.cpu().tolist()
@@ -510,7 +536,7 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                forward_time = forward_simulation(batch)
+                forward_time = forward_simulation[0](batch)
                 _ = batch.sample(logits)
                 logprobs = normalized_logprobs = last_logprobs = None
             next_token_ids = next_token_ids.cpu().tolist()
@@ -547,6 +573,8 @@ class ModelRpcServer:
                 pt += req.extend_input_len
 
         self.handle_finished_requests(batch)
+        if forward_simulation is None:
+            return start_event, end_event
         return forward_time
 
     def forward_decode_batch(self, batch: Batch, forward_simulation=None):
@@ -593,18 +621,30 @@ class ModelRpcServer:
         self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
         batch.prepare_for_decode()
 
+        num_batched_tokens = batch.input_ids.shape[0]
+        num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        if self.tp_rank == 0:
+            logging.debug(
+                f"GPU: {self.current_gpu} "
+                f"batch.num_reqs: {len(batch.reqs)}, "
+                f"input ids: {num_batched_tokens}, "
+                f"attention tokens: {num_attention_tokens}")
         forward_time = 0
         # Forward
-        if forward_simulation is None :
+        if forward_simulation is None:
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()        
             logits, (_, _, last_logprobs) = self.model_runner.forward(
                 batch, ForwardMode.DECODE
             )
+            end_event.record()
             next_token_ids, _ = batch.sample(logits)
         else:
             vocab_size = self.model_config.vocab_size
             logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
             next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation(batch)
+            forward_time = forward_simulation[1](batch)
             _ = batch.sample(logits)
             last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()
@@ -626,6 +666,8 @@ class ModelRpcServer:
                 req.token_logprob.append((next_tok_id, last_logprobs[i]))
 
         self.handle_finished_requests(batch)
+        if forward_simulation is None:
+            return start_event, end_event
         return forward_time
 
     def handle_finished_requests(self, batch: Batch):

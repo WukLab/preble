@@ -5,6 +5,7 @@ import logging
 import pkgutil
 from dataclasses import dataclass
 from functools import lru_cache
+import inspect
 
 import numpy as np
 import torch
@@ -263,10 +264,19 @@ class GPUConfig:
         self.url = url
         self.use_ssh = use_ssh
         self.ssh_config = ssh_config
+        self.forward_simulation = None
+        self.kv_cache_memory = None
     
     def regist_simulator_config(self, forward_simulation, kv_cache_memory):
         self.forward_simulation = forward_simulation
         self.kv_cache_memory = kv_cache_memory
+    
+    def __repr__(self) -> str:
+        return (
+            f"GPUConfig: id={self.gpu_id}\n"
+            f"forward equation:\n {inspect.getsource(self.forward_simulation)}\n"
+            f"kv_cache_memory: {self.kv_cache_memory}\n"
+        )
         
 
 class ModelRunner:

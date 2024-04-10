@@ -23,6 +23,7 @@ from benchmarks.benchmark_utils import RequestFuncOutput
 from sglang.srt.managers.router.infer_batch import Batch
 import torch
 import logging
+from tqdm.asyncio import tqdm_asyncio
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)
@@ -106,20 +107,6 @@ class ModelDetails:
                     gpu_config=config,
                     **kwargs,
                 )
-                def forward_simulation(batch: Batch):
-                    num_batched_tokens = batch.input_ids.shape[0]
-                    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-                    
-                    if num_batched_tokens >= 384:
-                        forward_time = 0.131*num_batched_tokens + 5.67
-                    elif num_batched_tokens >= 128:
-                        forward_time = 0.114*num_batched_tokens + 12.4
-                    else:
-                        forward_time = 26.06523603
-                    forward_time += num_attention_tokens / 2048 * 1.663659159
-                    forward_time /= 1e3 # to seconds
-                    return forward_time
-                config.regist_simulator_config(forward_simulation, config.kv_cache_memory)
             elif config.use_ssh:
                 runtime = SSHRuntime(
                     model_path=model_path,
@@ -206,6 +193,7 @@ class ModelDetails:
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
+            simulator.warm_up()
             simulator.initialize_all_request_with_rps(requests, request_rate, exp_time)
             simulator.start_model_forwarding_loop()
             return simulator.run()
