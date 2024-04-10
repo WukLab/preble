@@ -89,7 +89,7 @@ def test_oracle_random_basic(
         num_workloads,
         num_requests,
         tokenizer,
-        load_dist=LoadDistribution.ZIPF,
+        load_dist=LoadDistribution.NORMAL,
     )
     requests = dataloader.generate_workload(k=k)
     # dataloader = RandomDataLoader(
@@ -221,9 +221,9 @@ def test_oracle_random_basic(
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
     # )
-    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_GUROBI_SCHEDULER)
-    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
 
     # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_GUROBI_SCHEDULER)
 
@@ -242,7 +242,7 @@ def test_oracle_random_basic(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="logs/zipf_distribution_greedy_v2.log")
+    logging.basicConfig(level=logging.DEBUG, filename="logs/normal_distribution.log")
     # logging.basicConfig(level=logging.DEBUG, filename="merge_resolve.log")
     # logging.basicConfig(level=logging.DEBUG, filename="experiment_new_benchmarks_4096_toolbench_reasonable_rps.log")
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))

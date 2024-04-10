@@ -61,9 +61,9 @@ def mistral_7b_A6000_sglang_extend(batch: Batch):
     return forward_time / 1e3
 
 def mistrial_7b_A6000_sglang_decode(batch: Batch):
-    num_batched_tokens = batch.input_ids.shape[0]
-    if num_batched_tokens >= 48 * 2048:
-        forward_time = num_batched_tokens * 4.5e-4 + 10
+    num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+    if num_attention_tokens >= 48 * 2048:
+        forward_time = num_attention_tokens * 4.5e-4 + 10
     else:
         forward_time = 40.0
     return forward_time / 1e3

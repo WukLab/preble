@@ -348,10 +348,10 @@ class LPGurobiGreedyTraversal:
         
         new_total_memory_cost = [0 for _ in range(self.num_gpus)]
 
-        decode_length = 16  # Assume decoding occurs for 20 tokens
+        decode_length = 45  # Assume decoding occurs for 20 tokens
         decoding_time = lambda x: 6.7 * x
         total_decode_time =  decoding_time(decode_length) 
-        # min_ref_counter = min([node.ref_counter for node in modified_nodes])
+        min_ref_counter = min([node.ref_counter for node in modified_nodes])
 
         for prefix_node in modified_nodes:
             num_tokens_total = 0
@@ -369,8 +369,8 @@ class LPGurobiGreedyTraversal:
                 total_cost += recomp_cost
                 new_total_memory_cost[gpu_index] += (num_tokens_time - previous_gpu_selected * num_tokens_time)
                 # updated load cost
-                # if min_ref_counter > self.num_gpus:
-                per_gpu_mem_load_cost[gpu_index] += var * num_tokens_time
+                if min_ref_counter > self.num_gpus:
+                    per_gpu_mem_load_cost[gpu_index] += var * num_tokens_time
 
         for gpu_index in range(self.num_gpus):
             # Increment load by decoding time each time
@@ -433,10 +433,10 @@ class LPGurobiGreedyTraversal:
         # print(f"Solving time: {(time.time() - start_time) * 1000}ms")
         return time.time() - start_time
 
-    def pretty_print(self, prefix_node, depth_limit=4):
-        self.pretty_print_helper(prefix_node, depth_limit=depth_limit)
+    def pretty_print(self, prefix_node, depth_limit=4,tokenizer=None):
+        self.pretty_print_helper(prefix_node, depth_limit=depth_limit, tokenizer=tokenizer)
 
-    def pretty_print_helper(self, prefix_node: TreeNode, indent="", depth=0, depth_limit=4):
+    def pretty_print_helper(self, prefix_node: TreeNode, indent="", depth=0, depth_limit=4, tokenizer=None):
         if depth == depth_limit:
             return
         selected_gpus = self.node_map.get(prefix_node)
@@ -449,7 +449,7 @@ class LPGurobiGreedyTraversal:
         print(f"{indent}Node {prefix_node.id} (Tokens: {get_tool(prefix_node.value)}, {len(prefix_node.value)}, {(prefix_node.ref_counter)}): GPUs {selected_gpus}")
 
         for child in prefix_node.children.values():
-            self.pretty_print_helper(child, indent + "  ", depth=depth + 1, depth_limit=depth_limit)
+            self.pretty_print_helper(child, indent + "  ", depth=depth + 1, depth_limit=depth_limit,tokenizer=tokenizer)
 
 
     def update_nodes_with_solution(self, modified_nodes=None):
@@ -460,7 +460,7 @@ class LPGurobiGreedyTraversal:
                     prefix_node.gpu_selections.add(gpu_id)
 
     def completed_request(self, tree_cache, input_ids):
-        decode_length = 16  # Assume decoding occurs for 20 tokens
+        decode_length = 45  # Assume decoding occurs for 20 tokens
         decoding_time = lambda x: 6.7 * x
         total_decode_time =  decoding_time(decode_length) 
         node: TreeNode = tree_cache.find_node(input_ids)
@@ -511,10 +511,9 @@ class GurobiGreedyLPScheduler:
         })
         return runtime_selected
 
-    # def finish_request(self, text: str=None, request_id: str=None, input_ids=None, func_output=None):
-    #     with self.lock:
-    #         pass
-            # self.lp_tree_traversal.completed_request(self.tree_cache, input_ids)
+    def finish_request(self, text: str=None, request_id: str=None, input_ids=None, func_output=None):
+        with self.lock:
+            self.lp_tree_traversal.completed_request(self.tree_cache, input_ids)
 
 if __name__ == "__main__":
     import random
@@ -583,8 +582,13 @@ if __name__ == "__main__":
     num_workloads = 100
     num_requests = 4096
     tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-    dataloader = ToolBenchDataLoader('benchmarks/datasets/G1_workload_updated_input_output_lengths_4096_cropped_to_50.json', num_workloads, num_requests, tokenizer, LoadDistribution.EVEN)
+    random.seed(5)
+    dataloader = ToolBenchDataLoader(
+        'benchmarks/datasets/G1_workload_updated_input_output_lengths_4096_cropped_to_50.json', num_workloads, num_requests, tokenizer, LoadDistribution.ZIPF)
     workload = dataloader.generate_workload(k=1.1)
+    print(workload[0]['text'])
+    # random.shuffle(workload)
+
     # lp_tree_traversal = LPGurobiGreedyTraversal(2)
     # modified_nodes = set()
     # lp_tree_traversal.depth_limit = 64
@@ -601,7 +605,10 @@ if __name__ == "__main__":
 
     # lp_tree_traversal.pretty_print(cache.root_node, depth_limit=3)
     scheduler = GurobiGreedyLPScheduler(2)
-    for i, item in enumerate(workload[:50]):
+    for i, item in enumerate(workload[:64]):
         runtime_selected = scheduler.runtime_selector(text=item["text"], request_id=i, input_ids=item["input_ids"])
         # print(item["text"], runtime_selected)
-    print(pd.DataFrame(scheduler.metrics_dict))
+    # print(pd.DataFrame(scheduler.metrics_dict))
+    scheduler.lp_tree_traversal.pretty_print(scheduler.tree_cache.root_node, depth_limit=3, tokenizer=tokenizer)
+    # breakpoint()
+    # scheduler.lp_tree_traversal.pretty_print(scheduler.tree_cache.root_node, depth_limit=3)
