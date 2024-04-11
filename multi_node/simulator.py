@@ -266,7 +266,7 @@ class Simulation:
         all_req_outputs = [{rid: asdict(rq)} for rid, rq in self.request_output.items()]
         with open("output.json", "w") as f:
             f.write(json.dumps(all_req_outputs, indent=4))
-        return [rq for rq in self.request_output.values() if rq.success]
+        return [rq for rq in self.request_output.values()]
         # return list(self.request_output.values())
     
     # requests: List[Dict[str, Dict, List]]
@@ -317,6 +317,7 @@ class SendRequestEvent(SimulationEvent):
         overhead = time.time() - start
         self.update_lock(overhead, simulator)
         simulator.request_output[generate_input.rid] = RequestFuncOutput(
+            prompt_text=self.request['text'][:20],
             prompt_len=len(self.request['input_ids']), 
             send_out_time=self.time,
             route_dest=runtime_id,
@@ -373,6 +374,7 @@ class GenerateRequestEvent(SimulationEvent):
             )
             overhead = time.time() - start
             self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
+            # self.update_lock(0, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
             # logging.debug(f"{self.runtime_id}: tokenized req added at {runtime.tokenizer_clock}, overhead {overhead}")
             runtime.manager_recv_reqs.append(tokenized_obj)
         else:
@@ -398,11 +400,11 @@ class ModelStepEvent(SimulationEvent):
                     request_output = simulator.request_output[rid]
                     if not request_output.ttft:
                         request_output.ttft = runtime.manager_clock - request_output.send_out_time
+                    request_output.request_latency = runtime.manager_clock - request_output.send_out_time
+                    request_output.output_len = len(output_token_ids)
                     if finished:
                         request_output.success = True
-                        request_output.request_latency = runtime.manager_clock - request_output.send_out_time
                         request_output.global_time = runtime.manager_clock
-                        request_output.output_len = len(output_token_ids)
     
     def process_event(self, simulator: Simulation):
         start = time.time()
