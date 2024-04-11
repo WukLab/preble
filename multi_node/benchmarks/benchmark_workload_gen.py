@@ -182,7 +182,7 @@ class DataLoader:
     def generate_workload(self):
         raise NotImplementedError()
     
-class RandomDataLoader(DataLoader):
+class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
         self,
         num_patterns: int,
@@ -243,7 +243,7 @@ class RandomDataLoader(DataLoader):
             input_ids = self.tokenizer(request["text"]).input_ids
             request["input_ids"] = input_ids
 
-        with ThreadPoolExecutor(128) as executor:
+        with ThreadPoolExecutor(64) as executor:
             futures = []
             for request in workload:
                 futures.append(executor.submit(get_token_ids, request))
@@ -346,7 +346,7 @@ class ToolBenchDataLoader(DataLoader):
                     workload.append(
                         {
                             "text": e["prompt"],
-                            "input_ids": self.tokenizer(e["prompt"]),
+                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len,
@@ -386,7 +386,7 @@ class ToolBenchDataLoader(DataLoader):
                     workload.append(
                         {
                             "text": e["prompt"],
-                            "input_ids": self.tokenizer(e["prompt"]),
+                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len,

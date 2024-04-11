@@ -140,6 +140,11 @@ class ModelDetails:
         runtime_id = self.request_router.select_runtime(text, experiment_id, request_id, input_ids)
         return self.runtimes[runtime_id]
 
+    def finish_request(self, text, sampling_params, input_ids, func_output: RequestFuncOutput) -> EndpointRuntimeInterface:
+        experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
+        request_id = sampling_params.pop("request_id", random_uuid_string())
+        self.request_router.finish_request(text, experiment_id, request_id, input_ids, func_output)
+
     def async_wrap(f):
         async def _func(*args, **kwargs):
             return f(*args, **kwargs)
@@ -257,11 +262,15 @@ class ModelDetails:
         self, text=None, sampling_params=None, input_ids=None
     ) -> RequestFuncOutput: 
         start_time = time.time()
+        st = time.perf_counter()
+
         rid = random_uuid_string()
         sampling_params["request_id"] = rid
         runtime = await asyncio.to_thread(
             self.select_runtime_with_identifiers, text, sampling_params, input_ids
         )
+        scheduling_overhead = time.time() - start_time
+
         api_url = runtime.generate_url
         payload = {
             "text": text,
@@ -278,7 +287,6 @@ class ModelDetails:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             self.request_sent_time.append(time.time() - self.start_time)
             ttft = 0
-            st = time.perf_counter()
             most_recent_timestamp = st
             try:
                 async with session.post(url=api_url, json=payload) as response:
@@ -318,6 +326,13 @@ class ModelDetails:
                 exc_info = sys.exc_info()
                 output.error = "".join(traceback.format_exception(*exc_info))
         #  throughput as token generated per second
+        output.scheduling_overhead = scheduling_overhead
+
+        await asyncio.to_thread(
+            self.finish_request, text, sampling_params, input_ids, output
+        )
+
+        output.scheduling_overhead = scheduling_overhead
         return output
 
 def remove_prefix(text: str, prefix: str) -> str:

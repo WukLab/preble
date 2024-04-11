@@ -18,10 +18,12 @@ class CustomRuntimeSelector:
     num_nodes: int
     def runtime_selector(self, text: InputText, request_id: str, input_ids: List) -> NodeID:
         pass
-    
+
+    def finish_request(self, text: InputText, request_id: str, input_ids: List, func_output) -> NodeID:
+        pass
+
 class DataParallelRuntimeSelectionPolicy(Enum):
     RANDOM = auto()
-    CONSISTENT_HASH = auto()
     CUSTOM = auto()
 
 class CustomPolicyType(Enum):
@@ -36,7 +38,8 @@ class CustomPolicyType(Enum):
 
     LOOGLE_ORACLE = auto()
 
-    LP_SCHEDULER = auto()
+    GREEDY_LP = auto()
+
 
 class DataParallelRequestRouter:
     def __init__(
@@ -67,6 +70,14 @@ class DataParallelRequestRouter:
             }
         )
         return selected_runtime
+
+    def finish_request(self, text, experiment_id, request_id, input_ids=None, func_output=None) -> int:
+        if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
+            pass
+        elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
+            self.custom_selector.finish_request(text, request_id, input_ids, func_output)
+        else:
+            raise NotImplementedError
 
     def update_runtime_selection_policy(self, runtime_selection_policy):
         self.runtime_selection_policy = runtime_selection_policy
