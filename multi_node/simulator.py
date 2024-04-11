@@ -41,7 +41,7 @@ from sglang.srt.managers.io_struct import (
 from sglang.srt.sampling_params import SamplingParams
 from sglang.srt.backend_config import GLOBAL_BACKEND_CONFIG
 from sglang.srt.managers.router.infer_batch import Batch
-from benchmarks.benchmark_workload_gen import RandomDataLoader
+from benchmarks.benchmark_workload_gen import WorkloadPrefixDataLoader
 from benchmarks.benchmark_utils import RequestFuncOutput, BenchmarkMetrics
 
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -446,7 +446,7 @@ if __name__ == "__main__":
     rps, exp_time = 8, 30
     num_requests = int(rps * exp_time)
     num_workloads = 10
-    dataloader = RandomDataLoader(
+    dataloader = WorkloadPrefixDataLoader(
         num_workloads,
         num_requests,
         tokenizer,
@@ -467,4 +467,3 @@ if __name__ == "__main__":
     )
     exp_params = f"{model_name}, {num_workloads}, {0}, {num_requests}, {rps}, {exp_time}"
     bench_metrics.to_log_file(exp_params)
-    

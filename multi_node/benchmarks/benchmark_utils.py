@@ -1,29 +1,19 @@
-from dataclasses import dataclass
-from typing import List, Dict, Optional
-import numpy as np
-import logging
-import uuid
-from dataclasses import field
 import json
-import sys, os
+import logging
+import os
+import sys
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+import numpy as np
 
 # Add the parent directory of the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sglang.srt.managers.router.model_runner import GPUConfig
-from benchmark_workload_gen import (
-    DataLoader,
-    ToolBenchDataLoader,
-    RandomDataLoader,
-    LoadDistribution,
-    Oracle,
-    TBOracle,
-    TBOracleB,
-    LooGLEDataset,
-    LooGLEDatasetType,
-    LoogleOracle,
-)
-from sglang.srt.server_args import ServerArgs
+
+from benchmark_workload_gen import DataLoader
+
 
 @dataclass
 class WorkloadConfig:
@@ -68,6 +58,7 @@ class RequestFuncOutput:
     prefill_decode_ratio: float = None
     send_out_time: float = 0.0
     route_dest: int = None
+    scheduling_overhead: float = 0.0
 
     def update_metrics(
         self,
@@ -112,6 +103,7 @@ class BenchmarkMetrics:
     overall_latency: float
     requests_per_sec: float
     gpu_counts: Dict[int, int]
+    avg_scheduling_overhead: float
 
     def gen_benchmark_metrics(
         tokenizer,
@@ -164,6 +156,8 @@ class BenchmarkMetrics:
         average_ttft = np.mean(ttfts)
         average_topt = np.mean(tpots)
         requests_per_sec = len(req_func_outputs) / overall_latency
+
+        avg_scheduling_overhead = np.mean([result.scheduling_overhead for result in req_func_outputs])
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
             average_finished_topt=average_finished_tpot,
@@ -182,6 +176,7 @@ class BenchmarkMetrics:
             prefill_decode_ratio=prefill_decode_ratio,
             requests_per_sec=requests_per_sec,
             gpu_counts=gpu_counts,
+            avg_scheduling_overhead=avg_scheduling_overhead
         )
 
     @property
@@ -206,6 +201,7 @@ class BenchmarkMetrics:
             "throughput_tok_sec": self.throughput_tok_sec,
             "all_reqs": all_reqs,
             "prefill_decode_ratio": self.prefill_decode_ratio,
+            "scheduling_overhead": self.avg_scheduling_overhead,
         }
 
     def to_log_file(self, exp_params):
@@ -227,5 +223,8 @@ class BenchmarkMetrics:
         )
         logging.info(
             f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"
+        )
+        logging.info(
+            f"Params=({exp_params}) Average Scheduling Overhead: {self.avg_scheduling_overhead}"
         )
         logging.info(f"Params=({exp_params}) Counts: {self.gpu_counts}")
