@@ -97,6 +97,16 @@ class RadixCache:
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
+                
+    def get_num_referenced_nodes(self):
+        def _total_size_helper(node: TreeNode):
+            if node.ref_counter == 0:
+                return 0
+            x = len(node.value)
+            for child in node.children.values():
+                x += _total_size_helper(child)
+            return x
+        return _total_size_helper(self.root_node)
 
     def inc_ref_counter(self, node):
         delta = 0

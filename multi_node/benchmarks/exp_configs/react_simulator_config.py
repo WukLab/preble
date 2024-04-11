@@ -138,14 +138,14 @@ def create_workload_configs(configurations_to_test):
 # log_file_path = "logs/more_info_hc_600.log"
 # log_file_path = "logs/sim-sleep-flashinfer.log"
 
-log_file_path = "logs/sim_hot_cold_rps18_1800.log"
+log_file_path = "logs/sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/debug.log"
 
 # log_file_path = "logs/sim_hc_debug"
 
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 1800
+exp_time = 600
 
 # GPU Configuration
 gpu_configs = [
@@ -217,6 +217,7 @@ selectors_configs = [
     (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_2h_2c"),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1ctp_2.0"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_1hpp_2c"),
 ]

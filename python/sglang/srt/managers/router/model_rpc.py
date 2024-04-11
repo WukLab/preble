@@ -521,7 +521,8 @@ class ModelRpcServer:
                 f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
                 f"num reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}"
+                f"attention tokens: {num_attention_tokens}, "
+                f"tree unique ref nodes : {self.tree_cache.get_num_referenced_nodes()}"
                 # f"prefix indices: {batch.prefix_lens}"
             )
         if batch.extend_num_tokens != 0:
@@ -654,7 +655,9 @@ class ModelRpcServer:
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}")
+                f"attention tokens: {num_attention_tokens}, "
+                f"tree unique ref nodes : {self.tree_cache.get_num_referenced_nodes()}"
+            )
         forward_time = 0
         # Forward
         if forward_simulation is None:

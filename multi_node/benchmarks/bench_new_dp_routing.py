@@ -138,6 +138,7 @@ def load_and_run_benchmark(
         overall_latency=overall_latency,
         time_limit=exp_time,
         gpu_counts=counts,
+        detail_log_path=f'{directory}/details-{policy}-{custom_policy}-{custom_msg}.json'
     )
     exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     bench_metrics.to_log_file(exp_params)
@@ -159,6 +160,10 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
+    directory = os.path.dirname(exp_args.log_file_path)
+    # Create the directory if it doesn't exist
+    if not os.path.exists(directory):
+        os.makedirs(directory)
     logging.basicConfig(level=logging.INFO, filename=exp_args.log_file_path)
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     # Add current time to log file

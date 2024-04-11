@@ -266,7 +266,7 @@ class Simulation:
         all_req_outputs = [{rid: asdict(rq)} for rid, rq in self.request_output.items()]
         with open("output.json", "w") as f:
             f.write(json.dumps(all_req_outputs, indent=4))
-        return [rq for rq in self.request_output.values() if rq.success]
+        return [rq for rq in self.request_output.values()]
         # return list(self.request_output.values())
     
     # requests: List[Dict[str, Dict, List]]
@@ -317,6 +317,7 @@ class SendRequestEvent(SimulationEvent):
         overhead = time.time() - start
         self.update_lock(overhead, simulator)
         simulator.request_output[generate_input.rid] = RequestFuncOutput(
+            prompt_text=self.request['text'][:20],
             prompt_len=len(self.request['input_ids']), 
             send_out_time=self.time,
             route_dest=runtime_id,

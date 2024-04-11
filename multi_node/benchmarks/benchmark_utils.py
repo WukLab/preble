@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 import numpy as np
 import logging
 import uuid
-from dataclasses import field
+from dataclasses import field, asdict
 import json
 import sys, os
 
@@ -55,6 +55,7 @@ class MajorExperimentArgs:
 
 @dataclass
 class RequestFuncOutput:
+    prompt_text: str = ""
     generated_text: str = ""
     success: bool = False
     request_latency: float = 0
@@ -92,7 +93,7 @@ class RequestFuncOutput:
 
     def to_json(self):
         return json.dumps(self.__dict__)
-
+    
 
 @dataclass
 class BenchmarkMetrics:
@@ -125,11 +126,15 @@ class BenchmarkMetrics:
         overall_latency: float,
         time_limit: int = 100,
         gpu_counts={},
+        detail_log_path=None,
     ):
         # req_func_outputs = [result for result in req_func_outputs if result.success]
         for result in req_func_outputs:
             result.update_metrics(tokenizer)  # Computes the generated output tokens
-
+        if detail_log_path is None:
+            detail_log_path = './detail_stats.json'
+        with open(detail_log_path, "w") as f:
+            json.dump([asdict(result) for result in req_func_outputs], f, indent=4)
         ttfts = [result.ttft for result in req_func_outputs if result.ttft]
         tpots = [result.tpot for result in req_func_outputs if result.tpot]
         overall_latency = overall_latency

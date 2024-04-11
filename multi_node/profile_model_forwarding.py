@@ -86,6 +86,7 @@ def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, t
     model_server = model_client.model_server
     sampling_params = get_sampling_params(starting_ctx_len, model_server.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
+    reqs = []
     for i in range(num_seqs):
         input_ids = [token_id_start + i % num_prefix] * starting_ctx_len
         tokenized_obj = TokenizedGenerateReqInput(
@@ -100,9 +101,10 @@ def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, t
             logprob_start_len=None,
             stream=True,
         )
-        model_server.handle_generate_request(tokenized_obj)
+        reqs.append(tokenized_obj)
         
     while True:
+        model_server.handle_generate_request(reqs.pop())
         model_server.forward_step()
         if model_server.out_pyobjs:
             print(len(model_server.out_pyobjs[-1].rids))
@@ -122,19 +124,46 @@ def profile_multi_query(model_client: ModelRpcClient, num_prompt, num_mul, ctx_l
     return forward_time
 
 def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start, num_prefix):
+    model_server = model_client.model_server
     if not num_prefix:
         num_prefix = num_seqs
-    run_to_scheduled(model_client, num_seqs, ctx_len, token_id_start, num_prefix)
-    model_server = model_client.model_server
-    torch.cuda.cudart().cudaProfilerStart()
+    run_to_complete(model_client, num_seqs, ctx_len, token_id_start, 1, num_prefix)
+    
+    sampling_params = get_sampling_params(2, model_server.tokenizer)
+    pixel_values, image_hash, image_size = None, None, None
+    for i in range(num_seqs):
+        input_ids = [token_id_start + i % num_prefix] * ctx_len
+        tokenized_obj = TokenizedGenerateReqInput(
+            rid=uuid.uuid4().hex,
+            input_text="",
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_hash=image_hash,
+            image_size=image_size,
+            sampling_params=sampling_params,
+            return_logprob=None,
+            logprob_start_len=None,
+            stream=True,
+        )
+        model_server.handle_generate_request(tokenized_obj)
+    
+    model_server.forward_step()
+    num_stepped = sum(len(output.rids) for output in model_server.out_pyobjs)
+    assert num_stepped == num_seqs, f"Expected {num_seqs} outputs, got {num_stepped}"
+    model_server.out_pyobjs = []
+
+    torch.cuda.cudart().cudaProfilerStart() 
     forward_time_events = model_server.forward_step()
     torch.cuda.cudart().cudaProfilerStop()
-    assert model_server.out_pyobjs and len(model_server.out_pyobjs[-1].rids) == num_seqs
+    num_stepped = sum(len(output.rids) for output in model_server.out_pyobjs)
+    assert num_stepped == num_seqs, f"Expected {num_seqs} outputs, got {num_stepped}"
+    model_server.out_pyobjs = []
+    
     forward_time = 0
     for start, end in forward_time_events:
         end.synchronize()
         forward_time += start.elapsed_time(end)
-    return forward_time / len(forward_time_events)
+    return forward_time
     
     
 def main(args):
@@ -196,4 +225,6 @@ if __name__ == "__main__":
     # prompt + mul cannot be scheduled together with gen
     if args.num_prompt + args.num_mul > 0 and args.num_gen > 0:
         raise ValueError("Prompt and Multi Query cannot be scheduled together with normal decoding.")
+    if args.num_gen > 0 and not args.stream_interval:
+        args.stream_interval = 1
     main(args)
