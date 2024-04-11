@@ -18,7 +18,6 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 from multi_node_loader import MultiNodeLoader
 from model_runtime_manager import RequestFuncOutput, ModelDetails
 from benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig
-from benchmarks.exp_configs.react_simulator_config import exp_args
 from benchmark_workload_gen import *
 from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
 from metrics_based_scheduler import LongestPrefixMatchSelector, GlobalLongestPrefixMatch
@@ -160,6 +159,8 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
+    from benchmarks.exp_configs.react_simulator_config import exp_args
+    # from benchmarks.exp_configs.debug_simulator import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
     if not os.path.exists(directory):

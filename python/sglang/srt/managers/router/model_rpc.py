@@ -498,7 +498,6 @@ class ModelRpcServer:
         self.forward_queue = [x for x in self.forward_queue if x not in can_run_list]
         if self.log_prefix_hit:
             self.prefix_hit_trace.append({x.rid: [x.input_text[:20], len(x.prefix_indices)] for x in can_run_list})
-                
         return new_batch
     
     def dump_prefix_hit_trace(self, path: str):
@@ -515,6 +514,7 @@ class ModelRpcServer:
         forward_time = 0
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
         if self.tp_rank == 0:
             logging.info(
                 f"GPU: {self.current_gpu} "
@@ -522,7 +522,7 @@ class ModelRpcServer:
                 f"num reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
                 f"attention tokens: {num_attention_tokens}, "
-                f"tree unique ref nodes : {self.tree_cache.get_num_referenced_nodes()}"
+                f"tree unique ref nodes : {unique_kvs}"
                 # f"prefix indices: {batch.prefix_lens}"
             )
         if batch.extend_num_tokens != 0:
@@ -546,7 +546,7 @@ class ModelRpcServer:
                     vocab_size = self.model_config.vocab_size
                     logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                     next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                    time.sleep(self.gpu_config.forward_simulation[0](batch))
+                    time.sleep(self.gpu_config.forward_simulation[0](batch, unique_kvs))
                     _ = batch.sample(logits)
                     logprobs = normalized_logprobs = last_logprobs = None
                 end_event.record()
@@ -556,7 +556,7 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                forward_time = forward_simulation[0](batch)
+                forward_time = forward_simulation[0](batch, unique_kvs)
                 _ = batch.sample(logits)
                 logprobs = normalized_logprobs = last_logprobs = None
             next_token_ids = next_token_ids.cpu().tolist()
@@ -650,13 +650,14 @@ class ModelRpcServer:
 
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
         if self.tp_rank == 0:
             logging.info(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
                 f"attention tokens: {num_attention_tokens}, "
-                f"tree unique ref nodes : {self.tree_cache.get_num_referenced_nodes()}"
+                f"tree unique ref nodes : {unique_kvs}"
             )
         forward_time = 0
         # Forward
@@ -675,7 +676,7 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                time.sleep(self.gpu_config.forward_simulation[1](batch))   
+                time.sleep(self.gpu_config.forward_simulation[1](batch, unique_kvs))   
                 _ = batch.sample(logits)
                 last_logprobs = None
             forward_time = time.time() - s
@@ -684,7 +685,7 @@ class ModelRpcServer:
             vocab_size = self.model_config.vocab_size
             logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
             next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation[1](batch)
+            forward_time = forward_simulation[1](batch, unique_kvs)
             _ = batch.sample(logits)
             last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()
