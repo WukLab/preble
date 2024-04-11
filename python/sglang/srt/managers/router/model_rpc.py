@@ -52,6 +52,9 @@ class ModelRpcServer:
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
         self.gpu_config = gpu_config
+        # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
+        self.use_sleep_forwarding = False
+        logging.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
         self.tp_rank = tp_rank
         self.tp_size = server_args.tp_size
@@ -316,11 +319,15 @@ class ModelRpcServer:
                         f"available_size={available_size}, max_total_num_token={self.max_total_num_token}\n"
                         "KV cache pool leak detected!"
                     )
-        if forward_simulation is None and forward_time:
-            total_forward_time = 0
+        total_forward_time = 0
+        if (self.use_sleep_forwarding or forward_simulation) and forward_time:
+            total_forward_time = sum(forward_time) * 1000
+        elif forward_time:
             for start, end in forward_time:
-                end.synchronize()
-                total_forward_time += start.elapsed_time(end)
+                if start and end:
+                    end.synchronize()
+                    total_forward_time += start.elapsed_time(end)
+        if total_forward_time > 0:
             logger.info(
                 f'GPU: {self.current_gpu} '
                 f"forward time: {total_forward_time:.2f} ms"
@@ -468,8 +475,9 @@ class ModelRpcServer:
                 f"#new_token: {new_batch_input_tokens}. "
                 f"#remaining_req: {len(self.forward_queue) - len(can_run_list)}. "
                 f"#running_req: {running_req}. "
-                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%."
-                f"hit_tokens: {hit_tokens}."
+                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
+                f"hit_tokens: {hit_tokens}. "
+                f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
             )
             # logger.debug(
             #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
@@ -490,7 +498,6 @@ class ModelRpcServer:
         self.forward_queue = [x for x in self.forward_queue if x not in can_run_list]
         if self.log_prefix_hit:
             self.prefix_hit_trace.append({x.rid: [x.input_text[:20], len(x.prefix_indices)] for x in can_run_list})
-                
         return new_batch
     
     def dump_prefix_hit_trace(self, path: str):
@@ -507,13 +514,16 @@ class ModelRpcServer:
         forward_time = 0
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
         if self.tp_rank == 0:
-            logging.debug(
+            logging.info(
                 f"GPU: {self.current_gpu} "
                 f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
                 f"num reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}"
+                f"attention tokens: {num_attention_tokens}, "
+                f"tree unique ref nodes : {unique_kvs}"
+                # f"prefix indices: {batch.prefix_lens}"
             )
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
@@ -521,28 +531,39 @@ class ModelRpcServer:
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
                 start_event.record()
-                logits, (
-                    prefill_logprobs,
-                    normalized_logprobs,
-                    last_logprobs,
-                ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
+                s = time.time()
+                if not self.use_sleep_forwarding:
+                    logits, (
+                        prefill_logprobs,
+                        normalized_logprobs,
+                        last_logprobs,
+                    ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
+                    if prefill_logprobs is not None:
+                        logprobs = prefill_logprobs.cpu().tolist()
+                        normalized_logprobs = normalized_logprobs.cpu().tolist()
+                    next_token_ids, _ = batch.sample(logits)
+                else:
+                    vocab_size = self.model_config.vocab_size
+                    logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+                    next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+                    time.sleep(self.gpu_config.forward_simulation[0](batch, unique_kvs))
+                    _ = batch.sample(logits)
+                    logprobs = normalized_logprobs = last_logprobs = None
                 end_event.record()
-                if prefill_logprobs is not None:
-                    logprobs = prefill_logprobs.cpu().tolist()
-                    normalized_logprobs = normalized_logprobs.cpu().tolist()
-
-                next_token_ids, _ = batch.sample(logits)
+                forward_time = time.time() - s
+                forward_time = forward_time
             else:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                forward_time = forward_simulation[0](batch)
+                forward_time = forward_simulation[0](batch, unique_kvs)
                 _ = batch.sample(logits)
                 logprobs = normalized_logprobs = last_logprobs = None
             next_token_ids = next_token_ids.cpu().tolist()
         else:
             next_token_ids = [self.tokenizer.eos_token_id] * len(batch.reqs)
             logits = logprobs = normalized_logprobs = last_logprobs = None
+            start_event, end_event = None, None
 
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
         reqs = batch.reqs
@@ -573,6 +594,8 @@ class ModelRpcServer:
                 pt += req.extend_input_len
 
         self.handle_finished_requests(batch)
+        if self.use_sleep_forwarding:
+            return forward_time
         if forward_simulation is None:
             return start_event, end_event
         return forward_time
@@ -615,7 +638,11 @@ class ModelRpcServer:
 
             self.forward_queue.extend(jump_forward_reqs)
             if batch.is_empty():
-                return
+                if self.use_sleep_forwarding:
+                    return 0
+                if forward_simulation is None:
+                    return None, None
+                return 0
 
         # Update batch tensors
         self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
@@ -623,28 +650,42 @@ class ModelRpcServer:
 
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
         if self.tp_rank == 0:
-            logging.debug(
+            logging.info(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}")
+                f"attention tokens: {num_attention_tokens}, "
+                f"tree unique ref nodes : {unique_kvs}"
+            )
         forward_time = 0
         # Forward
         if forward_simulation is None:
-            start_event = torch.cuda.Event(enable_timing=True)
-            end_event = torch.cuda.Event(enable_timing=True)
-            start_event.record()        
-            logits, (_, _, last_logprobs) = self.model_runner.forward(
-                batch, ForwardMode.DECODE
-            )
-            end_event.record()
-            next_token_ids, _ = batch.sample(logits)
+            s = time.time()
+            if not self.use_sleep_forwarding:
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()        
+                logits, (_, _, last_logprobs) = self.model_runner.forward(
+                    batch, ForwardMode.DECODE
+                )
+                end_event.record()
+                next_token_ids, _ = batch.sample(logits)
+            else:
+                vocab_size = self.model_config.vocab_size
+                logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+                next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+                time.sleep(self.gpu_config.forward_simulation[1](batch, unique_kvs))   
+                _ = batch.sample(logits)
+                last_logprobs = None
+            forward_time = time.time() - s
+            forward_time = forward_time
         else:
             vocab_size = self.model_config.vocab_size
             logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
             next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation[1](batch)
+            forward_time = forward_simulation[1](batch, unique_kvs)
             _ = batch.sample(logits)
             last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()
@@ -666,6 +707,8 @@ class ModelRpcServer:
                 req.token_logprob.append((next_tok_id, last_logprobs[i]))
 
         self.handle_finished_requests(batch)
+        if self.use_sleep_forwarding:
+            return forward_time
         if forward_simulation is None:
             return start_event, end_event
         return forward_time
@@ -761,13 +804,14 @@ class ModelRpcService(rpyc.Service):
 
 
 class ModelRpcClient:
-    def __init__(self, server_args: ServerArgs, port_args: PortArgs):
+    def __init__(self, server_args: ServerArgs, port_args: PortArgs, gpu_config: GPUConfig = None):
         tp_size = server_args.tp_size
+        self.gpu_config = gpu_config
 
         if tp_size == 1:
             # Init model
             self.model_server = ModelRpcService().exposed_ModelRpcServer(
-                0, server_args, port_args
+                0, server_args, port_args, False, gpu_config
             )
 
             # Wrap functions

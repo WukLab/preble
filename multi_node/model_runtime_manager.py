@@ -21,9 +21,9 @@ from sglang.srt.managers.router.model_runner import GPUConfig # FIXME wrong impo
 from simulator import ServerRuntimeSimulator, Simulation
 from benchmarks.benchmark_utils import RequestFuncOutput
 from sglang.srt.managers.router.infer_batch import Batch
+from sglang.srt.managers.io_struct import BatchStrOut
 import torch
 import logging
-from tqdm.asyncio import tqdm_asyncio
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)
@@ -125,6 +125,7 @@ class ModelDetails:
                     model_path=model_path,
                     cuda_devices=[gpu_id],
                     gpu=gpu_id,
+                    gpu_config=config,
                     **kwargs,
                 )
             self.runtimes.append(runtime)
@@ -297,7 +298,7 @@ class ModelDetails:
 
                             chunk = remove_prefix(chunk.decode("utf-8"), "data:").strip()
                             if chunk == "[DONE]":
-                                request_latency = time.perf_counter() - st
+                                output.success = True
                             else:
                                 data = json.loads(chunk)
                                 timestamp = time.perf_counter()
@@ -312,11 +313,10 @@ class ModelDetails:
                                                     most_recent_timestamp)
 
                                 most_recent_timestamp = timestamp
-
-                        output.request_latency = request_latency
+                            output.request_latency = time.perf_counter() - st
+                            output.generated_text = data["text"]
+                            output.output_len = data['meta_info']['completion_tokens']
                         output.global_time = time.time() - self.current_experiment_state_time
-                        output.success = True
-                        output.generated_text = data["text"]
                         # print(data["meta_info"])
                     else:
                         output.error = response.reason

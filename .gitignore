@@ -177,3 +177,4 @@ tmp*.txt
 # Plots
 *.png
 *.pdf
+*.nsys-rep
