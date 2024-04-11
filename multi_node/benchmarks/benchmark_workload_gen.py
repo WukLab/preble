@@ -182,6 +182,17 @@ class DataLoader:
     def generate_workload(self):
         raise NotImplementedError()
     
+    def get_token_ids(self, request, tokenizer):
+        input_ids = tokenizer(request["text"]).input_ids
+        request["input_ids"] = input_ids
+
+    def add_input_token_ids_to_workload(self, workload):
+        with ThreadPoolExecutor(64) as executor:
+            futures = []
+            for request in workload:
+                futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
+            for future in futures:
+                future.result()
 class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
         self,
@@ -237,17 +248,9 @@ class WorkloadPrefixDataLoader(DataLoader):
                     "sampling_params": copy.deepcopy(sampling_params),
                 }
             )
+        self.add_input_token_ids_to_workload(workload)
         random.shuffle(workload)
 
-        def get_token_ids(request):
-            input_ids = self.tokenizer(request["text"]).input_ids
-            request["input_ids"] = input_ids
-
-        with ThreadPoolExecutor(64) as executor:
-            futures = []
-            for request in workload:
-                futures.append(executor.submit(get_token_ids, request))
-            wait(futures)
         prompt_lens = [len(p["input_ids"]) for p in workload]
         plt.hist(prompt_lens)
         plt.savefig(f"react_prompt_length.png")
@@ -288,7 +291,6 @@ class ToolBenchDataLoader(DataLoader):
                     workload.append(
                         {
                             "text": e['prompt'], 
-                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len,
@@ -296,16 +298,6 @@ class ToolBenchDataLoader(DataLoader):
                         }
                     )
 
-        # elif self.load_dist == LoadDistribution.ALL:
-        #     for tool, items in self.data.items():
-        #         for item in items:
-        #             output_len = len(self.tokenizer(item['output']).input_ids)
-        #             workload.append((
-        #                 e['prompt'],
-        #                 {
-        #                     "temperature": 0,
-        #                     "max_new_tokens": output_len
-        #                 }))
         elif self.load_dist == LoadDistribution.ZIPF:
             assert k is not None
             prefix_stats = sorted(
@@ -346,7 +338,6 @@ class ToolBenchDataLoader(DataLoader):
                     workload.append(
                         {
                             "text": e["prompt"],
-                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len,
@@ -386,7 +377,6 @@ class ToolBenchDataLoader(DataLoader):
                     workload.append(
                         {
                             "text": e["prompt"],
-                            'input_ids': self.tokenizer(e['prompt'])['input_ids'],
                             "sampling_params": {
                                 "temperature": 0,
                                 "max_new_tokens": output_len,
@@ -395,13 +385,8 @@ class ToolBenchDataLoader(DataLoader):
                     )
         else:
             raise NotImplementedError()
-        print(len(workload))
+        self.add_input_token_ids_to_workload(workload)
         random.shuffle(workload)
-        # save to json
-        with open(
-            f"workload_{self.num_patterns}_{self.total_num_requests}.json", "w"
-        ) as f:
-            json.dump([{"text": item["text"]} for item in workload], f)
         return workload
 
 
@@ -473,7 +458,7 @@ class TBOracleB(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
-    
+
 
 class LooGLEDatasetType(Enum):
     LONG_QA = auto()
@@ -574,7 +559,7 @@ class LooGLEDataset(DataLoader):
                 request["input_ids"] = tokenized_prompt
             return request
 
-        with ThreadPoolExecutor(128) as executor:
+        with ThreadPoolExecutor(64) as executor:
             futures = []
             for request in workload:
                 futures.append(executor.submit(tokenize_workload, request))

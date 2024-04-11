@@ -448,7 +448,7 @@ class LPGurobiGreedyTraversal:
 
         # Model parameters
         self.model.setParam("Threads", 0)
-        self.model.setParam("TimeLimit", 0.05)
+        self.model.setParam("TimeLimit", 0.005)
         self.model.setParam("MIPGap", 0.02)
 
         self.model.optimize()
@@ -458,7 +458,6 @@ class LPGurobiGreedyTraversal:
             pass
         elif self.model.Status == GRB.INFEASIBLE:
             print("Infeasable solution found")
-
         else:
             pass
             # print('Feasible solution found.')

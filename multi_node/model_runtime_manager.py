@@ -17,7 +17,7 @@ import paramiko
 import sys, traceback
 from ssh_runtime import SSHRuntimeManager
 from dataclasses import field
-from sglang.srt.managers.router.model_runner import GPUConfig
+from sglang.srt.managers.router.model_runner import GPUConfig # FIXME wrong import
 from simulator import ServerRuntimeSimulator, Simulation
 from benchmarks.benchmark_utils import RequestFuncOutput
 from sglang.srt.managers.router.infer_batch import Batch

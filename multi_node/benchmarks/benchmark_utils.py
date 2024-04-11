@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Iterator
 
 import numpy as np
 
@@ -37,7 +37,7 @@ class WorkloadConfig:
 @dataclass
 class MajorExperimentArgs:
     runtime_args: Dict
-    workload_configs: List[WorkloadConfig]
+    workload_configs: Iterator[WorkloadConfig]
     gpu_configs: List[GPUConfig]
     simulate: bool
     log_file_path: str
