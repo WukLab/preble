@@ -15,7 +15,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sglang.srt.managers.router.model_runner import GPUConfig
 
-from benchmark_workload_gen import DataLoader
+from benchmarks.benchmark_workload_gen import DataLoader
 
 
 @dataclass

@@ -24,7 +24,7 @@ from exp_configs.react_simulator_config import add_simulation_to_gpu_config
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "logs/test_greedy_simulation.log"
+log_file_path = "logs/test_greedy_simulation/exp.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = 100
@@ -66,7 +66,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

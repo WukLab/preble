@@ -11,7 +11,7 @@ from benchmark_workload_gen import *
 from sglang.srt.managers.router.model_runner import GPUConfig
 from sglang.srt.managers.router.infer_batch import Batch
 from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
-from .model_equations import mistrial_7b_A6000_sglang_total
+from exp_configs.model_equations import mistrial_7b_A6000_sglang_total
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -69,7 +69,8 @@ def create_workload_configs(configurations_to_test):
 # log_file_path = "logs/more_info_hc_600.log"
 # log_file_path = "logs/sim-sleep-flashinfer.log"
 
-log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
+# log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
+log_file_path = "logs/greedy_new_equation_sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/debug.log"
 
 # log_file_path = "logs/sim_hc_debug"
@@ -145,12 +146,13 @@ workload_configs = create_workload_configs(configurations_to_test)
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_2h_2c"),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_2h_2c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1ctp_2.0"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_1hpp_2c"),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy'),
 ]
 
 exp_args = MajorExperimentArgs(

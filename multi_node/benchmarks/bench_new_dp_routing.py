@@ -145,15 +145,16 @@ def load_and_run_benchmark(
     overall_latency = time.time() - tic_benchmark
 
     counts = model_details.request_router.get_model_selection_counts()
+    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
+    detail_log_path = exp_params.replace(", ", "_").replace("/", "-")
     bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(
         tokenizer=tokenizer,
         req_func_outputs=results,
         overall_latency=overall_latency,
         time_limit=exp_time,
         gpu_counts=counts,
-        detail_log_path=f'{directory}/details-{policy}-{custom_policy}-{custom_msg}.json'
+        detail_log_path=detail_log_path,
     )
-    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     bench_metrics.to_log_file(exp_params)
 
 
@@ -178,7 +179,7 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 if __name__ == "__main__":
     from benchmarks.exp_configs.react_simulator_config import exp_args
-    # from benchmarks.exp_configs.debug_simulator import exp_args
+    # from exp_configs.react_simulator_config_greedy import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
     if not os.path.exists(directory):

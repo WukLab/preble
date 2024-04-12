@@ -328,7 +328,7 @@ class ModelRpcServer:
                     end.synchronize()
                     total_forward_time += start.elapsed_time(end)
         if total_forward_time > 0:
-            logger.info(
+            logger.debug(
                 f'GPU: {self.current_gpu} '
                 f"forward time: {total_forward_time:.2f} ms"
             )
@@ -516,7 +516,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
         if self.tp_rank == 0:
-            logging.info(
+            logging.debug(
                 f"GPU: {self.current_gpu} "
                 f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
                 f"num reqs: {len(batch.reqs)}, "
@@ -652,7 +652,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
         if self.tp_rank == 0:
-            logging.info(
+            logging.debug(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
