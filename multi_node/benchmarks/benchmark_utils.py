@@ -251,7 +251,7 @@ class BenchmarkMetrics:
             f"Params=({exp_params}) TTFT p50, p90, p99: {np.percentile(self.ttfts, 50):.2f}, {np.percentile(self.ttfts, 90):.2f}, {np.percentile(self.ttfts, 99):.2f}"
         )
         logging.info(
-            f"params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.2f}, {self.p90_latency:.2f}, {self.p99_latency:.2f}"
+            f"Params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.2f}, {self.p90_latency:.2f}, {self.p99_latency:.2f}"
         )
         logging.info(
             f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"
