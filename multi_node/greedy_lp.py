@@ -394,7 +394,7 @@ class LPGurobiGreedyTraversal:
         # self.model.setParam("WorkLimit", 0.005)
         self.model.setParam("MIPGap", 0.02)
         # self.model.setParam("Method", 4)
-        self.model.setParam("TimeLimit", 0.005)
+        # self.model.setParam("TimeLimit", 0.005)
 
         self.variables_initialized = False
         self.initialize_or_update_variables()
@@ -427,7 +427,7 @@ class LPGurobiGreedyTraversal:
             total_tokens += self._calculate_children_token_cost(child)
         return total_tokens
 
-    def update_constraints(self, leaf_node, modified_nodes, decode_cost):
+    def update_constraints(self, leaf_node, modified_nodes: set[LPTreeNode], decode_cost):
         self.model.remove(self.model.getConstrs())
         self.model.addConstr(gp.quicksum(self.lp_node.variables) >= 1, "min_one_gpu")
 
@@ -440,8 +440,9 @@ class LPGurobiGreedyTraversal:
 
         for prefix_node in modified_nodes:
             num_tokens_total = self._calculate_children_token_cost(leaf_node) if prefix_node == leaf_node else prefix_node.num_tokens
-            num_tokens_time = 0.148 * num_tokens_total + 22.7
-
+            num_tokens_time = 0.148 * num_tokens_total
+            if prefix_node.is_leaf:
+                num_tokens_time += 22.7
             for gpu_index, var in enumerate(self.lp_node.variables):
                 previous_gpu_selected = gpu_index in leaf_node.gpu_selections  # Assuming gpu_selections tracks selected GPUs
                 recomp_cost = var * (num_tokens_time - previous_gpu_selected * num_tokens_time)
@@ -465,6 +466,8 @@ class LPGurobiGreedyTraversal:
         self, leaf_node: LPTreeNode, modified_nodes: set[LPTreeNode] = None, split_nodes={}, decode_cost=0
     ):
         start_time = time.time()
+        leaf_node.is_leaf = True
+
         self.initialize_or_update_variables()
         for key, value in split_nodes.items():
             self.node_to_gpu_selections[value] = self.node_to_gpu_selections[key]
@@ -483,6 +486,7 @@ class LPGurobiGreedyTraversal:
             self.current_load_cost[gpu] += total_decode_time
             self.current_memory_cost[gpu] += new_total_memory_cost[gpu]
         return time.time() - start_time
+
 
     def update_gpu_selections(self, lp_node, leaf_node):
         selected_gpus = [
@@ -599,9 +603,10 @@ class GurobiGreedyLPScheduler:
             if len(updated_node) == 0:
                 del self.lp_tree_traversal.node_to_gpu_selections[node]
         num_tokens = len(node.value)
-        mistral_tokens_to_prefill_time = lambda x: 0.148 * x + 22.7
-        num_tokens_time = mistral_tokens_to_prefill_time(num_tokens)
-        self.lp_tree_traversal.current_memory_cost[runtime_selected] -= num_tokens_time
+        mistral_tokens_to_prefill_time = 0.148 * num_tokens
+        if node.is_leaf:
+            mistral_tokens_to_prefill_time += 22.7
+        self.lp_tree_traversal.current_memory_cost[runtime_selected] -= mistral_tokens_to_prefill_time
         return len(node.value)
 
     def select_runtime_from_gpu_selections(self, gpu_selections) -> tuple[int, RuntimeSelectionType]:
@@ -636,7 +641,7 @@ class GurobiGreedyLPScheduler:
             # decode_cost =  sampling_params.get("max_new_tokens") * average_tpot_queue_ms
             decode_cost = average_tpot_queue_ms * sampling_params.get("max_new_tokens") * 1000 # 1000 bc converting seconds to miliseconds
             self.rid_to_deocde_cost[request_id] = decode_cost 
-    
+            # request_id -> memory_cost
             node = self.lp_tree_traversal.insert_into_cache_and_solve(input_ids, self.tree_cache, decode_cost)
             solving_time = time.time() - st
 

@@ -110,7 +110,6 @@ def regist_selector(
             )
         elif custom_policy == CustomPolicyType.GREEDY_LP:
             greedy_lp = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes), gpu_configs=gpu_configs)
-            print(f"HERE")
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=greedy_lp,

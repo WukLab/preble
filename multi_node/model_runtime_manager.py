@@ -338,6 +338,7 @@ class ModelDetails:
             #     output.error = "".join(traceback.format_exception(*exc_info))
         #  throughput as token generated per second
         output.scheduling_overhead = scheduling_overhead
+        output.tpot = (output.request_latency - output.ttft) / (output.output_len - 1)
 
         await asyncio.to_thread(
             self.finish_request, text, sampling_params, input_ids, output
