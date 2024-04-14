@@ -36,8 +36,7 @@ def mistral_7b_A6000_sglang_linear(num_batched_tokens: int):
     return forward_time / 1e3
 
 
-def mistral_7b_A6000_sglang_attention(num_reqs, num_attention_tokens, num_unique_kv: int):
-    total_context = num_attention_tokens.sum()
+def mistral_7b_A6000_sglang_attention(num_reqs, total_context, num_unique_kv: int):
     if num_unique_kv is None:
         num_unique_kv = total_context
     if total_context <= 1024:
@@ -49,19 +48,19 @@ def mistral_7b_A6000_sglang_attention(num_reqs, num_attention_tokens, num_unique
             forward_time /= 2
     return forward_time / 1e3
     
-def mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, num_attention_tokens, num_unique_kv = None):
+def mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv = None):
     forward_time = mistral_7b_A6000_sglang_linear(num_batched_tokens) + \
-                   mistral_7b_A6000_sglang_attention(num_reqs, num_attention_tokens, num_unique_kv)
+                   mistral_7b_A6000_sglang_attention(num_reqs, total_context, num_unique_kv)
     return forward_time 
 
 def mistral_7b_A6000_sglang_extend_flashinfer(
     num_reqs, 
     num_batched_tokens, 
-    num_attention_tokens, 
+    total_context, 
     input_id_lens, 
     num_unique_kv = None
 ):
-    base = mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, num_attention_tokens, num_unique_kv)
+    base = mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv)
     attn_quad = 0
     for extend_lengths in input_id_lens:
         if extend_lengths >= 4096:
@@ -73,15 +72,15 @@ def mistral_7b_A6000_sglang_extend_flashinfer(
 def mistrial_7b_A6000_sglang_decode_flashinfer(
     num_reqs, 
     num_batched_tokens, 
-    num_attention_tokens, 
+    total_context, 
     num_unique_kv = None
 ):
-    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, num_attention_tokens, num_unique_kv) / 0.95
+    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.95
 
 
-def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, is_leaf):
+def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context, is_leaf):
     if num_extend_tokens < 192 and not is_leaf:
         print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")
     return mistral_7b_A6000_sglang_extend_flashinfer(
-        1, num_extend_tokens, num_extend_tokens, [num_extend_tokens], num_extend_tokens
+        1, num_extend_tokens, total_context, [num_extend_tokens], num_extend_tokens
     )
