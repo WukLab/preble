@@ -328,7 +328,7 @@ class ModelRpcServer:
                     end.synchronize()
                     total_forward_time += start.elapsed_time(end)
         if total_forward_time > 0:
-            logger.info(
+            logger.debug(
                 f'GPU: {self.current_gpu} '
                 f"forward time: {total_forward_time:.2f} ms"
             )
