@@ -141,20 +141,21 @@ def load_and_run_benchmark(
 
     tic_benchmark = time.time()
     results: List[RequestFuncOutput] = model_details.get_experiment_results(
-        requests, rps, exp_time
+        requests, rps, exp_time, workload_config.send_out_times
     )
     overall_latency = time.time() - tic_benchmark
 
     counts = model_details.request_router.get_model_selection_counts()
+    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
+    detail_log_path = directory + '/' + exp_params.replace(", ", "_").replace("/", "-") + '.json'
     bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(
         tokenizer=tokenizer,
         req_func_outputs=results,
         overall_latency=overall_latency,
         time_limit=exp_time,
         gpu_counts=counts,
-        detail_log_path=f'{directory}/details-{policy}-{custom_policy}-{custom_msg}.json'
+        detail_log_path=detail_log_path,
     )
-    exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     bench_metrics.to_log_file(exp_params)
 
 

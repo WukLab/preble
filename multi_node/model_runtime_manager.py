@@ -196,12 +196,12 @@ class ModelDetails:
         requests: Iterable,
         request_rate: float,
         exp_time: float = 0.0,
+        send_out_times = None,
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
-            simulator.warm_up()
-            print(f"Finished warmup with init")
-            simulator.initialize_all_request_with_rps(requests, request_rate, exp_time)
+            # simulator.warm_up()
+            simulator.initialize_all_request_with_rps(requests, request_rate, exp_time, send_out_times)
             simulator.start_model_forwarding_loop()
             return simulator.run()
         else:
@@ -211,6 +211,7 @@ class ModelDetails:
                     request_rate,
                     self.async_send_request,
                     exp_time,
+                    send_out_times,
                 )
             )
         return results
@@ -221,6 +222,7 @@ class ModelDetails:
         request_rate: float,
         routine,
         exp_time: float = 0.0,
+        send_out_times = None,
     ):
         self.current_experiment_state_time = time.time()
         async def get_request(
@@ -228,14 +230,14 @@ class ModelDetails:
             request_rate: float,
         ):
             input_requests = iter(input_requests)
-            i = 0
-            for request in input_requests:
-                i += 1
-                print(f"Sent request {i}")
+            for i, request in enumerate(input_requests):
                 yield request
                 if request_rate == float("inf"):
                     continue
-                interval = np.random.exponential(1.0 / request_rate)
+                if not send_out_times:
+                    interval = np.random.exponential(1.0 / request_rate)
+                else:
+                    interval = send_out_times[i + 1] - send_out_times[i]
                 await asyncio.sleep(interval)
         if self.start_time is None:
             self.start_time = time.time()
@@ -264,12 +266,12 @@ class ModelDetails:
             raise
 
     async def async_send_request(
-        self, text=None, sampling_params=None, input_ids=None
+        self, text=None, sampling_params=None, input_ids=None, rid=None,
     ) -> RequestFuncOutput: 
         start_time = time.time()
         st = time.perf_counter()
-
-        rid = random_uuid_string()
+        if rid is None:
+            rid = random_uuid_string()
         sampling_params["request_id"] = rid
         try:
             runtime_idx = await asyncio.to_thread(
@@ -288,6 +290,8 @@ class ModelDetails:
             'stream': True
         }
         output = RequestFuncOutput()
+        output.rid = rid
+        output.prompt_text = text[:20]
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
         output.runtime_selected = runtime_idx
@@ -299,43 +303,54 @@ class ModelDetails:
             self.request_sent_time.append(time.time() - self.start_time)
             ttft = 0
             most_recent_timestamp = st
-            # try:
-            async with session.post(url=api_url, json=payload) as response:
-                if response.status == 200:
-                    async for chunk in response.content:
-                        chunk = chunk.strip()
-                        if not chunk:
-                            continue
+            try:
+              async with session.post(url=api_url, json=payload) as response:
+                  if response.status == 200:
+                      async for chunk in response.content:
+                          chunk = chunk.strip()
+                          if not chunk:
+                              continue
 
-                        chunk = remove_prefix(chunk.decode("utf-8"), "data:").strip()
-                        if chunk == "[DONE]":
-                            output.success = True
-                        else:
-                            data = json.loads(chunk)
-                            timestamp = time.perf_counter()
-                            # First token
-                            if ttft == 0:
-                                ttft = time.perf_counter() - st
-                                output.ttft = ttft
+                          chunk = remove_prefix(chunk.decode("utf-8"), "data:").strip()
+                          if chunk == "[DONE]":
+                              output.success = True
+                          else:
+                              data = json.loads(chunk)
+                              timestamp = time.perf_counter()
+                              # First token
+                              if ttft == 0:
+                                  ttft = time.perf_counter() - st
+                                  output.ttft = ttft
 
-                            # Decoding phase
-                            else:
-                                output.itl.append(timestamp -
-                                                most_recent_timestamp)
+                              # Decoding phase
+                              else:
+                                  data = json.loads(chunk)
+                                  timestamp = time.perf_counter()
+                                  # First token
+                                  if ttft == 0:
+                                      ttft = time.perf_counter() - st
+                                      output.ttft = ttft
 
-                            most_recent_timestamp = timestamp
-                        output.request_latency = time.perf_counter() - st
-                        output.generated_text = data["text"]
-                        output.output_len = data['meta_info']['completion_tokens']
-                    output.global_time = time.time() - self.current_experiment_state_time
-                    # print(data["meta_info"])
-                else:
-                    output.error = response.reason
-                    output.success = False
-            # except Exception as e:
-            #     output.success = False
-            #     exc_info = sys.exc_info()
-            #     output.error = "".join(traceback.format_exception(*exc_info))
+                                  # Decoding phase
+                                  else:
+                                      output.itl.append(timestamp -
+                                                      most_recent_timestamp)
+
+                                  most_recent_timestamp = timestamp
+                              output.request_latency = time.perf_counter() - st
+                              output.generated_text = data["text"]
+                              output.output_len = data['meta_info']['completion_tokens']
+                              output.arrival_time = data['meta_info']['arrival_time'] - self.current_experiment_state_time
+                              output.append_to_queue_time = data['meta_info']['append_to_queue_time'] - self.current_experiment_state_time
+                          output.global_time = time.time() - self.current_experiment_state_time
+                          # print(data["meta_info"])
+                      else:
+                          output.error = response.reason
+                          output.success = False
+            except Exception:
+                output.success = False
+                exc_info = sys.exc_info()
+                output.error = "".join(traceback.format_exception(*exc_info))
         #  throughput as token generated per second
         output.scheduling_overhead = scheduling_overhead
         output.tpot = (output.request_latency - output.ttft) / (output.output_len - 1)

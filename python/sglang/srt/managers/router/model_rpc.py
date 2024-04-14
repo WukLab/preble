@@ -52,9 +52,9 @@ class ModelRpcServer:
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
         self.gpu_config = gpu_config
-        # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
-        self.use_sleep_forwarding = False
-        # logging.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
+        self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
+        # self.use_sleep_forwarding = False
+        logger.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
         self.tp_rank = tp_rank
         self.tp_size = server_args.tp_size
@@ -332,13 +332,15 @@ class ModelRpcServer:
         #         f'GPU: {self.current_gpu} '
         #         f"forward time: {total_forward_time:.2f} ms"
         #     )
+
         return forward_time
     
     def handle_generate_request(
         self,
         recv_req: TokenizedGenerateReqInput,
     ):
-        req = Req(recv_req.rid, recv_req.input_text, recv_req.input_ids)
+        req = Req(recv_req.rid, recv_req.input_text, recv_req.input_ids, 
+                  recv_req.arrival_time, recv_req.append_to_queue_time)
         req.pixel_values = recv_req.pixel_values
         if req.pixel_values is not None:
             req.pad_value = [
@@ -452,7 +454,6 @@ class ModelRpcServer:
                         req.extend_input_len + req.max_new_tokens()
                     )
                     new_batch_input_tokens += req.extend_input_len
-
         if len(can_run_list) == 0:
             return None
 
@@ -525,6 +526,7 @@ class ModelRpcServer:
         #         f"tree unique ref nodes : {unique_kvs}"
         #         # f"prefix indices: {batch.prefix_lens}"
         #     )
+
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
                 # Forward
@@ -546,7 +548,13 @@ class ModelRpcServer:
                     vocab_size = self.model_config.vocab_size
                     logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                     next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                    time.sleep(self.gpu_config.forward_simulation[0](batch, unique_kvs))
+                    time.sleep(self.gpu_config.forward_simulation[0](
+                        len(batch.reqs),
+                        num_batched_tokens,
+                        num_attention_tokens,
+                        batch.input_id_lengths,
+                        unique_kvs
+                    ))
                     _ = batch.sample(logits)
                     logprobs = normalized_logprobs = last_logprobs = None
                 end_event.record()
@@ -556,7 +564,13 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                forward_time = forward_simulation[0](batch, unique_kvs)
+                forward_time = forward_simulation[0](
+                    len(batch.reqs),
+                    num_batched_tokens,
+                    num_attention_tokens,
+                    batch.input_id_lengths,
+                    unique_kvs
+                )
                 _ = batch.sample(logits)
                 logprobs = normalized_logprobs = last_logprobs = None
             next_token_ids = next_token_ids.cpu().tolist()
@@ -608,7 +622,7 @@ class ModelRpcServer:
 
             retracted_reqs = batch.retract_decode()
             logger.info(
-                "decode out of memory happened, "
+                f"GPU {self.current_gpu}: decode out of memory happened, "
                 f"#retracted_reqs: {len(retracted_reqs)}, "
                 f"#new_token_ratio: {old_ratio:.4f} -> {self.new_token_ratio:.4f}"
             )
@@ -659,6 +673,7 @@ class ModelRpcServer:
         #         f"attention tokens: {num_attention_tokens}, "
         #         f"tree unique ref nodes : {unique_kvs}"
         #     )
+
         forward_time = 0
         # Forward
         if forward_simulation is None:
@@ -676,7 +691,12 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                time.sleep(self.gpu_config.forward_simulation[1](batch, unique_kvs))   
+                time.sleep(self.gpu_config.forward_simulation[1](
+                    len(batch.reqs),
+                    num_batched_tokens,
+                    num_attention_tokens,
+                    unique_kvs
+                ))   
                 _ = batch.sample(logits)
                 last_logprobs = None
             forward_time = time.time() - s
@@ -685,7 +705,12 @@ class ModelRpcServer:
             vocab_size = self.model_config.vocab_size
             logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
             next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation[1](batch, unique_kvs)
+            forward_time = forward_simulation[1](
+                len(batch.reqs),
+                num_batched_tokens,
+                num_attention_tokens,
+                unique_kvs
+            )
             _ = batch.sample(logits)
             last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()
@@ -752,6 +777,8 @@ class ModelRpcServer:
                     + len(req.output_ids)
                     - req.prompt_tokens,
                     "completion_tokens_wo_jump_forward": req.completion_tokens_wo_jump_forward,
+                    "arrival_time": req.arrival_time,
+                    "append_to_queue_time": req.append_to_queue_time,
                 }
                 if req.return_logprob:
                     meta_info["prompt_logprob"] = req.logprob

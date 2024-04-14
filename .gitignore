@@ -178,3 +178,5 @@ tmp*.txt
 *.png
 *.pdf
 *.nsys-rep
+*.ncu-rep
+logs/
