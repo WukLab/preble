@@ -42,7 +42,9 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/greedy_new_equation_sim_hot_cold_rps18_600/exp.log"
-log_file_path = "logs/sim_eq_v2_16K_2r_1800_rps_2/exp.log"
+# log_file_path = "logs/sim_eq_v2_16K_2r_1800_rps_2/exp.log"
+log_file_path = "logs/debug/exp.log"
+
 
 # log_file_path = "logs/sim_hc_debug"
 
@@ -53,8 +55,8 @@ model_name = "mistralai/Mistral-7B-v0.1"
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False),
     GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -119,8 +121,8 @@ workload_configs = create_workload_prefix_configs(configurations_to_test, model_
 # Format {policy - custom policy - message}
 selectors_configs = [
     (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_2h_2c"),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_2h_2c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "5r_2h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1ctp_2.0"),
