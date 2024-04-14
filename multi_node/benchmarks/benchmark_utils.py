@@ -29,6 +29,7 @@ class WorkloadConfig:
     request_rate: float
     requests: List[Dict]
     dataloader: DataLoader
+    send_out_times: List[float]
     exp_time: Optional[float] = float("inf")
 
     def __repr__(self) -> str:

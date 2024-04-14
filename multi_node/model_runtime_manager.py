@@ -196,11 +196,12 @@ class ModelDetails:
         requests: Iterable,
         request_rate: float,
         exp_time: float = 0.0,
+        send_out_times = None,
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
             simulator.warm_up()
-            simulator.initialize_all_request_with_rps(requests, request_rate, exp_time)
+            simulator.initialize_all_request_with_rps(requests, request_rate, exp_time, send_out_times)
             simulator.start_model_forwarding_loop()
             return simulator.run()
         else:
@@ -210,6 +211,7 @@ class ModelDetails:
                     request_rate,
                     self.async_send_request,
                     exp_time,
+                    send_out_times,
                 )
             )
         return results
@@ -220,6 +222,7 @@ class ModelDetails:
         request_rate: float,
         routine,
         exp_time: float = 0.0,
+        send_out_times = None,
     ):
         self.current_experiment_state_time = time.time()
         async def get_request(
@@ -227,11 +230,14 @@ class ModelDetails:
             request_rate: float,
         ):
             input_requests = iter(input_requests)
-            for request in input_requests:
+            for i, request in enumerate(input_requests):
                 yield request
                 if request_rate == float("inf"):
                     continue
-                interval = np.random.exponential(1.0 / request_rate)
+                if not send_out_times:
+                    interval = np.random.exponential(1.0 / request_rate)
+                else:
+                    interval = send_out_times[i + 1] - send_out_times[i]
                 await asyncio.sleep(interval)
         if self.start_time is None:
             self.start_time = time.time()
@@ -279,6 +285,7 @@ class ModelDetails:
             'stream': True
         }
         output = RequestFuncOutput()
+        output.prompt_text = text[:20]
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
 

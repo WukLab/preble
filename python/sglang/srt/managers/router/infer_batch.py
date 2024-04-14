@@ -21,11 +21,12 @@ class FinishReason(Enum):
 
 
 class Req:
-    def __init__(self, rid, input_text, input_ids):
+    def __init__(self, rid, input_text, input_ids, arrival_time):
         self.rid = rid
         self.input_text = input_text
         self.input_ids = input_ids
         self.output_ids = []
+        self.arrival_time = arrival_time
 
         # Since jump forward may retokenize the prompt with partial outputs,
         # we maintain the original prompt length to report the correct usage.
@@ -63,6 +64,7 @@ class Req:
         self.regex_fsm_state = 0
         self.jump_forward_map = None
         self.output_and_jump_forward_str = ""
+        
 
     def max_new_tokens(self):
         return self.sampling_params.max_new_tokens
@@ -177,6 +179,9 @@ class Batch:
     frequency_penalties: torch.Tensor = None
     presence_penalties: torch.Tensor = None
     logit_bias: torch.Tensor = None
+    
+    # for simulator
+    input_id_lengths: List[int] = None
 
     @classmethod
     def init_new(cls, reqs, req_to_token_pool, token_to_kv_pool, tree_cache):
@@ -223,7 +228,8 @@ class Batch:
             seq_lens.append(prefix_lens[-1] + extend_lens[-1])
 
         position_ids_offsets = torch.zeros((bs,), dtype=torch.int32, device=device)
-
+        self.input_id_lengths = extend_lens
+        
         # Alloc mem
         seq_lens, prefix_lens = np.array(seq_lens), np.array(prefix_lens)
         extend_num_tokens = seq_lens.sum() - prefix_lens.sum()
@@ -304,9 +310,12 @@ class Batch:
 
     def retract_decode(self):
         sorted_indices = [i for i in range(len(self.reqs))]
+        # sorted_indices.sort(
+        #     key=lambda i: (len(self.reqs[i].output_ids), -len(self.reqs[i].input_ids)),
+        #     reverse=True,
+        # )
         sorted_indices.sort(
-            key=lambda i: (len(self.reqs[i].output_ids), -len(self.reqs[i].input_ids)),
-            reverse=True,
+            key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
         )
 
         retracted_reqs = []
@@ -383,7 +392,8 @@ class Batch:
         self.input_ids = torch.tensor(input_ids, dtype=torch.int32, device="cuda")
         self.seq_lens.add_(1)
         self.prefix_lens = None
-
+        self.input_id_lengths = [1] * len(input_ids)
+        
         # Alloc mem
         bs = len(self.reqs)
         alloc_res = self.token_to_kv_pool.alloc_contiguous(bs)

@@ -52,9 +52,9 @@ class ModelRpcServer:
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
         self.gpu_config = gpu_config
-        # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
-        self.use_sleep_forwarding = False
-        logging.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
+        self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
+        # self.use_sleep_forwarding = False
+        logger.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
         self.tp_rank = tp_rank
         self.tp_size = server_args.tp_size
@@ -328,7 +328,7 @@ class ModelRpcServer:
                     end.synchronize()
                     total_forward_time += start.elapsed_time(end)
         if total_forward_time > 0:
-            logger.debug(
+            logger.info(
                 f'GPU: {self.current_gpu} '
                 f"forward time: {total_forward_time:.2f} ms"
             )
@@ -338,7 +338,7 @@ class ModelRpcServer:
         self,
         recv_req: TokenizedGenerateReqInput,
     ):
-        req = Req(recv_req.rid, recv_req.input_text, recv_req.input_ids)
+        req = Req(recv_req.rid, recv_req.input_text, recv_req.input_ids, recv_req.arrival_time)
         req.pixel_values = recv_req.pixel_values
         if req.pixel_values is not None:
             req.pad_value = [
@@ -452,7 +452,6 @@ class ModelRpcServer:
                         req.extend_input_len + req.max_new_tokens()
                     )
                     new_batch_input_tokens += req.extend_input_len
-
         if len(can_run_list) == 0:
             return None
 
@@ -514,15 +513,15 @@ class ModelRpcServer:
         forward_time = 0
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
+        unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logging.debug(
+            logger.info(
                 f"GPU: {self.current_gpu} "
                 f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
                 f"num reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
                 f"attention tokens: {num_attention_tokens}, "
-                f"tree unique ref nodes : {unique_kvs}"
+                f"unique kv tokens: {unique_kvs}"
                 # f"prefix indices: {batch.prefix_lens}"
             )
         if batch.extend_num_tokens != 0:
@@ -608,7 +607,7 @@ class ModelRpcServer:
 
             retracted_reqs = batch.retract_decode()
             logger.info(
-                "decode out of memory happened, "
+                f"GPU {self.current_gpu}: decode out of memory happened, "
                 f"#retracted_reqs: {len(retracted_reqs)}, "
                 f"#new_token_ratio: {old_ratio:.4f} -> {self.new_token_ratio:.4f}"
             )
@@ -650,14 +649,14 @@ class ModelRpcServer:
 
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
+        unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logging.debug(
+            logger.info(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
                 f"attention tokens: {num_attention_tokens}, "
-                f"tree unique ref nodes : {unique_kvs}"
+                f"unique kv tokens: {unique_kvs}"
             )
         forward_time = 0
         # Forward

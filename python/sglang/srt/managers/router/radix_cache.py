@@ -2,7 +2,7 @@ import heapq
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, List
 
 import torch
 
@@ -98,16 +98,39 @@ class RadixCache:
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
                 
-    def get_num_referenced_nodes(self):
-        def _total_size_helper(node: TreeNode):
-            if node.ref_counter == 0:
+    def total_unique_kv_tokens(self, reqs):
+        seen = set()
+        
+        # length of token is not in tree, calculated independently regardless
+        def _traverse(node, length):
+            while node != self.root_node:
+                if node.ref_counter > 0:
+                    seen.add(node)
+                    length -= len(node.value)
+                node = node.parent
+            return length
+            
+        total_tokens = 0
+        for req in reqs:
+            total_tokens += _traverse(req.last_node, len(req.input_ids) + len(req.output_ids))
+        for node in seen:
+            total_tokens += len(node.value)
+        return total_tokens
+    
+    def total_shared_token_by_count(self):
+        def _helper(node: TreeNode):
+            if node.ref_counter <= 1:
                 return 0
-            x = len(node.value)
+            x = len(node.value) * (node.ref_counter - 1)
             for child in node.children.values():
-                x += _total_size_helper(child)
+                x += _helper(child)
             return x
-        return _total_size_helper(self.root_node)
-
+        
+        sum_shared = 0
+        for child in self.root_node.children.values():
+            sum_shared += _helper(child)    
+        return sum_shared
+    
     def inc_ref_counter(self, node):
         delta = 0
         while node != self.root_node:

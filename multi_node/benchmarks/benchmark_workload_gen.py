@@ -255,6 +255,10 @@ class WorkloadPrefixDataLoader(DataLoader):
         plt.hist(prompt_lens)
         plt.savefig(f"react_prompt_length.png")
         return workload
+    
+    @staticmethod
+    def is_hot(output):
+        return output.prompt_text.startswith("Workload ")
 
 class ToolBenchDataLoader(DataLoader):
     def __init__(
@@ -416,15 +420,14 @@ class OracleHotCold(CustomRuntimeSelector):
         self.trace[request_id] = text[:50]
         for i in range(self.num_workloads):
             if text.startswith(f"Workload {i} "):
-                # return i % (num_nodes // 2)
-                return 0
+                return i % (num_nodes // 2)
+                # return i % 2
                 # return i % (num_nodes - 1)
                 # return num_nodes - 1
 
         # return num_nodes - 1 
-        return random.randint(1, 3)
-        # return random.randint(num_nodes // 2, num_nodes - 1)
-        # return random.randint(0, 1)
+        # return random.randint(2, 4)
+        return random.randint(num_nodes // 2, num_nodes - 1)
 
 @dataclass
 class TBOracle:

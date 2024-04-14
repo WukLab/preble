@@ -78,6 +78,7 @@ class TokenizedGenerateReqInput:
     return_logprob: bool
     logprob_start_len: int
     stream: bool
+    arrival_time: float
 
 @dataclass
 class SchedulingMetricsReqInput:

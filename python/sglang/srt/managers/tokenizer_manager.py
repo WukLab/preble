@@ -226,6 +226,7 @@ class TokenizerManager:
         if self.to_create_loop:
             await self.create_handle_loop()
 
+        arrival_time = time.time()
         is_single = isinstance(obj.text, str)
 
         if is_single:
@@ -257,6 +258,7 @@ class TokenizerManager:
                 return_logprob=obj.return_logprob,
                 logprob_start_len=obj.logprob_start_len,
                 stream=obj.stream,
+                arrival_time=arrival_time,
             )
             self.send_to_router.send_pyobj(tokenized_obj)
 

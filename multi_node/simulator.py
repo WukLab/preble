@@ -270,17 +270,29 @@ class Simulation:
         # return list(self.request_output.values())
     
     # requests: List[Dict[str, Dict, List]]
-    def initialize_all_request_with_rps(self, requests, rps: float, time: float):
+    def initialize_all_request_with_rps(
+        self, 
+        requests, 
+        rps,
+        time,
+        send_out_times=None, 
+    ):
         self.time_litmit = time
-        assert len(requests) >= int(rps * time)
-        send_time = self.global_clock
-        for request in requests:
-            self.add_event(SendRequestEvent(send_time, request))
-            if rps == float('inf'):
-                interval = 0
-            else:
-                interval = np.random.exponential(1 / rps)
-            send_time += interval
+        if rps != float('inf') and time != float('inf'):
+            assert len(requests) >= int(rps * time)
+        
+        if not send_out_times:
+            send_time = self.global_clock
+            for request in requests:
+                self.add_event(SendRequestEvent(send_time, request))
+                if rps == float('inf'):
+                    interval = 0
+                else:
+                    interval = np.random.exponential(1 / rps)
+                send_time += interval
+        else:
+            for request, send_time in zip(requests, send_out_times):
+                self.add_event(SendRequestEvent(send_time, request))
     
     def start_model_forwarding_loop(self):
         for i in range(len(self.runtimes)):
@@ -371,6 +383,7 @@ class GenerateRequestEvent(SimulationEvent):
                 return_logprob=obj.return_logprob,
                 logprob_start_len=obj.logprob_start_len,
                 stream=obj.stream,
+                arrival_time=self.time,
             )
             overhead = time.time() - start
             self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
