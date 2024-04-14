@@ -3,9 +3,10 @@ import random
 from benchmark_utils import WorkloadConfig
 from benchmark_workload_gen import WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType
 from typing import Iterator
+import numpy as np
+import uuid
 
-def create_workload_prefix_configs(configurations_to_test, model_name, exp_time):
-    workload_configs = []
+def create_workload_prefix_configs(configurations_to_test, model_name, exp_time, num_examples=4):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     for config in configurations_to_test:
         num_workloads, random_ratio, num_requests, request_rate = config
@@ -15,22 +16,31 @@ def create_workload_prefix_configs(configurations_to_test, model_name, exp_time)
             num_workloads,
             num_requests,
             tokenizer,
-            num_in_context_examples=4,
+            num_in_context_examples=num_examples,
             output_len=64,
             distribution_of_non_shared=random_ratio,
         )
         requests = dataloader.generate_workload(None)
         random.shuffle(requests)
+        send_out_times = [0]
+        for i in range(num_requests - 1):
+            if request_rate == float('inf'):
+                interval = 0
+            else:
+                interval = np.random.exponential(1 / request_rate)
+            send_out_times.append(send_out_times[-1] + interval)
+        send_out_times.append(send_out_times[-1]) # for the actual run to calculate last dummy interval
         workload_config = WorkloadConfig(
-                num_workloads,
-                random_ratio,
-                num_requests,
-                request_rate,
-                requests,
-                dataloader,
-                exp_time=exp_time,
-            )
-    yield workload_configs
+            num_workloads,
+            random_ratio,
+            num_requests,
+            request_rate,
+            requests,
+            dataloader,
+            send_out_times=send_out_times,
+            exp_time=exp_time,
+        )
+        yield workload_config
 
 def create_toolbench_data_loader(configurations_to_test, model_name, exp_time, data_path, load_dist, k=None) -> Iterator[WorkloadConfig]:
     workload_configs = []

@@ -39,6 +39,7 @@ def profile_prefill(model_client: ModelRpcClient, num_mul, num_prompt, ctx_len, 
             return_logprob=None,
             logprob_start_len=None,
             stream=False,
+            arrival_time=0.0,
         )
         model_server.handle_generate_request(tokenized_obj)
     forward_time_events = model_server.forward_step()
@@ -71,6 +72,7 @@ def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_st
             return_logprob=None,
             logprob_start_len=None,
             stream=False,
+            arrival_time=0.0,
         )
         inflight.add(tokenized_obj.rid)
         model_server.handle_generate_request(tokenized_obj)
@@ -100,6 +102,7 @@ def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, t
             return_logprob=None,
             logprob_start_len=None,
             stream=True,
+            arrival_time=0.0,
         )
         reqs.append(tokenized_obj)
         
@@ -144,6 +147,7 @@ def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_s
             return_logprob=None,
             logprob_start_len=None,
             stream=True,
+            arrival_time=0.0
         )
         model_server.handle_generate_request(tokenized_obj)
     

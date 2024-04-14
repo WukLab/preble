@@ -73,7 +73,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )
