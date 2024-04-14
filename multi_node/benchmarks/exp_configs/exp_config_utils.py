@@ -4,6 +4,7 @@ from benchmark_utils import WorkloadConfig
 from benchmark_workload_gen import WorkloadPrefixDataLoader, ToolBenchDataLoader
 from typing import Iterator
 import numpy as np
+import uuid
 
 def create_workload_prefix_configs(configurations_to_test, model_name, exp_time, num_examples=4):
     tokenizer = AutoTokenizer.from_pretrained(model_name)

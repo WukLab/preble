@@ -200,7 +200,7 @@ class ModelDetails:
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
-            simulator.warm_up()
+            # simulator.warm_up()
             simulator.initialize_all_request_with_rps(requests, request_rate, exp_time, send_out_times)
             simulator.start_model_forwarding_loop()
             return simulator.run()
@@ -265,12 +265,12 @@ class ModelDetails:
             raise
 
     async def async_send_request(
-        self, text=None, sampling_params=None, input_ids=None
+        self, text=None, sampling_params=None, input_ids=None, rid=None,
     ) -> RequestFuncOutput: 
         start_time = time.time()
         st = time.perf_counter()
-
-        rid = random_uuid_string()
+        if rid is None:
+            rid = random_uuid_string()
         sampling_params["request_id"] = rid
         runtime = await asyncio.to_thread(
             self.select_runtime_with_identifiers, text, sampling_params, input_ids
@@ -285,6 +285,7 @@ class ModelDetails:
             'stream': True
         }
         output = RequestFuncOutput()
+        output.rid = rid
         output.prompt_text = text[:20]
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
@@ -323,6 +324,8 @@ class ModelDetails:
                             output.request_latency = time.perf_counter() - st
                             output.generated_text = data["text"]
                             output.output_len = data['meta_info']['completion_tokens']
+                            output.arrival_time = data['meta_info']['arrival_time'] - self.current_experiment_state_time
+                            output.append_to_queue_time = data['meta_info']['append_to_queue_time'] - self.current_experiment_state_time
                         output.global_time = time.time() - self.current_experiment_state_time
                         # print(data["meta_info"])
                     else:

@@ -21,12 +21,13 @@ class FinishReason(Enum):
 
 
 class Req:
-    def __init__(self, rid, input_text, input_ids, arrival_time):
+    def __init__(self, rid, input_text, input_ids, arrival_time, append_to_queue_time):
         self.rid = rid
         self.input_text = input_text
         self.input_ids = input_ids
         self.output_ids = []
         self.arrival_time = arrival_time
+        self.append_to_queue_time = append_to_queue_time
 
         # Since jump forward may retokenize the prompt with partial outputs,
         # we maintain the original prompt length to report the correct usage.

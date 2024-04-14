@@ -234,6 +234,7 @@ class WorkloadPrefixDataLoader(DataLoader):
                 {
                     "text": prompt,
                     "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
                 }
             )
         # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
@@ -246,6 +247,7 @@ class WorkloadPrefixDataLoader(DataLoader):
                 {
                     "text": prompt,
                     "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
                 }
             )
         self.add_input_token_ids_to_workload(workload)

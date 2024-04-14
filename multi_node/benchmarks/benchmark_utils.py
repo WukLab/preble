@@ -52,6 +52,7 @@ class MajorExperimentArgs:
 
 @dataclass
 class RequestFuncOutput:
+    rid: str = ""
     prompt_text: str = ""
     generated_text: str = ""
     success: bool = False
@@ -65,6 +66,8 @@ class RequestFuncOutput:
     tpot: float = None
     prefill_decode_ratio: float = None
     send_out_time: float = 0.0
+    arrival_time: float = 0.0
+    append_to_queue_time: float = 0.0
     route_dest: int = None
     scheduling_overhead: float = 0.0
 
@@ -133,7 +136,9 @@ class BenchmarkMetrics:
         if detail_log_path is None:
             detail_log_path = './detail_stats.json'
         with open(detail_log_path, "w") as f:
-            json.dump([asdict(result) for result in req_func_outputs], f, indent=4)
+            json.dump([asdict(result) for result in 
+                       sorted(req_func_outputs, key=lambda x: x.send_out_time)], 
+                      f, indent=4)
         ttfts = [result.ttft for result in req_func_outputs if result.ttft]
         tpots = [result.tpot for result in req_func_outputs if result.tpot]
         overall_latency = overall_latency

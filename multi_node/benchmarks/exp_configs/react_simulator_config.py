@@ -42,7 +42,7 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/greedy_new_equation_sim_hot_cold_rps18_600/exp.log"
-log_file_path = "logs/sim_sleep_eq_v2_16K_2r_1800_rps_2/exp.log"
+log_file_path = "logs/sim_eq_v2_16K_2r_1800_rps_2/exp.log"
 
 # log_file_path = "logs/sim_hc_debug"
 
@@ -132,7 +132,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

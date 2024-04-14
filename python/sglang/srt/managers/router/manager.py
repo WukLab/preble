@@ -111,6 +111,7 @@ class RouterManager:
             if isinstance(recv_req, DumpTrace):
                 await self.dump_trace(recv_req)
                 continue
+            recv_req.append_to_queue_time = time.time()
             self.recv_reqs.append(recv_req)
     
     async def dump_trace(self, recv_req: DumpTrace):

@@ -310,14 +310,15 @@ class SendRequestEvent(SimulationEvent):
     def advance_to_schedule_time(self, simulator: "Simulation"):
         simulator.global_clock = max(simulator.global_clock, self.time)
         
-    def select_and_prepare_input(self, simulator: Simulation, text, sampling_params, input_ids):
+    def select_and_prepare_input(self, simulator: Simulation, text, sampling_params, input_ids, rid=None):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
-        request_id = random_uuid_string()
-        runtime_id = simulator.router.select_runtime(text, experiment_id, request_id, input_ids)
+        if rid is None:
+            rid = random_uuid_string()
+        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids)
         generate_input = GenerateReqInput(
             text=text,
             sampling_params=sampling_params,
-            rid=request_id,
+            rid=rid,
             stream=True,
         )
         return runtime_id, generate_input
@@ -329,6 +330,7 @@ class SendRequestEvent(SimulationEvent):
         overhead = time.time() - start
         self.update_lock(overhead, simulator)
         simulator.request_output[generate_input.rid] = RequestFuncOutput(
+            rid=generate_input.rid,
             prompt_text=self.request['text'][:20],
             prompt_len=len(self.request['input_ids']), 
             send_out_time=self.time,
@@ -352,6 +354,7 @@ class GenerateRequestEvent(SimulationEvent):
         
     def process_event(self, simulator: Simulation):
         start = time.time()
+        simulator.request_output[self.request.rid].arrival_time = self.time
         obj = self.request
         obj.post_init()
         is_single = isinstance(obj.text, str)
@@ -389,9 +392,23 @@ class GenerateRequestEvent(SimulationEvent):
             self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
             # self.update_lock(0, simulator, ServerRuntimeSimulator.Process.TOKENIZER)
             # logging.debug(f"{self.runtime_id}: tokenized req added at {runtime.tokenizer_clock}, overhead {overhead}")
-            runtime.manager_recv_reqs.append(tokenized_obj)
+            # runtime.manager_recv_reqs.append(tokenized_obj)
+            simulator.add_event(AddToManagerQueueEvent(runtime.tokenizer_clock, tokenized_obj, self.runtime_id))
         else:
             raise NotImplementedError("Batch request not supported")
+
+class AddToManagerQueueEvent(SimulationEvent):
+    def __init__(self, time, tokenized_obj, runtime_id):
+        super().__init__("add_to_manager_queue", time, runtime_id)
+        self.tokenized_obj = tokenized_obj
+    
+    def advance_to_schedule_time(self, simulator: Simulation):
+        pass
+    
+    def process_event(self, simulator: Simulation):
+        runtime = simulator.runtimes[self.runtime_id]
+        simulator.request_output[self.tokenized_obj.rid].append_to_queue_time = self.time
+        runtime.manager_recv_reqs.append(self.tokenized_obj)
 
 
 class ModelStepEvent(SimulationEvent):

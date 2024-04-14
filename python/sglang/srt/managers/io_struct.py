@@ -79,6 +79,7 @@ class TokenizedGenerateReqInput:
     logprob_start_len: int
     stream: bool
     arrival_time: float
+    append_to_queue_time: float = 0.0
 
 @dataclass
 class SchedulingMetricsReqInput:

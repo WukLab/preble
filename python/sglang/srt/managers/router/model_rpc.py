@@ -338,7 +338,8 @@ class ModelRpcServer:
         self,
         recv_req: TokenizedGenerateReqInput,
     ):
-        req = Req(recv_req.rid, recv_req.input_text, recv_req.input_ids, recv_req.arrival_time)
+        req = Req(recv_req.rid, recv_req.input_text, recv_req.input_ids, 
+                  recv_req.arrival_time, recv_req.append_to_queue_time)
         req.pixel_values = recv_req.pixel_values
         if req.pixel_values is not None:
             req.pad_value = [
@@ -515,7 +516,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logger.info(
+            logger.debug(
                 f"GPU: {self.current_gpu} "
                 f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
                 f"num reqs: {len(batch.reqs)}, "
@@ -651,7 +652,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logger.info(
+            logger.debug(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "
@@ -751,6 +752,8 @@ class ModelRpcServer:
                     + len(req.output_ids)
                     - req.prompt_tokens,
                     "completion_tokens_wo_jump_forward": req.completion_tokens_wo_jump_forward,
+                    "arrival_time": req.arrival_time,
+                    "append_to_queue_time": req.append_to_queue_time,
                 }
                 if req.return_logprob:
                     meta_info["prompt_logprob"] = req.logprob
