@@ -52,7 +52,7 @@ log = logging.getLogger(__name__)
 
 
 def regist_selector(
-    policy, custom_policy, model_details: ModelDetails, workload_config: WorkloadConfig
+    policy, custom_policy, model_details: ModelDetails, workload_config: WorkloadConfig, gpu_configs
 ):
     if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
         if custom_policy == CustomPolicyType.ORACLE:
@@ -109,7 +109,8 @@ def regist_selector(
                 custom_runtime_selector=glpm,
             )
         elif custom_policy == CustomPolicyType.GREEDY_LP:
-            greedy_lp = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes))
+            greedy_lp = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes), gpu_configs=gpu_configs)
+            print(f"HERE")
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=greedy_lp,
@@ -124,6 +125,7 @@ def load_and_run_benchmark(
     policy,
     custom_policy=None,
     custom_msg="",
+    gpu_configs=None
 ):
     num_workloads = workload_config.num_prefix_patterns
     distribution_of_non_shared = workload_config.random_ratio
@@ -136,7 +138,7 @@ def load_and_run_benchmark(
     logging.info(
         f"=====STARTING Policy {policy}-{custom_policy}:{custom_msg}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
-    regist_selector(policy, custom_policy, model_details, workload_config)
+    regist_selector(policy, custom_policy, model_details, workload_config,gpu_configs=gpu_configs)
 
     tic_benchmark = time.time()
     results: List[RequestFuncOutput] = model_details.get_experiment_results(
@@ -159,6 +161,7 @@ def load_and_run_benchmark(
 
 def test_oracle_random_basic(exp_args: MajorExperimentArgs):
     loader = MultiNodeLoader(exp_args.simulate)
+    gpu_configs = exp_args.gpu_configs
     for workload_config in exp_args.workload_configs:
         logging.info(workload_config)
         logging.info(
@@ -169,7 +172,8 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             model_details = loader.load_model(
                 **exp_args.runtime_args
             )  # TODO: clear cache instead of reload
-            load_and_run_benchmark(model_details, workload_config, *selector_config)
+            policy, custom_policy, custom_msg = selector_config
+            load_and_run_benchmark(model_details, workload_config, policy, custom_policy, custom_msg, gpu_configs=gpu_configs)
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
             gc.collect()
@@ -177,7 +181,7 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    from benchmarks.exp_configs.react_simulator_config import exp_args
+    from benchmarks.exp_configs.react_simulator_config_greedy import exp_args
     # from benchmarks.exp_configs.debug_simulator import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist

@@ -54,7 +54,7 @@ class ModelRpcServer:
         self.gpu_config = gpu_config
         # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
         self.use_sleep_forwarding = False
-        logging.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
+        # logging.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
         self.tp_rank = tp_rank
         self.tp_size = server_args.tp_size
@@ -327,11 +327,11 @@ class ModelRpcServer:
                 if start and end:
                     end.synchronize()
                     total_forward_time += start.elapsed_time(end)
-        if total_forward_time > 0:
-            logger.info(
-                f'GPU: {self.current_gpu} '
-                f"forward time: {total_forward_time:.2f} ms"
-            )
+        # if total_forward_time > 0:
+        #     logger.info(
+        #         f'GPU: {self.current_gpu} '
+        #         f"forward time: {total_forward_time:.2f} ms"
+        #     )
         return forward_time
     
     def handle_generate_request(
@@ -515,16 +515,16 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
-        if self.tp_rank == 0:
-            logging.info(
-                f"GPU: {self.current_gpu} "
-                f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
-                f"num reqs: {len(batch.reqs)}, "
-                f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}, "
-                f"tree unique ref nodes : {unique_kvs}"
-                # f"prefix indices: {batch.prefix_lens}"
-            )
+        # if self.tp_rank == 0:
+        #     logging.info(
+        #         f"GPU: {self.current_gpu} "
+        #         f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
+        #         f"num reqs: {len(batch.reqs)}, "
+        #         f"input ids: {num_batched_tokens}, "
+        #         f"attention tokens: {num_attention_tokens}, "
+        #         f"tree unique ref nodes : {unique_kvs}"
+        #         # f"prefix indices: {batch.prefix_lens}"
+        #     )
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
                 # Forward
@@ -651,14 +651,14 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
-        if self.tp_rank == 0:
-            logging.info(
-                f"GPU: {self.current_gpu} "
-                f"batch.num_reqs: {len(batch.reqs)}, "
-                f"input ids: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}, "
-                f"tree unique ref nodes : {unique_kvs}"
-            )
+        # if self.tp_rank == 0:
+        #     logging.info(
+        #         f"GPU: {self.current_gpu} "
+        #         f"batch.num_reqs: {len(batch.reqs)}, "
+        #         f"input ids: {num_batched_tokens}, "
+        #         f"attention tokens: {num_attention_tokens}, "
+        #         f"tree unique ref nodes : {unique_kvs}"
+        #     )
         forward_time = 0
         # Forward
         if forward_simulation is None:

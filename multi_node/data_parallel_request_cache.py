@@ -16,7 +16,7 @@ class CustomRuntimeSelector:
     NodeID = int
 
     num_nodes: int
-    def runtime_selector(self, text: InputText, request_id: str, input_ids: List) -> NodeID:
+    def runtime_selector(self, text: InputText, request_id: str, input_ids: List, sampling_params) -> NodeID:
         pass
 
     def finish_request(self, text: InputText, request_id: str, input_ids: List, func_output) -> NodeID:
@@ -53,11 +53,11 @@ class DataParallelRequestRouter:
         self.total_nodes = total_nodes
         self.model_selection_stats = []
 
-    def select_runtime(self, text, experiment_id, request_id, input_ids=None) -> int:
+    def select_runtime(self, text, experiment_id, request_id, input_ids=None, sampling_params=None) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
-            selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids)
+            selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids, sampling_params)
         else:
             raise NotImplementedError
         self.model_selection_stats.append(

@@ -1,0 +1,102 @@
+         791 function calls (509 primitive calls) in 0.039 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.037    0.037    0.039    0.039 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:434(traverse_and_optimize)
+    138/1    0.002    0.000    0.002    0.002 {built-in method _abc._abc_subclasscheck}
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:282(__init__)
+    138/1    0.000    0.000    0.002    0.002 /usr/lib/python3.9/abc.py:121(__subclasscheck__)
+        6    0.000    0.000    0.000    0.000 {method 'flush' of '_io.TextIOWrapper' objects}
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:525(<listcomp>)
+        6    0.000    0.000    0.000    0.000 {method 'write' of '_io.TextIOWrapper' objects}
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1514(findCaller)
+       89    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:409(__subclasshook__)
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:18(__init__)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1071(emit)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1284(getLogger)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:939(handle)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1060(flush)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:650(format)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1645(callHandlers)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:2034(getLogger)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:358(getMessage)
+        4    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:218(_acquireLock)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:429(_format)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1436(info)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1565(_log)
+        5    0.000    0.000    0.002    0.000 {built-in method _abc._abc_instancecheck}
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:423(_calculate_children_token_cost)
+     16/8    0.000    0.000    0.000    0.000 {built-in method builtins.hash}
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1689(isEnabledFor)
+       12    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:896(acquire)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/posixpath.py:140(basename)
+       26    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:315(__subclasshook__)
+        5    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:78(_check_methods)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:160(<lambda>)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/posixpath.py:117(splitext)
+       21    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+       16    0.000    0.000    0.000    0.000 {method 'acquire' of '_thread.RLock' objects}
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:916(format)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/genericpath.py:121(_splitext)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:421(usesTime)
+        8    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:262(__subclasshook__)
+        3    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:58(__eq__)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1550(makeRecord)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1591(handle)
+       12    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:903(release)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/posixpath.py:52(normcase)
+       12    0.000    0.000    0.000    0.000 {built-in method builtins.hasattr}
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1178(emit)
+        2    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:51(num_tokens)
+        5    0.000    0.000    0.002    0.000 /usr/lib/python3.9/abc.py:117(__instancecheck__)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:628(usesTime)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1404(__init__)
+        8    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:63(__hash__)
+       10    0.000    0.000    0.000    0.000 {method 'rfind' of 'str' objects}
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:432(format)
+        8    0.000    0.000    0.000    0.000 /usr/lib/python3.9/uuid.py:267(__hash__)
+        9    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:791(filter)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:119(getLevelName)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/os.py:754(encode)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/os.py:674(__getitem__)
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:634(formatMessage)
+        4    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:227(_releaseLock)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1335(_fixupParents)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/threading.py:1358(current_thread)
+       16    0.000    0.000    0.000    0.000 {method 'release' of '_thread.RLock' objects}
+        6    0.000    0.000    0.000    0.000 {method 'find' of 'str' objects}
+        6    0.000    0.000    0.000    0.000 {built-in method time.time}
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:767(__contains__)
+        2    0.000    0.000    0.000    0.000 /usr/lib/python3.9/uuid.py:239(__eq__)
+        6    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+        6    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:283(__subclasshook__)
+        9    0.000    0.000    0.000    0.000 {built-in method posix.fspath}
+        3    0.000    0.000    0.000    0.000 {built-in method posix.getpid}
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/posixpath.py:41(_get_sep)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/multiprocessing/process.py:189(name)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/threading.py:1093(name)
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:463(<listcomp>)
+        6    0.000    0.000    0.000    0.000 {built-in method _thread.get_ident}
+        3    0.000    0.000    0.000    0.000 {built-in method sys._getframe}
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:362(__subclasshook__)
+        2    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:479(<lambda>)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:771(__init__)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/_collections_abc.py:381(__subclasshook__)
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:464(<listcomp>)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:193(_checkLevel)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1675(getEffectiveLevel)
+        3    0.000    0.000    0.000    0.000 /usr/lib/python3.9/multiprocessing/process.py:37(current_process)
+        1    0.000    0.000    0.000    0.000 {method 'update' of 'set' objects}
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:20(<listcomp>)
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:466(<listcomp>)
+        2    0.000    0.000    0.000    0.000 {method 'items' of 'dict' objects}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:468(<lambda>)
+        1    0.000    0.000    0.000    0.000 {method 'encode' of 'str' objects}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        1    0.000    0.000    0.000    0.000 {method 'values' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 /mnt/data/ssd/sglang_multi_model/multi_node/greedy_lp.py:25(<listcomp>)
+        1    0.000    0.000    0.000    0.000 /usr/lib/python3.9/logging/__init__.py:1276(disable)
+
+

@@ -134,11 +134,11 @@ class ModelDetails:
         for config in gpu_configs:
             load_runtime(config)
 
-    def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
+    def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> int:
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         request_id = sampling_params.pop("request_id", random_uuid_string())
-        runtime_id = self.request_router.select_runtime(text, experiment_id, request_id, input_ids)
-        return self.runtimes[runtime_id]
+        runtime_idx = self.request_router.select_runtime(text, experiment_id, request_id, input_ids, sampling_params)
+        return runtime_idx
 
     def finish_request(self, text, sampling_params, input_ids, func_output: RequestFuncOutput) -> EndpointRuntimeInterface:
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
@@ -152,12 +152,12 @@ class ModelDetails:
         return _func
     
     @async_wrap
-    def async_select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
+    def async_select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> int:
         return self.select_runtime_with_identifiers(text, sampling_params, input_ids)
 
     def generate_request(self, text, sampling_params):
         runtime: EndpointRuntimeInterface = (
-            self.select_runtime_with_identifiers(text, sampling_params)
+            self.runtimes[self.select_runtime_with_identifiers(text, sampling_params)]
         )
         start_time = time.time()
         output =  requests.post(
@@ -200,6 +200,7 @@ class ModelDetails:
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
             simulator.warm_up()
+            print(f"Finished warmup with init")
             simulator.initialize_all_request_with_rps(requests, request_rate, exp_time)
             simulator.start_model_forwarding_loop()
             return simulator.run()
@@ -227,7 +228,10 @@ class ModelDetails:
             request_rate: float,
         ):
             input_requests = iter(input_requests)
+            i = 0
             for request in input_requests:
+                i += 1
+                print(f"Sent request {i}")
                 yield request
                 if request_rate == float("inf"):
                     continue
@@ -243,7 +247,8 @@ class ModelDetails:
 
             if exp_time != float("inf"):
                 remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
-                done, pending = await asyncio.wait(tasks, timeout=remaining_time)
+                print(f"REMAINING TIME", remaining_time)
+                done, pending = await asyncio.wait(tasks, timeout=remaining_time + 10)
             else:
                 done, pending = await asyncio.wait(tasks)
             for task in pending:
@@ -266,9 +271,13 @@ class ModelDetails:
 
         rid = random_uuid_string()
         sampling_params["request_id"] = rid
-        runtime = await asyncio.to_thread(
-            self.select_runtime_with_identifiers, text, sampling_params, input_ids
-        )
+        try:
+            runtime_idx = await asyncio.to_thread(
+                self.select_runtime_with_identifiers, text, sampling_params, input_ids
+            )
+        except AttributeError as e:
+            return RequestFuncOutput(success=False, error=str(e))
+        runtime = self.runtimes[runtime_idx]
         scheduling_overhead = time.time() - start_time
 
         api_url = runtime.generate_url
@@ -281,50 +290,52 @@ class ModelDetails:
         output = RequestFuncOutput()
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
+        output.runtime_selected = runtime_idx
+        output.max_new_tokens = sampling_params.get("max_new_tokens", 45)
 
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
-        timeout = aiohttp.ClientTimeout(total=3 * 3600)
+        timeout = aiohttp.ClientTimeout(total=3 * 60)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             self.request_sent_time.append(time.time() - self.start_time)
             ttft = 0
             most_recent_timestamp = st
-            try:
-                async with session.post(url=api_url, json=payload) as response:
-                    if response.status == 200:
-                        async for chunk in response.content:
-                            chunk = chunk.strip()
-                            if not chunk:
-                                continue
+            # try:
+            async with session.post(url=api_url, json=payload) as response:
+                if response.status == 200:
+                    async for chunk in response.content:
+                        chunk = chunk.strip()
+                        if not chunk:
+                            continue
 
-                            chunk = remove_prefix(chunk.decode("utf-8"), "data:").strip()
-                            if chunk == "[DONE]":
-                                output.success = True
+                        chunk = remove_prefix(chunk.decode("utf-8"), "data:").strip()
+                        if chunk == "[DONE]":
+                            output.success = True
+                        else:
+                            data = json.loads(chunk)
+                            timestamp = time.perf_counter()
+                            # First token
+                            if ttft == 0:
+                                ttft = time.perf_counter() - st
+                                output.ttft = ttft
+
+                            # Decoding phase
                             else:
-                                data = json.loads(chunk)
-                                timestamp = time.perf_counter()
-                                # First token
-                                if ttft == 0:
-                                    ttft = time.perf_counter() - st
-                                    output.ttft = ttft
+                                output.itl.append(timestamp -
+                                                most_recent_timestamp)
 
-                                # Decoding phase
-                                else:
-                                    output.itl.append(timestamp -
-                                                    most_recent_timestamp)
-
-                                most_recent_timestamp = timestamp
-                            output.request_latency = time.perf_counter() - st
-                            output.generated_text = data["text"]
-                            output.output_len = data['meta_info']['completion_tokens']
-                        output.global_time = time.time() - self.current_experiment_state_time
-                        # print(data["meta_info"])
-                    else:
-                        output.error = response.reason
-                        output.success = False
-            except Exception:
-                output.success = False
-                exc_info = sys.exc_info()
-                output.error = "".join(traceback.format_exception(*exc_info))
+                            most_recent_timestamp = timestamp
+                        output.request_latency = time.perf_counter() - st
+                        output.generated_text = data["text"]
+                        output.output_len = data['meta_info']['completion_tokens']
+                    output.global_time = time.time() - self.current_experiment_state_time
+                    # print(data["meta_info"])
+                else:
+                    output.error = response.reason
+                    output.success = False
+            # except Exception as e:
+            #     output.success = False
+            #     exc_info = sys.exc_info()
+            #     output.error = "".join(traceback.format_exception(*exc_info))
         #  throughput as token generated per second
         output.scheduling_overhead = scheduling_overhead
 
@@ -332,7 +343,6 @@ class ModelDetails:
             self.finish_request, text, sampling_params, input_ids, output
         )
 
-        output.scheduling_overhead = scheduling_overhead
         return output
 
 def remove_prefix(text: str, prefix: str) -> str:

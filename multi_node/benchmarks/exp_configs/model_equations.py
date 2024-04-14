@@ -14,7 +14,7 @@ def llama2_7b_A6000_vllm(batch: Batch):
     forward_time /= 1e3 # to seconds
     return forward_time
 
-def mistral_7b_A6000_sglang_extend_flashinfer(batch: Batch):
+def mistral_7b_A6000_sglang_extend_flashinfer(batch: Batch, provide_tokens=None):
     num_batched_tokens = batch.input_ids.shape[0]
     if num_batched_tokens >= 384:
         forward_time = 0.128 * num_batched_tokens + 9.97

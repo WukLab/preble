@@ -58,8 +58,8 @@ class RouterManager:
                 self.local_start = time.time()
             if self.local_start:
                 gap = time.time() - self.local_start
-                if gap <= 180.0:
-                    logging.debug(f"model step at: {time.time() - self.local_start}")
+                # if gap <= 180.0:
+                #     logging.debug(f"model step at: {time.time() - self.local_start}")
             out_pyobjs = await self.model_client.step(next_step_input)
 
             for obj in out_pyobjs:

@@ -321,6 +321,7 @@ class ToolBenchDataLoader(DataLoader):
             # prob = ss.norm.cdf(xU, scale = 3, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = 3, loc=self.num_patterns//2)
             # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
             # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
+            import matplotlib.pyplot as plt
 
             plt.hist(hist, bins=self.num_patterns)
             plt.savefig(f"zipf_distribution_{k}.png")
@@ -395,7 +396,7 @@ class Oracle(CustomRuntimeSelector):
     num_workloads: int
     trace = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         num_nodes = self.num_nodes
         self.trace[request_id] = text[:50]
         for i in range(self.num_workloads):
@@ -409,7 +410,7 @@ class OracleHotCold(CustomRuntimeSelector):
     num_workloads: int
     trace = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         num_nodes = self.num_nodes
         if num_nodes == 1:
             return 0
@@ -433,7 +434,7 @@ class TBOracle:
     num_nodes: int
     counter = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -452,7 +453,7 @@ class TBOracleB(CustomRuntimeSelector):
     tbl = {}
     counter: int = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -577,7 +578,7 @@ class LoogleOracle(CustomRuntimeSelector):
         self.tbl = {}
         self.counter = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         match = re.search(r"(.*)Question:", text, re.DOTALL)
         if match:
             tool = match.group(1)
