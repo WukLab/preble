@@ -25,7 +25,6 @@ import logging
 from datasets import load_dataset
 import re
 
-
 ReActWorkloadEx1 = """
 Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
 Thought 1: I need to search Colorado orogeny, find the area that the eastern sector of the Colorado orogeny extends into, then find the elevation range of the area.
@@ -193,6 +192,7 @@ class DataLoader:
                 futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
             for future in futures:
                 future.result()
+
 class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
         self,
@@ -286,11 +286,11 @@ class ToolBenchDataLoader(DataLoader):
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
             selected_prefixs = np.random.choice(
-                prefix_stats, self.num_patterns, replace=False
+                prefix_stats, self.num_patterns, replace=True
             )
             for p in selected_prefixs:
                 selected_instances = np.random.choice(
-                    self.data[p], load_threshold, replace=False
+                    self.data[p], load_threshold, replace=True
                 )
                 for e in selected_instances:
                     output_len = len(self.tokenizer(e["output"]).input_ids)
@@ -482,7 +482,6 @@ class LooGLEDataset(DataLoader):
         num_patterns: int,
         total_num_requests: int,
         tokenizer,
-        load_dist,
         crop_max_decode=True,
     ):
         super().__init__(
@@ -490,7 +489,6 @@ class LooGLEDataset(DataLoader):
             num_patterns,
             total_num_requests,
             tokenizer=tokenizer,
-            load_dist=load_dist,
         )
         self.prompt_format = {
             LooGLEDatasetType.SHORT_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",

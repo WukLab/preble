@@ -8,4 +8,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     server_args = ServerArgs.from_cli_args(args)
 
-    launch_server(server_args, None)
+    launch_server(server_args, None, None)
