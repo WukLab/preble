@@ -546,7 +546,13 @@ class ModelRpcServer:
                     vocab_size = self.model_config.vocab_size
                     logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                     next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                    time.sleep(self.gpu_config.forward_simulation[0](batch, unique_kvs))
+                    time.sleep(self.gpu_config.forward_simulation[0](
+                        len(batch.reqs),
+                        num_batched_tokens,
+                        num_attention_tokens,
+                        batch.input_id_lengths,
+                        unique_kvs
+                    ))
                     _ = batch.sample(logits)
                     logprobs = normalized_logprobs = last_logprobs = None
                 end_event.record()
@@ -556,7 +562,13 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                forward_time = forward_simulation[0](batch, unique_kvs)
+                forward_time = forward_simulation[0](
+                    len(batch.reqs),
+                    num_batched_tokens,
+                    num_attention_tokens,
+                    batch.input_id_lengths,
+                    unique_kvs
+                )
                 _ = batch.sample(logits)
                 logprobs = normalized_logprobs = last_logprobs = None
             next_token_ids = next_token_ids.cpu().tolist()
@@ -676,7 +688,12 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                time.sleep(self.gpu_config.forward_simulation[1](batch, unique_kvs))   
+                time.sleep(self.gpu_config.forward_simulation[1](
+                    len(batch.reqs),
+                    num_batched_tokens,
+                    num_attention_tokens,
+                    unique_kvs
+                ))   
                 _ = batch.sample(logits)
                 last_logprobs = None
             forward_time = time.time() - s
@@ -685,7 +702,12 @@ class ModelRpcServer:
             vocab_size = self.model_config.vocab_size
             logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
             next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation[1](batch, unique_kvs)
+            forward_time = forward_simulation[1](
+                len(batch.reqs),
+                num_batched_tokens,
+                num_attention_tokens,
+                unique_kvs
+            )
             _ = batch.sample(logits)
             last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()

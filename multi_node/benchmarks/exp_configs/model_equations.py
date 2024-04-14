@@ -49,23 +49,39 @@ def mistral_7b_A6000_sglang_attention(num_reqs, num_attention_tokens, num_unique
             forward_time /= 2
     return forward_time / 1e3
     
-def mistrial_7b_A6000_sglang_base(batch: Batch, num_unique_kv = None):
-    num_reqs = len(batch.reqs)
-    num_batched_tokens = batch.input_ids.shape[0]
-    num_attention_tokens = batch.seq_lens.cpu().numpy()
+def mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, num_attention_tokens, num_unique_kv = None):
     forward_time = mistral_7b_A6000_sglang_linear(num_batched_tokens) + \
                    mistral_7b_A6000_sglang_attention(num_reqs, num_attention_tokens, num_unique_kv)
     return forward_time 
 
-def mistral_7b_A6000_sglang_extend_flashinfer(batch: Batch, num_unique_kv = None):
-    base = mistrial_7b_A6000_sglang_base(batch, num_unique_kv)
+def mistral_7b_A6000_sglang_extend_flashinfer(
+    num_reqs, 
+    num_batched_tokens, 
+    num_attention_tokens, 
+    input_id_lens, 
+    num_unique_kv = None
+):
+    base = mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, num_attention_tokens, num_unique_kv)
     attn_quad = 0
-    for extend_lengths in batch.input_id_lengths:
+    for extend_lengths in input_id_lens:
         if extend_lengths >= 4096:
             #  -7.37 + 3.86E-03x + 2.16E-06x^2
             attn_quad += -7.37 + 3.86e-3 * extend_lengths + 2.16e-6 * extend_lengths**2
     attn_quad /= 1e3
     return (base + attn_quad) / 0.95
 
-def mistrial_7b_A6000_sglang_decode_flashinfer(batch: Batch, num_unique_kv = None):
-    return mistrial_7b_A6000_sglang_base(batch, num_unique_kv) / 0.95
+def mistrial_7b_A6000_sglang_decode_flashinfer(
+    num_reqs, 
+    num_batched_tokens, 
+    num_attention_tokens, 
+    num_unique_kv = None
+):
+    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, num_attention_tokens, num_unique_kv) / 0.95
+
+
+def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, is_leaf):
+    if num_extend_tokens < 192 and not is_leaf:
+        print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")
+    return mistral_7b_A6000_sglang_extend_flashinfer(
+        1, num_extend_tokens, num_extend_tokens, [num_extend_tokens], num_extend_tokens
+    )
