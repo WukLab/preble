@@ -302,7 +302,6 @@ class SendRequestEvent(SimulationEvent):
     def select_and_prepare_input(self, simulator: Simulation, text, sampling_params, input_ids):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         request_id = random_uuid_string()
-        print(f"Selecting runtime for {request_id}")
         runtime_id = simulator.router.select_runtime(text, experiment_id, request_id, input_ids, sampling_params=sampling_params)
         generate_input = GenerateReqInput(
             text=text,
@@ -411,6 +410,7 @@ class ModelStepEvent(SimulationEvent):
                         request_output.ttft = runtime.manager_clock - request_output.send_out_time
                     request_output.request_latency = runtime.manager_clock - request_output.send_out_time
                     request_output.output_len = len(output_token_ids)
+                    request_output.tpot = (request_output.request_latency - request_output.ttft) / request_output.output_len
                     if finished:
                         request_output.success = True
                         request_output.global_time = runtime.manager_clock

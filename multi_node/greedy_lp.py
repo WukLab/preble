@@ -13,6 +13,8 @@ from enum import Enum, auto
 import logging
 from benchmarks.benchmark_utils import RequestFuncOutput
 import os
+import collections
+import numpy as np
 
 class LpNode:
     def __init__(self, node_id, num_gpus):
@@ -387,6 +389,13 @@ class LPGurobiGreedyTraversal:
         self.model = gp.Model()
         self.model.setParam("OutputFlag", 0)
         self.model.setParam("LogToConsole", 0)
+        self.model.setParam('Seed', 0)
+        self.model.setParam("Threads", 0)
+        # self.model.setParam("WorkLimit", 0.005)
+        self.model.setParam("MIPGap", 0.02)
+        # self.model.setParam("Method", 4)
+        self.model.setParam("TimeLimit", 0.005)
+
         self.variables_initialized = False
         self.initialize_or_update_variables()
         # self.init_cache() # for performance reasons, Presolve an LP. This reduces the cost of the first LP
@@ -418,7 +427,7 @@ class LPGurobiGreedyTraversal:
             total_tokens += self._calculate_children_token_cost(child)
         return total_tokens
 
-    def update_constraints(self, leaf_node, modified_nodes, decode_length):
+    def update_constraints(self, leaf_node, modified_nodes, decode_cost):
         self.model.remove(self.model.getConstrs())
         self.model.addConstr(gp.quicksum(self.lp_node.variables) >= 1, "min_one_gpu")
 
@@ -427,7 +436,7 @@ class LPGurobiGreedyTraversal:
         per_gpu_mem_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         new_total_memory_cost = [0 for _ in range(self.num_gpus)]
 
-        decoding_time = 47 * decode_length
+        decoding_time = decode_cost
 
         for prefix_node in modified_nodes:
             num_tokens_total = self._calculate_children_token_cost(leaf_node) if prefix_node == leaf_node else prefix_node.num_tokens
@@ -453,30 +462,29 @@ class LPGurobiGreedyTraversal:
         return new_total_memory_cost, decoding_time
 
     def traverse_and_optimize(
-        self, leaf_node: LPTreeNode, modified_nodes: set[LPTreeNode] = None, split_nodes={}, decode_length=45
+        self, leaf_node: LPTreeNode, modified_nodes: set[LPTreeNode] = None, split_nodes={}, decode_cost=0
     ):
         start_time = time.time()
         self.initialize_or_update_variables()
         for key, value in split_nodes.items():
             self.node_to_gpu_selections[value] = self.node_to_gpu_selections[key]
 
-        new_total_memory_cost, total_decode_time = self.update_constraints(leaf_node, modified_nodes, decode_length)
-
-        self.model.setParam("Threads", 0)
-        self.model.setParam("TimeLimit", 0.005)
-        self.model.setParam("MIPGap", 0.02)
+        new_total_memory_cost, total_decode_time = self.update_constraints(leaf_node, modified_nodes, decode_cost)
         self.model.optimize()
 
-        # Save gurobi to file
         if self.model.Status == GRB.OPTIMAL:
-            # print('Optimal solution found.')
             pass
         elif self.model.Status == GRB.INFEASIBLE:
             print("Infeasable solution found")
         else:
             pass
-            # print('Feasible solution found.')
-        # todo find placement
+        selected_gpus = self.update_gpu_selections(self.lp_node, leaf_node)
+        for gpu in selected_gpus:
+            self.current_load_cost[gpu] += total_decode_time
+            self.current_memory_cost[gpu] += new_total_memory_cost[gpu]
+        return time.time() - start_time
+
+    def update_gpu_selections(self, lp_node, leaf_node):
         selected_gpus = [
             gpu_id for gpu_id, var in enumerate(self.lp_node.variables) if var.X >= 0.99
         ]
@@ -491,15 +499,8 @@ class LPGurobiGreedyTraversal:
             node.gpu_selections = parent_gpu_selection
             self.node_to_gpu_selections[node] = parent_gpu_selection
             node = node.parent
+        return selected_gpus
         
-        for gpu in selected_gpus:
-            self.current_load_cost[
-                gpu
-            ] += total_decode_time  # Increase by decoding time to each gpu
-            self.current_memory_cost[gpu] += new_total_memory_cost[gpu]
-        # print(f"Time taken: ", time.time() - start_time)
-        return time.time() - start_time
-
     def pretty_print(self, prefix_node, depth_limit=4, tokenizer=None):
         self.pretty_print_helper(
             prefix_node, depth_limit=depth_limit, tokenizer=tokenizer
@@ -539,15 +540,15 @@ class LPGurobiGreedyTraversal:
                 if var.X >= 0.99:
                     prefix_node.gpu_selections.add(gpu_id)
 
-    def completed_request(self, tree_cache, input_ids, decode_length=45):
-        decoding_time = lambda x: 47 * x
-        total_decode_time = decoding_time(decode_length)
+    def completed_request(self, tree_cache, input_ids, decode_cost):
+        # decoding_time = lambda x: 47 * x
+        total_decode_time = decode_cost
         node: LPTreeNode = tree_cache.find_node(input_ids)
         tree_cache.remove_completed_input_ids(input_ids)
         for selection in node.gpu_selections:
             self.current_load_cost[selection] -= total_decode_time
 
-    def insert_into_cache_and_solve(self, input_ids, tree_cache, decode_length=45):
+    def insert_into_cache_and_solve(self, input_ids, tree_cache, decode_cost):
         node_map = self.node_to_gpu_selections
         split_nodes = {}
         modified_nodes = set()
@@ -559,7 +560,7 @@ class LPGurobiGreedyTraversal:
             split_nodes=split_nodes,
         )
         self.traverse_and_optimize(
-            node, modified_nodes=modified_nodes, split_nodes=split_nodes, decode_length=decode_length
+            node, modified_nodes=modified_nodes, split_nodes=split_nodes, decode_cost=decode_cost
         )
         return node
 
@@ -580,9 +581,16 @@ class GurobiGreedyLPScheduler:
 
         self.runtime_caches = [LPRadixCache() for _ in range(num_nodes)]
         self.max_tokens_gpu = [198466, 198466]
-        self.average_tpot = 0.0
+        self.average_tpot = 0.041
         self.counter = 0
-    
+        self.rid_to_deocde_cost = {}
+        self.average_tpot_queue = collections.deque(maxlen=50)
+        self.average_tpot_queue.append(0.041)
+        # self.average_tpot_queue.append(0.041)
+        # self.average_tpot_queue.append(0.041)
+        # self.average_tpot_queue.append(0.041)
+        # self.average_tpot_queue.append(0.041)
+
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
         """Method to handle eviction logic."""
         updated_node = self.lp_tree_traversal.node_to_gpu_selections.get(node)
@@ -624,10 +632,14 @@ class GurobiGreedyLPScheduler:
         start_time = time.time()
         with self.lock:
             st = time.time()
-            print(f"In insert function")
-            node = self.lp_tree_traversal.insert_into_cache_and_solve(input_ids, self.tree_cache, sampling_params.get("max_new_tokens"))
+            average_tpot_queue_ms = np.median(self.average_tpot_queue)
+            # decode_cost =  sampling_params.get("max_new_tokens") * average_tpot_queue_ms
+            decode_cost = average_tpot_queue_ms * sampling_params.get("max_new_tokens") * 1000 # 1000 bc converting seconds to miliseconds
+            self.rid_to_deocde_cost[request_id] = decode_cost 
+    
+            node = self.lp_tree_traversal.insert_into_cache_and_solve(input_ids, self.tree_cache, decode_cost)
             solving_time = time.time() - st
-        
+
             gpu_selections: set[int] = node.gpu_selections
             runtime_selected, selection_type = self.select_runtime_from_gpu_selections(gpu_selections)
             self.load[runtime_selected] = self.load.get(runtime_selected, 0) + 1
@@ -650,7 +662,8 @@ class GurobiGreedyLPScheduler:
         self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
     ):
         with self.lock:
-            self.lp_tree_traversal.completed_request(self.tree_cache, input_ids, func_output.max_new_tokens)
+            self.average_tpot_queue.append(func_output.tpot)
+            self.lp_tree_traversal.completed_request(self.tree_cache, input_ids, self.rid_to_deocde_cost.pop(request_id))
             self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
             tpot = func_output.tpot
             self.average_tpot = (self.average_tpot * self.counter + tpot) / (self.counter + 1)
