@@ -23,6 +23,7 @@ class Scheduler:
             forward_queue.sort(key=lambda x: -len(x.prefix_indices))
             return forward_queue
         elif self.schedule_heuristic == "random":
+            forward_queue.sort(key=lambda x: x.arrival_time)
             random.shuffle(forward_queue)
             return forward_queue
         elif self.schedule_heuristic == "fcfs":

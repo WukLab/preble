@@ -315,6 +315,9 @@ class Batch:
         #     key=lambda i: (len(self.reqs[i].output_ids), -len(self.reqs[i].input_ids)),
         #     reverse=True,
         # )
+        # sorted_indices.sort(
+        #     key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
+        # )
         sorted_indices.sort(
             key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
         )

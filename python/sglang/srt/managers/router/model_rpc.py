@@ -40,6 +40,7 @@ import os
 
 logger = logging.getLogger("model_rpc")
 
+detail_batch_logger = logger.debug
 
 class ModelRpcServer:
     def __init__(
@@ -328,7 +329,7 @@ class ModelRpcServer:
                     end.synchronize()
                     total_forward_time += start.elapsed_time(end)
         if total_forward_time > 0:
-            logger.info(
+            detail_batch_logger(
                 f'GPU: {self.current_gpu} '
                 f"forward time: {total_forward_time:.2f} ms"
             )
@@ -516,7 +517,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logger.info(
+            detail_batch_logger(
                 f"GPU: {self.current_gpu} "
                 f"batch.extend_num_tokens: {batch.extend_num_tokens}, "
                 f"num reqs: {len(batch.reqs)}, "
@@ -664,7 +665,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logger.info(
+            detail_batch_logger(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"input ids: {num_batched_tokens}, "

@@ -45,7 +45,7 @@ def add_simulation_to_gpu_config(gpu_configs):
 # log_file_path = "logs/sim_eq_v2_16K_2r_1800_rps_2/exp.log"
 
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
-log_file_path = "hc_logs_run_to_complete/debug_oracle_sim_react_8k_100_0.3_2400_4/exp.log"
+log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
 
 
 # model_name = "meta-llama/Llama-2-7b-hf"
@@ -100,6 +100,7 @@ server_args = {
     'mem_fraction_static': 0.8,
     'context_length': 33000,
     'enable_flashinfer': True,
+    'schedule_heuristic': 'fcfs',
 }
 
 # Workload Configuration
@@ -113,15 +114,15 @@ configurations_to_test = [
     # [300, 0.2, 4096, 8],
     # [300, 0.2, 4096, 12],
     # [100, 0.2, 4096, 18],
-    [100, 0.3, 2400, 4],
+    [100, 0.3, 4800, 8],
 ]
 workload_configs = create_workload_prefix_configs(configurations_to_test, model_name, exp_time, 16)
 
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    # (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r'),
+    (DataParallelRuntimeSelectionPolicy.RANDOM, None, '4r-ratio-log'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, '4r-ratio-log'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "5r_2h_3c"),
