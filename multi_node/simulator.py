@@ -209,6 +209,7 @@ class Simulation:
         self.events = []
         # rid -> RequestFuncOutput
         self.request_output: Dict[str, RequestFuncOutput] = {}
+        self.unfinished_requests = 0
         
     def add_event(self, event: SimulationEvent):
         heapq.heappush(self.events, event)
@@ -257,6 +258,8 @@ class Simulation:
         while self.events:
             if self.global_clock > self.time_litmit:
                 break
+            if not self.unfinished_requests:
+                break
             if self.global_clock - previous_stamp >= 10.0:
                 logging.info(f"------------ Global clock: {self.global_clock} ------------")
                 previous_stamp = self.global_clock
@@ -293,6 +296,7 @@ class Simulation:
         else:
             for request, send_time in zip(requests, send_out_times):
                 self.add_event(SendRequestEvent(send_time, request))
+        self.unfinished_requests = len(requests)
     
     def start_model_forwarding_loop(self):
         for i in range(len(self.runtimes)):
@@ -435,6 +439,7 @@ class ModelStepEvent(SimulationEvent):
                     if finished:
                         request_output.success = True
                         request_output.global_time = runtime.manager_clock
+                        simulator.unfinished_requests -= 1
     
     def process_event(self, simulator: Simulation):
         start = time.time()
@@ -452,7 +457,7 @@ class ModelStepEvent(SimulationEvent):
         overhead = time.time() - start + forward_time + sleep_time
         self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.MANAGER)
         self.update_metric(simulator, out_pyobjs)
-        logging.debug(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock}, total {overhead}, overhead {overhead - forward_time - sleep_time}, model {forward_time}")
+        # logging.info(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock:.4f}, total {overhead:.4f}, overhead {overhead - forward_time - sleep_time:.4f}, model {forward_time:.4f}")
         simulator.add_event(ModelStepEvent(runtime.manager_clock, self.runtime_id))
 
 if __name__ == "__main__":

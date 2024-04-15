@@ -311,13 +311,13 @@ class Batch:
 
     def retract_decode(self):
         sorted_indices = [i for i in range(len(self.reqs))]
-        sorted_indices.sort(
-            key=lambda i: (len(self.reqs[i].output_ids), -len(self.reqs[i].input_ids)),
-            reverse=True,
-        )
         # sorted_indices.sort(
-        #     key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
+        #     key=lambda i: (len(self.reqs[i].output_ids), -len(self.reqs[i].input_ids)),
+        #     reverse=True,
         # )
+        sorted_indices.sort(
+            key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
+        )
 
         retracted_reqs = []
         seq_lens_np = self.seq_lens.cpu().numpy()
