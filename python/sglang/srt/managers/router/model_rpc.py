@@ -52,7 +52,8 @@ class ModelRpcServer:
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
         self.gpu_config = gpu_config
-        self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
+        self.use_sleep_forwarding = False
+        # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
         # self.use_sleep_forwarding = False
         logger.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
@@ -515,7 +516,7 @@ class ModelRpcServer:
         forward_time = 0
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
+        unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         # if self.tp_rank == 0:
         #     logging.info(
         #         f"GPU: {self.current_gpu} "
@@ -664,7 +665,7 @@ class ModelRpcServer:
 
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
-        unique_kvs = self.tree_cache.get_num_referenced_nodes() + num_batched_tokens
+        unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         # if self.tp_rank == 0:
         #     logging.info(
         #         f"GPU: {self.current_gpu} "

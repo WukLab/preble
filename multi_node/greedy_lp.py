@@ -16,6 +16,8 @@ import os
 import collections
 import numpy as np
 
+logging = logging.getLogger(__name__)
+DEBUG_COUNTER = 0
 class LpNode:
     def __init__(self, node_id, num_gpus):
         self.node_id = node_id
@@ -49,6 +51,7 @@ class LPTreeNode:
         self.gpu_selections = set()
         self.is_leaf = False
         self.decode_length = 0
+        self.context_length = 0
 
     @property
     def num_tokens(self):
@@ -66,7 +69,7 @@ class LPTreeNode:
         return hash(self.id)  # Use the unique ID for hashing
 
     def __repr__(self) -> str:
-        return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter})"
+        return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter}, gpu_selections={self.gpu_selections})"
 
 
 def match(key, seq):
@@ -118,6 +121,7 @@ class LPRadixCache:
                 if child.gpu_selections:
                     current_gpu_selection = child.gpu_selections
                 if prefix_len < len(c_key):
+                    print(prefix_len, len(c_key))
                     assert False
                     new_node = self._split_node(
                         c_key, child, prefix_len, new_nodes_created=new_nodes_created
@@ -259,12 +263,12 @@ class LPRadixCache:
         depth_limit,
         current_depth,
         split_nodes,
+        parent_context_length = 0
     ):
         node.last_access_time = time.time()
         node.ref_counter += 1
         for c_key, child in node.children.items():
             prefix_len = match(c_key, key)
-
             if prefix_len == len(c_key):
                 if prefix_len == len(key):
                     child.ref_counter += 1
@@ -282,6 +286,7 @@ class LPRadixCache:
                         depth_limit=depth_limit,
                         current_depth=current_depth + 1,
                         split_nodes=split_nodes,
+                        parent_context_length=node.context_length + len(child.value),
                     )
 
             if prefix_len:
@@ -296,8 +301,8 @@ class LPRadixCache:
                 # modified_nodes.add(new_node)
                 # modified_nodes.add(child)
                 # TODO check if this makes sense to ignore this?
-                if child in node_map and current_depth < depth_limit:
-                    split_nodes[child] = new_node
+                # if child in node_map and current_depth < depth_limit:
+                split_nodes[child] = new_node
                 return self._insert_helper(
                     new_node,
                     key[prefix_len:],
@@ -307,6 +312,7 @@ class LPRadixCache:
                     depth_limit=depth_limit,
                     current_depth=current_depth + 1,
                     split_nodes=split_nodes,
+                    parent_context_length=node.context_length + len(child.value),
                 )
 
         if len(key):
@@ -316,6 +322,7 @@ class LPRadixCache:
             new_node.value = value
             new_node.ref_counter = 1
             node.children[key] = new_node
+            node.context_length = parent_context_length + len(value) 
             self.evictable_size_ += len(value)
             # if current_depth < depth_limit:
             modified_nodes.add(new_node)
@@ -356,31 +363,12 @@ class LPRadixCache:
         dfs_(self.root_node)
         return ret_list
 
-from line_profiler import LineProfiler
-
-def do_profile(func):
-    def inner(*args, **kwargs):
-        profiler = LineProfiler()
-        profiler.add_function(func)  # Add the function to be profiled
-        wrapped_func = profiler(func)  # Wrap the function with the profiler
-
-        start_time = time.time()
-        result = wrapped_func(*args, **kwargs)  # Call the function
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-
-        if elapsed_time > 0.03:  # Only print if it takes longer than 0.03 seconds
-            # profiler.print_stats()  # Print the stats
-            with open("profiling.txt", 'w') as f:
-                profiler.print_stats(stream=f)
-
-
-        return result
-    return inner
-
-
 class LPGurobiGreedyTraversal:
-    def __init__(self, num_gpus):
+    def __init__(self, num_gpus, gpu_configs=None):
+        self.lp_forward_simulation = gpu_configs[0].lp_forward_simulation if gpu_configs else None
+        if self.lp_forward_simulation is None:
+            self.lp_forward_simulation = lambda num_extend_tokens, is_leaf: num_extend_tokens * 0.148 + (22.7 if is_leaf else 0)
+
         self.num_gpus = num_gpus
         self.node_to_gpu_selections = defaultdict(set)
         self.depth_limit = 3
@@ -392,8 +380,8 @@ class LPGurobiGreedyTraversal:
         self.model.setParam('Seed', 0)
         self.model.setParam("Threads", 0)
         # self.model.setParam("WorkLimit", 0.005)
-        self.model.setParam("MIPGap", 0.02)
-        # self.model.setParam("Method", 4)
+        # self.model.setParam("MIPGap", 0.02)
+        self.model.setParam("Method", 4)
         # self.model.setParam("TimeLimit", 0.005)
 
         self.variables_initialized = False
@@ -403,7 +391,7 @@ class LPGurobiGreedyTraversal:
     def initialize_or_update_variables(self):
         if not self.variables_initialized:
             # First run: add variables
-            self.max_per_gpu_cost = self.model.addVar(name="max_per_gpu_cost", vtype=GRB.INTEGER)
+            self.max_per_gpu_cost = self.model.addVar(name="max_per_gpu_cost", vtype=GRB.CONTINUOUS)
             self.lp_node = LpNode("main", self.num_gpus)
             for gpu in range(self.num_gpus):
                 self.lp_node.variables[gpu] = self.model.addVar(
@@ -427,39 +415,48 @@ class LPGurobiGreedyTraversal:
             total_tokens += self._calculate_children_token_cost(child)
         return total_tokens
 
-    def update_constraints(self, leaf_node, modified_nodes: set[LPTreeNode], decode_cost):
+    def update_constraints(self, leaf_node: LPTreeNode, modified_nodes: set[LPTreeNode], decode_cost):
         self.model.remove(self.model.getConstrs())
         self.model.addConstr(gp.quicksum(self.lp_node.variables) >= 1, "min_one_gpu")
 
         total_cost = gp.LinExpr()
+        per_gpu_recomp_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         per_gpu_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         per_gpu_mem_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         new_total_memory_cost = [0 for _ in range(self.num_gpus)]
 
         decoding_time = decode_cost
+        # print("Decoding time", decoding_time)
+        node: LPTreeNode = leaf_node
+        for gpu_index, var in enumerate(self.lp_node.variables):
+            node = leaf_node
+            total_recomputation_tokens = 0
+            while node != None:
+                if gpu_index in node.gpu_selections:
+                    break
+                total_recomputation_tokens += node.num_tokens
+                node = node.parent
 
-        for prefix_node in modified_nodes:
-            num_tokens_total = self._calculate_children_token_cost(leaf_node) if prefix_node == leaf_node else prefix_node.num_tokens
-            num_tokens_time = 0.148 * num_tokens_total
-            if prefix_node.is_leaf:
-                num_tokens_time += 22.7
-            for gpu_index, var in enumerate(self.lp_node.variables):
-                previous_gpu_selected = gpu_index in leaf_node.gpu_selections  # Assuming gpu_selections tracks selected GPUs
-                recomp_cost = var * (num_tokens_time - previous_gpu_selected * num_tokens_time)
-                total_cost += recomp_cost
-                new_total_memory_cost[gpu_index] += num_tokens_time - previous_gpu_selected * num_tokens_time
-
+            recomputation_time = 0
+            if total_recomputation_tokens != 0:
+                recomputation_time = self.lp_forward_simulation(total_recomputation_tokens, leaf_node.context_length) * 1000
+            total_cost += var * recomputation_time
+            new_total_memory_cost[gpu_index] = recomputation_time
+            per_gpu_recomp_cost[gpu_index] += var * recomputation_time
+    
         for gpu_index in range(self.num_gpus):
             per_gpu_load_cost[gpu_index] += self.lp_node.variables[gpu_index] * decoding_time
             per_gpu_mem_load_cost[gpu_index] += self.current_memory_cost[gpu_index]  # Assuming current_memory_cost is tracked
-            per_gpu_mem_load_cost[gpu_index] += self.current_load_cost[gpu_index]
+            per_gpu_load_cost[gpu_index] += self.current_load_cost[gpu_index]
 
+            cost =  self.current_load_cost[gpu_index] + self.current_memory_cost[gpu_index] + decoding_time
+            # logging.info(f"Cost for GPU {gpu_index}: {cost}, load cost: {self.current_load_cost[gpu_index]}, memory cost: {self.current_memory_cost[gpu_index]}, decoding time: {decoding_time}")
             self.model.addConstr(
-                per_gpu_mem_load_cost[gpu_index] + per_gpu_load_cost[gpu_index] <= self.max_per_gpu_cost,
+                per_gpu_mem_load_cost[gpu_index] + per_gpu_load_cost[gpu_index] + per_gpu_recomp_cost[gpu_index] <= self.max_per_gpu_cost,
                 name=f"max_per_gpu_cost_constr_{gpu_index}"
             )
 
-        self.model.setObjective(self.max_per_gpu_cost + total_cost, GRB.MINIMIZE)
+        self.model.setObjective(self.max_per_gpu_cost, GRB.MINIMIZE)
         return new_total_memory_cost, decoding_time
 
     def traverse_and_optimize(
@@ -474,14 +471,19 @@ class LPGurobiGreedyTraversal:
 
         new_total_memory_cost, total_decode_time = self.update_constraints(leaf_node, modified_nodes, decode_cost)
         self.model.optimize()
-
+        global DEBUG_COUNTER
+        DEBUG_COUNTER += 1
+        self.model.write(f"logs/gurobiv2_{DEBUG_COUNTER}_{time.time()}.lp")
+        # print(self.max_per_gpu_cost.X)
         if self.model.Status == GRB.OPTIMAL:
             pass
         elif self.model.Status == GRB.INFEASIBLE:
             print("Infeasable solution found")
         else:
             pass
+
         selected_gpus = self.update_gpu_selections(self.lp_node, leaf_node)
+        # print(f"Selected GPUs: {selected_gpus}")
         for gpu in selected_gpus:
             self.current_load_cost[gpu] += total_decode_time
             self.current_memory_cost[gpu] += new_total_memory_cost[gpu]
@@ -501,7 +503,7 @@ class LPGurobiGreedyTraversal:
             for key, children in node.children.items():
                 parent_gpu_selection.update(children.gpu_selections)
             node.gpu_selections = parent_gpu_selection
-            self.node_to_gpu_selections[node] = parent_gpu_selection
+            self.node_to_gpu_selections[node] = parent_gpu_selection.union(self.node_to_gpu_selections.get(node, set()))
             node = node.parent
         return selected_gpus
         
@@ -518,6 +520,7 @@ class LPGurobiGreedyTraversal:
         selected_gpus = self.node_to_gpu_selections.get(prefix_node)
 
         def get_tool(workload_item):
+            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
             text = tokenizer.decode(workload_item)
             if ":" in text:
                 return text.split(":")[0].strip().replace("\n", " ")
@@ -549,8 +552,8 @@ class LPGurobiGreedyTraversal:
         total_decode_time = decode_cost
         node: LPTreeNode = tree_cache.find_node(input_ids)
         tree_cache.remove_completed_input_ids(input_ids)
-        for selection in node.gpu_selections:
-            self.current_load_cost[selection] -= total_decode_time
+        # for selection in node.gpu_selections:
+            # self.current_load_cost[selection] -= total_decode_time
 
     def insert_into_cache_and_solve(self, input_ids, tree_cache, decode_cost):
         node_map = self.node_to_gpu_selections
@@ -576,7 +579,7 @@ class GurobiGreedyLPScheduler:
     def __init__(self, num_nodes: int, gpu_configs = None):
         self.num_nodes = num_nodes
         self.tree_cache = LPRadixCache()
-        self.lp_tree_traversal = LPGurobiGreedyTraversal(num_nodes)
+        self.lp_tree_traversal = LPGurobiGreedyTraversal(num_nodes, gpu_configs)
         self.lp_tree_traversal.depth_limit = 64
         self.metrics_dict = []
         self.load = {}
@@ -588,12 +591,13 @@ class GurobiGreedyLPScheduler:
         self.average_tpot = 0.041
         self.counter = 0
         self.rid_to_deocde_cost = {}
-        self.average_tpot_queue = collections.deque(maxlen=50)
-        self.average_tpot_queue.append(0.041)
-        # self.average_tpot_queue.append(0.041)
-        # self.average_tpot_queue.append(0.041)
-        # self.average_tpot_queue.append(0.041)
-        # self.average_tpot_queue.append(0.041)
+        self.tpot_queue = collections.deque(maxlen=100)
+        global DEBUG_COUNTER
+        DEBUG_COUNTER = 0
+        # self.tpot_queue.append(0.04)
+        # self.tpot_queue.append(0.041)
+        # self.tpot_queue.append(0.041)
+        # self.tpot_queue.append(0.041)
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
         """Method to handle eviction logic."""
@@ -603,9 +607,14 @@ class GurobiGreedyLPScheduler:
             if len(updated_node) == 0:
                 del self.lp_tree_traversal.node_to_gpu_selections[node]
         num_tokens = len(node.value)
-        mistral_tokens_to_prefill_time = 0.148 * num_tokens
-        if node.is_leaf:
-            mistral_tokens_to_prefill_time += 22.7
+        # accumlation
+        mistral_tokens_to_prefill_time = self.lp_tree_traversal.lp_forward_simulation(num_tokens, node.context_length) * 1000
+        # mistral_tokens_to_prefill_time = 0.148 * num_tokens
+        # if node.is_leaf:
+        #     mistral_tokens_to_prefill_time += 22.7
+
+        # TODO DO I Need to evict here?
+        # print(f"Eviction cost: mistral_tokens_to_prefill_time: {mistral_tokens_to_prefill_time}, num_tokens: {num_tokens}")
         self.lp_tree_traversal.current_memory_cost[runtime_selected] -= mistral_tokens_to_prefill_time
         return len(node.value)
 
@@ -636,10 +645,16 @@ class GurobiGreedyLPScheduler:
         # Tokenize the text
         start_time = time.time()
         with self.lock:
+            print(f"Request ID: {request_id}, Text: {text[-50:]}")
             st = time.time()
-            average_tpot_queue_ms = np.median(self.average_tpot_queue)
-            # decode_cost =  sampling_params.get("max_new_tokens") * average_tpot_queue_ms
-            decode_cost = average_tpot_queue_ms * sampling_params.get("max_new_tokens") * 1000 # 1000 bc converting seconds to miliseconds
+            # p_90_tpot = 6.7 / 1000
+            # decode_cost =  sampling_params.get("max_new_tokens") * tpot_queue_ms
+            p_90 = np.percentile(self.tpot_queue if self.tpot_queue else [0.0], 50)
+            print(f"TPOT: {p_90}, Max new tokens: {sampling_params.get('max_new_tokens')}, Decode cost: {p_90 * sampling_params.get('max_new_tokens') / 1000}")
+            # decode_cost = p_90_tpot * sampling_params.get("max_new_tokens") / 1000 # 1000 bc converting seconds to miliseconds
+            # 0.0004393649647164497
+            # 0.00067
+            decode_cost = max(p_90, 0.0001) * sampling_params.get("max_new_tokens")
             self.rid_to_deocde_cost[request_id] = decode_cost 
             # request_id -> memory_cost
             node = self.lp_tree_traversal.insert_into_cache_and_solve(input_ids, self.tree_cache, decode_cost)
@@ -649,7 +664,6 @@ class GurobiGreedyLPScheduler:
             runtime_selected, selection_type = self.select_runtime_from_gpu_selections(gpu_selections)
             self.load[runtime_selected] = self.load.get(runtime_selected, 0) + 1
             self.insert_then_evict_from_runtime_cache(input_ids, runtime_selected)
-
         if time.time() - start_time > 0.03:
             print(f"Overall time", time.time() - start_time, solving_time)
         self.metrics_dict.append(
@@ -667,13 +681,20 @@ class GurobiGreedyLPScheduler:
         self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
     ):
         with self.lock:
-            self.average_tpot_queue.append(func_output.tpot)
-            self.lp_tree_traversal.completed_request(self.tree_cache, input_ids, self.rid_to_deocde_cost.pop(request_id))
+            self.tpot_queue.append(func_output.tpot)
+            if request_id not in self.rid_to_deocde_cost:
+                decode_cost = 0
+                assert False
+            else:
+                decode_cost = self.rid_to_deocde_cost.pop(request_id)
+            self.lp_tree_traversal.completed_request(self.tree_cache, input_ids, decode_cost)
             self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
-            tpot = func_output.tpot
-            self.average_tpot = (self.average_tpot * self.counter + tpot) / (self.counter + 1)
+            # tpot = func_output.tpot
+            # self.average_tpot = (self.average_tpot * self.counter + tpot) / (self.counter + 1)
             self.counter += 1
 
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 if __name__ == "__main__":
     pass

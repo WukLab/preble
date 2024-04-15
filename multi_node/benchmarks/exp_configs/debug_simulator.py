@@ -39,7 +39,7 @@ def create_workload_configs(configurations_to_test):
         num_workloads, random_ratio, num_requests, request_rate = config
         if exp_time != float("inf"):
             num_requests = int(request_rate * exp_time)
-        dataloader = RandomDataLoader(
+        dataloader = WorkloadPrefixDataLoader(
             num_workloads,
             num_requests,
             tokenizer,

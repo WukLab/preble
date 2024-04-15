@@ -114,6 +114,13 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=greedy_lp,
             )
+        elif custom_policy == CustomPolicyType.GREEDY_LP_OLD:
+            from greedy_lp_old import GurobiGreedyLPSchedulerV1
+            greedy_lp =  GurobiGreedyLPSchedulerV1(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=greedy_lp,
+            )
     else:
         model_details.update_runtime_selection_policy(policy)
 

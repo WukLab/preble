@@ -39,6 +39,7 @@ class CustomPolicyType(Enum):
     LOOGLE_ORACLE = auto()
 
     GREEDY_LP = auto()
+    GREEDY_LP_OLD = auto()
 
 
 class DataParallelRequestRouter:

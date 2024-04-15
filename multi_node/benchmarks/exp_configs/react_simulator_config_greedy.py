@@ -12,13 +12,14 @@ from sglang.srt.managers.router.model_runner import GPUConfig
 from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
 from exp_configs.exp_config_utils import create_workload_prefix_configs, create_toolbench_data_loader, create_loogle_dataset, create_mixture_diff_toolbench_burts
 from exp_configs.react_simulator_config import add_simulation_to_gpu_config
+import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "logs_sim/april_13_improvements/scheduling_overhead_debug/debug_scheduling_overhead.log"
+log_file_path = "validate_oracle/simulated/oracle_vs_lps_5.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 300
+exp_time = 50
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -49,8 +50,11 @@ server_args = {
 }
 
 # Workload Configuration
+# configurations_to_test = [
+#     [200, 400, 4],
+# ]
 configurations_to_test = [
-    [50, 100, 2],
+    [200, 200, 4]
 ]
 workload_configs = create_toolbench_data_loader(
     configurations_to_test, 
@@ -60,14 +64,28 @@ workload_configs = create_toolbench_data_loader(
     load_dist=LoadDistribution.EVEN
     # k=None
 )
-
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy'),
-    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", "random"),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, "tb_oracle"),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'oracle'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'oracle'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'oracle'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 ]
+
+
 
 exp_args = MajorExperimentArgs(
     server_args,
@@ -77,3 +95,7 @@ exp_args = MajorExperimentArgs(
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )
+
+if __name__ == "__main__":
+    workload_configs = list(workload_configs)
+    print(workload_configs[0].requests[0]["text"])
