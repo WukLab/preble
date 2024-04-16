@@ -424,7 +424,7 @@ class LPGurobiGreedyTraversal:
         per_gpu_recomp_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         per_gpu_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
         per_gpu_mem_load_cost = [gp.LinExpr() for _ in range(self.num_gpus)]
-        new_total_memory_cost = [0 for _ in range(self.num_gpus)]
+        memory_cost_update = [0 for _ in range(self.num_gpus)]
 
         decoding_time = decode_cost
         # print("Decoding time", decoding_time)
@@ -441,8 +441,9 @@ class LPGurobiGreedyTraversal:
             recomputation_time = 0
             if total_recomputation_tokens != 0:
                 recomputation_time = self.lp_forward_simulation(total_recomputation_tokens, leaf_node.context_length) * 1000
+                # recomputation_time = total_recomputation_tokens
             total_cost += var * recomputation_time
-            new_total_memory_cost[gpu_index] = recomputation_time
+            memory_cost_update[gpu_index] = recomputation_time
             per_gpu_recomp_cost[gpu_index] += var * recomputation_time
     
         for gpu_index in range(self.num_gpus):
@@ -450,15 +451,16 @@ class LPGurobiGreedyTraversal:
             per_gpu_mem_load_cost[gpu_index] += self.current_memory_cost[gpu_index]  # Assuming current_memory_cost is tracked
             per_gpu_load_cost[gpu_index] += self.current_load_cost[gpu_index]
 
-            cost =  self.current_load_cost[gpu_index] + self.current_memory_cost[gpu_index] + decoding_time
-            # logging.info(f"Cost for GPU {gpu_index}: {cost}, load cost: {self.current_load_cost[gpu_index]}, memory cost: {self.current_memory_cost[gpu_index]}, decoding time: {decoding_time}")
+            cost =  self.current_load_cost[gpu_index] + self.current_memory_cost[gpu_index] + decoding_time + memory_cost_update[gpu_index]
+            print(f"Cost for GPU {gpu_index}: {cost}, load cost: {self.current_load_cost[gpu_index]}, memory cost: {self.current_memory_cost[gpu_index]}, decoding time: {decoding_time}, recomp_cost: {memory_cost_update[gpu_index]}")
+            # print(f"Var: ", per_gpu_mem_load_cost[gpu_index] + per_gpu_load_cost[gpu_index] + per_gpu_recomp_cost[gpu_index])
             self.model.addConstr(
                 per_gpu_mem_load_cost[gpu_index] + per_gpu_load_cost[gpu_index] + per_gpu_recomp_cost[gpu_index] <= self.max_per_gpu_cost,
                 name=f"max_per_gpu_cost_constr_{gpu_index}"
             )
 
         self.model.setObjective(self.max_per_gpu_cost, GRB.MINIMIZE)
-        return new_total_memory_cost, decoding_time
+        return memory_cost_update, decoding_time
 
     def traverse_and_optimize(
         self, leaf_node: LPTreeNode, modified_nodes: set[LPTreeNode] = None, split_nodes={}, decode_cost=0
@@ -474,8 +476,8 @@ class LPGurobiGreedyTraversal:
         self.model.optimize()
         global DEBUG_COUNTER
         DEBUG_COUNTER += 1
-        self.model.write(f"logs/gurobiv2_{DEBUG_COUNTER}_{time.time()}.lp")
-        # print(self.max_per_gpu_cost.X)
+        # self.model.write(f"logs/gurobiv2_{DEBUG_COUNTER}_{time.time()}.lp")
+        # print(f"Max per gpu cost", self.max_per_gpu_cost.X)
         if self.model.Status == GRB.OPTIMAL:
             pass
         elif self.model.Status == GRB.INFEASIBLE:
@@ -527,6 +529,8 @@ class LPGurobiGreedyTraversal:
                 return text.split(":")[0].strip().replace("\n", " ")
             else:
                 return text[:16].strip().replace("\n", "")
+        if prefix_node.ref_counter == 0:
+            return 
 
         print(
             f"{indent}Node {prefix_node.id} (Tokens: {get_tool(prefix_node.value)}, {len(prefix_node.value)}, {prefix_node.context_length}, {(prefix_node.ref_counter)}): GPUs {selected_gpus}"
@@ -592,7 +596,7 @@ class GurobiGreedyLPScheduler:
         self.average_tpot = 0.041
         self.counter = 0
         self.rid_to_deocde_cost = {}
-        self.tpot_queue = collections.deque(maxlen=100)
+        self.tpot_queue = collections.deque(maxlen=500)
         global DEBUG_COUNTER
         DEBUG_COUNTER = 0
         # self.tpot_queue.append(0.04)
@@ -616,7 +620,10 @@ class GurobiGreedyLPScheduler:
 
         # TODO DO I Need to evict here?
         # print(f"Eviction cost: mistral_tokens_to_prefill_time: {mistral_tokens_to_prefill_time}, num_tokens: {num_tokens}")
-        self.lp_tree_traversal.current_memory_cost[runtime_selected] -= mistral_tokens_to_prefill_time
+        # self.lp_tree_traversal.current_memory_cost[runtime_selected] -= mistral_tokens_to_prefill_time
+        if mistral_tokens_to_prefill_time > self.lp_tree_traversal.current_memory_cost[runtime_selected]:
+            self.lp_tree_traversal.current_memory_cost[runtime_selected] -= mistral_tokens_to_prefill_time
+            # TODO handle this
         return len(node.value)
 
     def select_runtime_from_gpu_selections(self, gpu_selections) -> tuple[int, RuntimeSelectionType]:
@@ -646,16 +653,14 @@ class GurobiGreedyLPScheduler:
         # Tokenize the text
         start_time = time.time()
         with self.lock:
-            print(f"Request ID: {request_id}, Text: {text[-50:]}")
+            # print(f"Request ID: {request_id}, Text: {text[-50:]}")
             st = time.time()
             # p_90_tpot = 6.7 / 1000
             # decode_cost =  sampling_params.get("max_new_tokens") * tpot_queue_ms
-            p_90 = np.percentile(self.tpot_queue if self.tpot_queue else [0.0], 50)
-            print(f"TPOT: {p_90}, Max new tokens: {sampling_params.get('max_new_tokens')}, Decode cost: {p_90 * sampling_params.get('max_new_tokens') / 1000}")
+            p_90 = max(np.percentile(self.tpot_queue if self.tpot_queue else [0.0], 50), 0.04)
+            # print(f"TPOT: {p_90}, Max new tokens: {sampling_params.get('max_new_tokens')}, Decode cost: {p_90 * sampling_params.get('max_new_tokens') / 1000}")
             # decode_cost = p_90_tpot * sampling_params.get("max_new_tokens") / 1000 # 1000 bc converting seconds to miliseconds
-            # 0.0004393649647164497
-            # 0.00067
-            decode_cost = max(p_90, 0.0001) * sampling_params.get("max_new_tokens")
+            decode_cost = p_90 * sampling_params.get("max_new_tokens")
             self.rid_to_deocde_cost[request_id] = decode_cost 
             # request_id -> memory_cost
             node = self.lp_tree_traversal.insert_into_cache_and_solve(input_ids, self.tree_cache, decode_cost)
@@ -665,6 +670,8 @@ class GurobiGreedyLPScheduler:
             runtime_selected, selection_type = self.select_runtime_from_gpu_selections(gpu_selections)
             self.load[runtime_selected] = self.load.get(runtime_selected, 0) + 1
             self.insert_then_evict_from_runtime_cache(input_ids, runtime_selected)
+            # if DEBUG_COUNTER % 20 == 0:
+            #     self.lp_tree_traversal.pretty_print(self.tree_cache.root_node, depth_limit=4, tokenizer=tokenizer)
         if time.time() - start_time > 0.03:
             print(f"Overall time", time.time() - start_time, solving_time)
         self.metrics_dict.append(
