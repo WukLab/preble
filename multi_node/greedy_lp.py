@@ -244,6 +244,7 @@ class LPRadixCache:
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
         new_node.ref_counter = child.ref_counter
+        new_node.context_length = child.context_length - len(child.value) + split_len
 
         new_node.value = child.value[:split_len]
         child.parent = new_node
@@ -300,7 +301,7 @@ class LPRadixCache:
                 )
                 # modified_nodes.add(new_node)
                 # modified_nodes.add(child)
-                # TODO check if this makes sense to ignore this?
+                # TODO check if this makes sense to ignore thisc
                 # if child in node_map and current_depth < depth_limit:
                 split_nodes[child] = new_node
                 return self._insert_helper(
@@ -312,17 +313,17 @@ class LPRadixCache:
                     depth_limit=depth_limit,
                     current_depth=current_depth + 1,
                     split_nodes=split_nodes,
-                    parent_context_length=node.context_length + len(child.value),
+                    parent_context_length=node.context_length + len(new_node.value),
                 )
 
         if len(key):
             new_node = LPTreeNode()
-            new_node.gpu_selections = copy.deepcopy(node.gpu_selections)
+            new_node.gpu_selections = set()
             new_node.parent = node
             new_node.value = value
             new_node.ref_counter = 1
+            new_node.context_length = parent_context_length + len(value) 
             node.children[key] = new_node
-            node.context_length = parent_context_length + len(value) 
             self.evictable_size_ += len(value)
             # if current_depth < depth_limit:
             modified_nodes.add(new_node)
@@ -520,15 +521,15 @@ class LPGurobiGreedyTraversal:
         selected_gpus = self.node_to_gpu_selections.get(prefix_node)
 
         def get_tool(workload_item):
-            tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-            text = tokenizer.decode(workload_item)
+            tok = tokenizer or AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+            text = tok.decode(workload_item)
             if ":" in text:
                 return text.split(":")[0].strip().replace("\n", " ")
             else:
                 return text[:16].strip().replace("\n", "")
 
         print(
-            f"{indent}Node {prefix_node.id} (Tokens: {get_tool(prefix_node.value)}, {len(prefix_node.value)}, {(prefix_node.ref_counter)}): GPUs {selected_gpus}"
+            f"{indent}Node {prefix_node.id} (Tokens: {get_tool(prefix_node.value)}, {len(prefix_node.value)}, {prefix_node.context_length}, {(prefix_node.ref_counter)}): GPUs {selected_gpus}"
         )
 
         for child in prefix_node.children.values():
@@ -555,7 +556,7 @@ class LPGurobiGreedyTraversal:
         # for selection in node.gpu_selections:
             # self.current_load_cost[selection] -= total_decode_time
 
-    def insert_into_cache_and_solve(self, input_ids, tree_cache, decode_cost):
+    def insert_into_cache_and_solve(self, input_ids, tree_cache: LPTreeNode, decode_cost):
         node_map = self.node_to_gpu_selections
         split_nodes = {}
         modified_nodes = set()

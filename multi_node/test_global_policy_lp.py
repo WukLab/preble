@@ -87,7 +87,7 @@ est laborum."""
     #     self.assertEqual(gpu_selection, set(i for i in range(num_gpus)))
 
     def _test_basic_workload_branching_consistent_across_depths(self, data_size=3, verbose=True):
-        lp_tree_traversal = LPGurobiGreedyTraversal(2)
+        lp_tree_traversal = LPGurobiGreedyTraversal(2, gpu_configs=self.gpu_config)
 
         lorem5 = " ".join([self.lorem for _ in range(data_size)])
         texts = [
@@ -135,7 +135,7 @@ est laborum."""
         self._test_basic_workload_branching_consistent_across_depths(data_size)
 
     def test_replication_workload_branching_consistent_across_depths(self):
-        lp_tree_traversal = LPGurobiGreedyTraversal(2)
+        lp_tree_traversal = LPGurobiGreedyTraversal(2, gpu_configs=self.gpu_config)
         lorem5 = " ".join([self.lorem for _ in range(4)])
         texts = [
             f"Workload 1. {lorem5} A B C D",
