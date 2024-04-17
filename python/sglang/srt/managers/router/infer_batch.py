@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List
+import logging
 
 import numpy as np
 import torch
 from sglang.srt.managers.router.radix_cache import RadixCache
 from sglang.srt.memory_pool import ReqToTokenPool, TokenToKVPool
+
+logger = logging.getLogger(__name__)
 
 
 class ForwardMode(Enum):
@@ -18,7 +21,6 @@ class FinishReason(Enum):
     LENGTH = auto()
     EOS_TOKEN = auto()
     STOP_STR = auto()
-
 
 class Req:
     def __init__(self, rid, input_text, input_ids, arrival_time, append_to_queue_time):
@@ -66,6 +68,9 @@ class Req:
         self.jump_forward_map = None
         self.output_and_jump_forward_str = ""
         
+        # For chunk-prefill
+        self.num_computed_tokens = 0
+        self.num_inflight_tokens = 0
 
     def max_new_tokens(self):
         return self.sampling_params.max_new_tokens
@@ -141,9 +146,52 @@ class Req:
                     self.finish_reason = FinishReason.STOP_STR
                     self.hit_stop_str = stop_str
                     return
+                
+    def get_num_unfinished_tokens(self):
+        return self.prompt_tokens + len(self.output_ids) - len(self.prefix_indices) - self.num_computed_tokens
+    
+    # NOTE: Currently sglang clears output tokens when recompute (??)
+    #       so a prefill chunk will never involve output tokens
+    #       Change this function if this is nolonger true
+    def get_inflight_token_ids(self) -> List[int]:
+        # logger.debug(f"num_computed_tokens={self.num_computed_tokens}, num_inflight_tokens={self.num_inflight_tokens}, prompt_len={self.prompt_tokens}, output_len={len(self.output_ids)}")
+        start_idx = len(self.prefix_indices) + self.num_computed_tokens
+        if start_idx >= self.prompt_tokens:
+            assert self.num_computed_tokens + len(self.prefix_indices) == self.prompt_tokens + len(self.output_ids) - 1
+            assert self.num_inflight_tokens == 1
+            return [self.output_ids[-1]]
+        return self.input_ids[start_idx : start_idx + self.num_inflight_tokens]
+    
+    def get_context_len(self):
+        return len(self.prefix_indices) + self.num_computed_tokens + self.num_inflight_tokens
+    
+    def update_after_step(self):
+        self.num_computed_tokens += self.num_inflight_tokens
+        self.num_inflight_tokens = 0
+    
+    def reset_state(self):
+        self.prefix_indices = None
+        self.last_node = None
+        self.extend_input_len = 0
+        self.output_ids = []
+        self.regex_fsm_state = 0
+        self.num_computed_tokens = 0
 
     def __repr__(self):
         return f"rid(n={self.rid}, " f"input_ids={self.input_ids}, "
+
+
+@dataclass
+class SchedulingBudget:
+    max_new_tokens: int
+    scheduled_tokens: int
+    
+    def get_remaining_token_budget(self):
+        return self.max_new_tokens - self.scheduled_tokens
+
+    def schedule_new_tokens(self, num_tokens):
+        assert num_tokens <= self.get_remaining_token_budget()
+        self.scheduled_tokens += num_tokens
 
 
 @dataclass
@@ -227,6 +275,7 @@ class Batch:
                 ] = prefix_indices[i]
 
             seq_lens.append(prefix_lens[-1] + extend_lens[-1])
+            self.reqs[i].num_inflight_tokens = extend_lens[-1]
 
         position_ids_offsets = torch.zeros((bs,), dtype=torch.int32, device=device)
         self.input_id_lengths = extend_lens
@@ -331,11 +380,7 @@ class Batch:
             retracted_reqs.append(req)
 
             self.tree_cache.dec_ref_counter(req.last_node)
-            req.prefix_indices = None
-            req.last_node = None
-            req.extend_input_len = 0
-            req.output_ids = []
-            req.regex_fsm_state = 0
+            req.reset_state()
 
             # TODO: apply more fine-grained retraction
 
@@ -347,6 +392,7 @@ class Batch:
         self.filter_batch(sorted_indices)
 
         return retracted_reqs
+
 
     def check_for_jump_forward(self):
         jump_forward_reqs = []
@@ -389,6 +435,7 @@ class Batch:
         return jump_forward_reqs
 
     def prepare_for_decode(self, input_ids=None):
+        # TODO: change to chunk-prefill
         if input_ids is None:
             input_ids = [
                 r.output_ids[-1] if r.output_ids else r.input_ids[-1] for r in self.reqs
@@ -466,7 +513,78 @@ class Batch:
             setattr(
                 self, item, torch.concat([getattr(self, item), getattr(other, item)])
             )
-
+    
+    def _schedule_running(
+        self, 
+        budget: SchedulingBudget
+    ) -> List[Req]:
+        current_running_idx = sorted(
+            [i for i in range(len(self.reqs))],
+            key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
+        )
+        req_pool_indices_np = self.req_pool_indices.cpu().numpy()
+        preempted = []
+        scheduled = []
+        self.out_cache_loc = None
+        while current_running_idx:
+            # try to schedule each request
+            target_idx = current_running_idx.pop(0)
+            target_to_schedule = self.reqs[target_idx]
+            # 1. check required new memory and evict if needed
+            new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
+            if (self.token_to_kv_pool.available_size() < new_tokens 
+                and not self.tree_cache.disable):
+                self.tree_cache.evict(new_tokens, self.token_to_kv_pool.free)
+            # 2. if not enough, evict running requests
+            while self.token_to_kv_pool.available_size() < new_tokens:
+                if not current_running_idx:
+                    evict_idx = target_idx
+                    evict_req = target_to_schedule
+                else:
+                    evict_idx = current_running_idx.pop()
+                    evict_req = self.reqs[evict_idx]
+                    
+                preempted.append(evict_req)
+                self.tree_cache.dec_ref_counter(evict_req.last_node)
+                evict_req.reset_state()
+                token_indices = self.req_to_token_pool.req_to_token[
+                    req_pool_indices_np[evict_idx]
+                ][: evict_req.num_computed_tokens]
+                self.token_to_kv_pool.free(token_indices)
+                self.req_to_token_pool.free(req_pool_indices_np[evict_idx])
+                
+                # not enought memory to schedule
+                if evict_idx == target_idx:
+                    break
+            else:
+            #3. schedule it, allocate and set workload
+                budget.schedule_new_tokens(new_tokens)
+                scheduled.append(target_idx)
+                out_cache_loc = self.token_to_kv_pool.alloc(new_tokens)
+                self.req_to_token_pool.req_to_token[
+                    req_pool_indices_np[target_idx],
+                    target_to_schedule.num_computed_tokens : target_to_schedule.num_computed_tokens + new_tokens
+                ] = out_cache_loc
+                target_to_schedule.num_inflight_tokens = new_tokens
+                if self.out_cache_loc is None:
+                    self.out_cache_loc = out_cache_loc
+                else:
+                    self.out_cache_loc = torch.cat([self.out_cache_loc, out_cache_loc])
+        if len(scheduled) < len(self.reqs):
+            self.filter_batch(scheduled)
+        self.out_cache_cont_start = self.out_cache_cont_end = None
+        return preempted
+    
+    def prepare_for_inference(self):
+        device = 'cuda'
+        input_ids = [r.get_inflight_token_ids() for r in self.reqs]
+        self.input_id_lengths = [len(ids) for ids in input_ids]
+        input_ids = sum(input_ids, [])
+        self.input_ids = torch.tensor(input_ids, dtype=torch.int32, device=device)
+        self.seq_lens = torch.tensor([r.get_context_len() for r in self.reqs], dtype=torch.int32, device=device)
+        self.prefix_lens = None
+        
+            
     def sample(self, logits: torch.Tensor):
         # Post process logits
         logits = logits.contiguous()

@@ -37,6 +37,7 @@ class ServerArgs:
     freeze: bool = False
     log_prefix_hit: bool = False
     api_key: str = ""
+    chunk_prefill_budget: int = 0
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -231,6 +232,13 @@ class ServerArgs:
             type=str,
             default=ServerArgs.api_key,
             help="Set API Key",
+        )
+        parser.add_argument(
+            '--chunk-prefill-budget',
+            type=int,
+            default=ServerArgs.chunk_prefill_budget,
+            help='The maximum number of tokens that can be scheduled in a single iteration '
+                 'Set to 0 to disable chunking.',
         )
 
     @classmethod

@@ -669,6 +669,7 @@ class Runtime:
         freeze: bool = False,
         log_prefix_hit: bool = False,
         gpu_config: Optional[GPUConfig] = None,
+        chunk_prefill_budget: int = 0,
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
         # host = "127.0.0.1"
@@ -700,6 +701,7 @@ class Runtime:
             disable_regex_jump_forward=disable_regex_jump_forward,
             disable_disk_cache=disable_disk_cache,
             api_key=api_key,
+            chunk_prefill_budget=chunk_prefill_budget,
         )
 
         self.url = self.server_args.url()

@@ -1,0 +1,350 @@
+INFO:server:mem_fraction_static: None
+INFO:server:http://0.0.0.0:30000, ports: PortArgs(tokenizer_port=10000, router_port=10001, detokenizer_port=10002, nccl_port=10003, migrate_port=10004, model_rpc_ports=[10005, 10006, 10007])
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/config.json HTTP/1.1" 200 0
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_rpc:Use sleep forwarding: False
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/config.json HTTP/1.1" 200 0
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_runner:Rank 0: load weight begin.
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "GET /api/models/mistralai/Mistral-7B-v0.1 HTTP/1.1" 200 13666
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "GET /api/models/mistralai/Mistral-7B-v0.1/tree/main?recursive=False&expand=False HTTP/1.1" 200 2139
+DEBUG:filelock:Attempting to acquire lock 139615035470800 on /tmp/mistralai-Mistral-7B-v0.1.lock
+DEBUG:filelock:Lock 139615035470800 acquired on /tmp/mistralai-Mistral-7B-v0.1.lock
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "GET /api/models/mistralai/Mistral-7B-v0.1/revision/main HTTP/1.1" 200 13666
+DEBUG:filelock:Attempting to release lock 139615035470800 on /tmp/mistralai-Mistral-7B-v0.1.lock
+DEBUG:filelock:Lock 139615035470800 released on /tmp/mistralai-Mistral-7B-v0.1.lock
+INFO:model_runner:Rank 0: load weight end.
+INFO:model_runner:kv one token size: 8 * 128 * 32 * 2 * 2 = 131072 bytes
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_rpc:Rank 0: max_total_num_token=237245, max_prefill_num_token=39540, context_len=32768, 
+INFO:model_rpc:disable_radix_cache=False, enable_flashinfer=False, disable_regex_jump_forward=False, disable_disk_cache=False, attention_reduce_in_fp32=False
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+DEBUG:urllib3.connectionpool:Starting new HTTP connection (1): 0.0.0.0:30000
+DEBUG:urllib3.connectionpool:http://0.0.0.0:30000 "GET /get_model_info HTTP/1.1" 200 42
+DEBUG:urllib3.connectionpool:Starting new HTTP connection (1): 0.0.0.0:30000
+INFO:model_rpc:GPU: 0 new fill batch. #seq: 1. #cached_token: 0. #new_token: 9. #remaining_req: 0. #running_req: 0. tree_cache_hit_rate: 0.00%. hit_tokens: 0. free_gpu_mem: 1.00. 
+DEBUG:model_rpc:GPU: 0 batch.extend_num_tokens: 9, num reqs: 1, input ids: 9, attention tokens: 9, unique kv tokens: 9
+DEBUG:model_rpc:GPU: 0 forward time: 574.97 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=9, num_inflight_tokens=1, prompt_len=9, output_len=1
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 10, unique kv tokens: 10
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=10, num_inflight_tokens=1, prompt_len=9, output_len=2
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 11, unique kv tokens: 11
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=11, num_inflight_tokens=1, prompt_len=9, output_len=3
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 12, unique kv tokens: 12
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=12, num_inflight_tokens=1, prompt_len=9, output_len=4
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 13, unique kv tokens: 13
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=13, num_inflight_tokens=1, prompt_len=9, output_len=5
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 14, unique kv tokens: 14
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=14, num_inflight_tokens=1, prompt_len=9, output_len=6
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 15, unique kv tokens: 15
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=15, num_inflight_tokens=1, prompt_len=9, output_len=7
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 16, unique kv tokens: 16
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=16, num_inflight_tokens=1, prompt_len=9, output_len=8
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 17, unique kv tokens: 17
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=17, num_inflight_tokens=1, prompt_len=9, output_len=9
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 18, unique kv tokens: 18
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=18, num_inflight_tokens=1, prompt_len=9, output_len=10
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 19, unique kv tokens: 19
+DEBUG:model_rpc:GPU: 0 forward time: 357.76 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=19, num_inflight_tokens=1, prompt_len=9, output_len=11
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 20, unique kv tokens: 20
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=20, num_inflight_tokens=1, prompt_len=9, output_len=12
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 21, unique kv tokens: 21
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=21, num_inflight_tokens=1, prompt_len=9, output_len=13
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 22, unique kv tokens: 22
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=22, num_inflight_tokens=1, prompt_len=9, output_len=14
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 23, unique kv tokens: 23
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=23, num_inflight_tokens=1, prompt_len=9, output_len=15
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 24, unique kv tokens: 24
+DEBUG:model_rpc:GPU: 0 forward time: 170.54 ms
+DEBUG:urllib3.connectionpool:http://0.0.0.0:30000 "POST /generate HTTP/1.1" 200 274
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+
+No chat template is defined for this tokenizer - using the default template for the LlamaTokenizerFast class. If the default is not appropriate for your model, please set `tokenizer.chat_template` to an appropriate template. See https://huggingface.co/docs/transformers/main/chat_templating for more information.
+
+INFO:model_rpc:GPU: 0 new fill batch. #seq: 1. #cached_token: 1. #new_token: 33. #remaining_req: 0. #running_req: 0. tree_cache_hit_rate: 2.33%. hit_tokens: 1. free_gpu_mem: 1.00. 
+DEBUG:model_rpc:GPU: 0 batch.extend_num_tokens: 33, num reqs: 1, input ids: 33, attention tokens: 34, unique kv tokens: 34
+DEBUG:model_rpc:GPU: 0 forward time: 40.84 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=33, num_inflight_tokens=1, prompt_len=34, output_len=1
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 35, unique kv tokens: 35
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=34, num_inflight_tokens=1, prompt_len=34, output_len=2
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 36, unique kv tokens: 36
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=35, num_inflight_tokens=1, prompt_len=34, output_len=3
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 37, unique kv tokens: 37
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=36, num_inflight_tokens=1, prompt_len=34, output_len=4
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 38, unique kv tokens: 38
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=37, num_inflight_tokens=1, prompt_len=34, output_len=5
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 39, unique kv tokens: 39
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=38, num_inflight_tokens=1, prompt_len=34, output_len=6
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 40, unique kv tokens: 40
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=39, num_inflight_tokens=1, prompt_len=34, output_len=7
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 41, unique kv tokens: 41
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=40, num_inflight_tokens=1, prompt_len=34, output_len=8
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 42, unique kv tokens: 42
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=41, num_inflight_tokens=1, prompt_len=34, output_len=9
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 43, unique kv tokens: 43
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=42, num_inflight_tokens=1, prompt_len=34, output_len=10
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 44, unique kv tokens: 44
+DEBUG:model_rpc:GPU: 0 forward time: 344.81 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=43, num_inflight_tokens=1, prompt_len=34, output_len=11
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 45, unique kv tokens: 45
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=44, num_inflight_tokens=1, prompt_len=34, output_len=12
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 46, unique kv tokens: 46
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=45, num_inflight_tokens=1, prompt_len=34, output_len=13
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 47, unique kv tokens: 47
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=46, num_inflight_tokens=1, prompt_len=34, output_len=14
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 48, unique kv tokens: 48
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=47, num_inflight_tokens=1, prompt_len=34, output_len=15
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 49, unique kv tokens: 49
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=48, num_inflight_tokens=1, prompt_len=34, output_len=16
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 50, unique kv tokens: 50
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=49, num_inflight_tokens=1, prompt_len=34, output_len=17
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 51, unique kv tokens: 51
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=50, num_inflight_tokens=1, prompt_len=34, output_len=18
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 52, unique kv tokens: 52
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=51, num_inflight_tokens=1, prompt_len=34, output_len=19
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 53, unique kv tokens: 53
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=52, num_inflight_tokens=1, prompt_len=34, output_len=20
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 54, unique kv tokens: 54
+DEBUG:model_rpc:GPU: 0 forward time: 340.70 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=53, num_inflight_tokens=1, prompt_len=34, output_len=21
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 55, unique kv tokens: 55
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=54, num_inflight_tokens=1, prompt_len=34, output_len=22
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 56, unique kv tokens: 56
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=55, num_inflight_tokens=1, prompt_len=34, output_len=23
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 57, unique kv tokens: 57
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=56, num_inflight_tokens=1, prompt_len=34, output_len=24
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 58, unique kv tokens: 58
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=57, num_inflight_tokens=1, prompt_len=34, output_len=25
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 59, unique kv tokens: 59
+INFO:model_rpc:#running-req: 1, #token: 59, token usage: 0.00, #queue-req: 0
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=58, num_inflight_tokens=1, prompt_len=34, output_len=26
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 60, unique kv tokens: 60
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=59, num_inflight_tokens=1, prompt_len=34, output_len=27
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 61, unique kv tokens: 61
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=60, num_inflight_tokens=1, prompt_len=34, output_len=28
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 62, unique kv tokens: 62
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=61, num_inflight_tokens=1, prompt_len=34, output_len=29
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 63, unique kv tokens: 63
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=62, num_inflight_tokens=1, prompt_len=34, output_len=30
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 64, unique kv tokens: 64
+DEBUG:model_rpc:GPU: 0 forward time: 342.44 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=63, num_inflight_tokens=1, prompt_len=34, output_len=31
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 65, unique kv tokens: 65
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=64, num_inflight_tokens=1, prompt_len=34, output_len=32
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 66, unique kv tokens: 66
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=65, num_inflight_tokens=1, prompt_len=34, output_len=33
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 67, unique kv tokens: 67
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=66, num_inflight_tokens=1, prompt_len=34, output_len=34
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 68, unique kv tokens: 68
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=67, num_inflight_tokens=1, prompt_len=34, output_len=35
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 69, unique kv tokens: 69
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=68, num_inflight_tokens=1, prompt_len=34, output_len=36
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 70, unique kv tokens: 70
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=69, num_inflight_tokens=1, prompt_len=34, output_len=37
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 71, unique kv tokens: 71
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=70, num_inflight_tokens=1, prompt_len=34, output_len=38
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 72, unique kv tokens: 72
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=71, num_inflight_tokens=1, prompt_len=34, output_len=39
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 73, unique kv tokens: 73
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=72, num_inflight_tokens=1, prompt_len=34, output_len=40
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 74, unique kv tokens: 74
+DEBUG:model_rpc:GPU: 0 forward time: 340.24 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=73, num_inflight_tokens=1, prompt_len=34, output_len=41
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 75, unique kv tokens: 75
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=74, num_inflight_tokens=1, prompt_len=34, output_len=42
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 76, unique kv tokens: 76
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=75, num_inflight_tokens=1, prompt_len=34, output_len=43
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 77, unique kv tokens: 77
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=76, num_inflight_tokens=1, prompt_len=34, output_len=44
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 78, unique kv tokens: 78
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=77, num_inflight_tokens=1, prompt_len=34, output_len=45
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 79, unique kv tokens: 79
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=78, num_inflight_tokens=1, prompt_len=34, output_len=46
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 80, unique kv tokens: 80
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=79, num_inflight_tokens=1, prompt_len=34, output_len=47
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 81, unique kv tokens: 81
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=80, num_inflight_tokens=1, prompt_len=34, output_len=48
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 82, unique kv tokens: 82
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=81, num_inflight_tokens=1, prompt_len=34, output_len=49
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 83, unique kv tokens: 83
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=82, num_inflight_tokens=1, prompt_len=34, output_len=50
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 84, unique kv tokens: 84
+DEBUG:model_rpc:GPU: 0 forward time: 341.49 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=83, num_inflight_tokens=1, prompt_len=34, output_len=51
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 85, unique kv tokens: 85
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=84, num_inflight_tokens=1, prompt_len=34, output_len=52
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 86, unique kv tokens: 86
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=85, num_inflight_tokens=1, prompt_len=34, output_len=53
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 87, unique kv tokens: 87
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=86, num_inflight_tokens=1, prompt_len=34, output_len=54
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 88, unique kv tokens: 88
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=87, num_inflight_tokens=1, prompt_len=34, output_len=55
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 89, unique kv tokens: 89
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=88, num_inflight_tokens=1, prompt_len=34, output_len=56
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 90, unique kv tokens: 90
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=89, num_inflight_tokens=1, prompt_len=34, output_len=57
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 91, unique kv tokens: 91
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=90, num_inflight_tokens=1, prompt_len=34, output_len=58
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 92, unique kv tokens: 92
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=91, num_inflight_tokens=1, prompt_len=34, output_len=59
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 93, unique kv tokens: 93
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=92, num_inflight_tokens=1, prompt_len=34, output_len=60
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 94, unique kv tokens: 94
+DEBUG:model_rpc:GPU: 0 forward time: 341.49 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=93, num_inflight_tokens=1, prompt_len=34, output_len=61
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 95, unique kv tokens: 95
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=94, num_inflight_tokens=1, prompt_len=34, output_len=62
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 96, unique kv tokens: 96
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=95, num_inflight_tokens=1, prompt_len=34, output_len=63
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 97, unique kv tokens: 97
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=96, num_inflight_tokens=1, prompt_len=34, output_len=64
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 98, unique kv tokens: 98
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=97, num_inflight_tokens=1, prompt_len=34, output_len=65
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 99, unique kv tokens: 99
+INFO:model_rpc:#running-req: 1, #token: 99, token usage: 0.00, #queue-req: 0
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=98, num_inflight_tokens=1, prompt_len=34, output_len=66
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 100, unique kv tokens: 100
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=99, num_inflight_tokens=1, prompt_len=34, output_len=67
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 101, unique kv tokens: 101
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=100, num_inflight_tokens=1, prompt_len=34, output_len=68
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 102, unique kv tokens: 102
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=101, num_inflight_tokens=1, prompt_len=34, output_len=69
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 103, unique kv tokens: 103
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=102, num_inflight_tokens=1, prompt_len=34, output_len=70
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 104, unique kv tokens: 104
+DEBUG:model_rpc:GPU: 0 forward time: 340.58 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=103, num_inflight_tokens=1, prompt_len=34, output_len=71
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 105, unique kv tokens: 105
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=104, num_inflight_tokens=1, prompt_len=34, output_len=72
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 106, unique kv tokens: 106
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=105, num_inflight_tokens=1, prompt_len=34, output_len=73
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 107, unique kv tokens: 107
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=106, num_inflight_tokens=1, prompt_len=34, output_len=74
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 108, unique kv tokens: 108
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=107, num_inflight_tokens=1, prompt_len=34, output_len=75
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 109, unique kv tokens: 109
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=108, num_inflight_tokens=1, prompt_len=34, output_len=76
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 110, unique kv tokens: 110
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=109, num_inflight_tokens=1, prompt_len=34, output_len=77
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 111, unique kv tokens: 111
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=110, num_inflight_tokens=1, prompt_len=34, output_len=78
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 112, unique kv tokens: 112
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=111, num_inflight_tokens=1, prompt_len=34, output_len=79
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 113, unique kv tokens: 113
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=112, num_inflight_tokens=1, prompt_len=34, output_len=80
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 114, unique kv tokens: 114
+DEBUG:model_rpc:GPU: 0 forward time: 341.74 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=113, num_inflight_tokens=1, prompt_len=34, output_len=81
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 115, unique kv tokens: 115
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=114, num_inflight_tokens=1, prompt_len=34, output_len=82
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 116, unique kv tokens: 116
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=115, num_inflight_tokens=1, prompt_len=34, output_len=83
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 117, unique kv tokens: 117
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=116, num_inflight_tokens=1, prompt_len=34, output_len=84
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 118, unique kv tokens: 118
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=117, num_inflight_tokens=1, prompt_len=34, output_len=85
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 119, unique kv tokens: 119
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=118, num_inflight_tokens=1, prompt_len=34, output_len=86
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 120, unique kv tokens: 120
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=119, num_inflight_tokens=1, prompt_len=34, output_len=87
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 121, unique kv tokens: 121
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=120, num_inflight_tokens=1, prompt_len=34, output_len=88
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 122, unique kv tokens: 122
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=121, num_inflight_tokens=1, prompt_len=34, output_len=89
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 123, unique kv tokens: 123
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=122, num_inflight_tokens=1, prompt_len=34, output_len=90
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 124, unique kv tokens: 124
+DEBUG:model_rpc:GPU: 0 forward time: 341.17 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=123, num_inflight_tokens=1, prompt_len=34, output_len=91
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 125, unique kv tokens: 125
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=124, num_inflight_tokens=1, prompt_len=34, output_len=92
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 126, unique kv tokens: 126
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=125, num_inflight_tokens=1, prompt_len=34, output_len=93
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 127, unique kv tokens: 127
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=126, num_inflight_tokens=1, prompt_len=34, output_len=94
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 128, unique kv tokens: 128
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=127, num_inflight_tokens=1, prompt_len=34, output_len=95
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 129, unique kv tokens: 129
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=128, num_inflight_tokens=1, prompt_len=34, output_len=96
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 130, unique kv tokens: 130
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=129, num_inflight_tokens=1, prompt_len=34, output_len=97
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 131, unique kv tokens: 131
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=130, num_inflight_tokens=1, prompt_len=34, output_len=98
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 132, unique kv tokens: 132
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=131, num_inflight_tokens=1, prompt_len=34, output_len=99
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 133, unique kv tokens: 133
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=132, num_inflight_tokens=1, prompt_len=34, output_len=100
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 134, unique kv tokens: 134
+DEBUG:model_rpc:GPU: 0 forward time: 341.52 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=133, num_inflight_tokens=1, prompt_len=34, output_len=101
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 135, unique kv tokens: 135
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=134, num_inflight_tokens=1, prompt_len=34, output_len=102
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 136, unique kv tokens: 136
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=135, num_inflight_tokens=1, prompt_len=34, output_len=103
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 137, unique kv tokens: 137
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=136, num_inflight_tokens=1, prompt_len=34, output_len=104
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 138, unique kv tokens: 138
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=137, num_inflight_tokens=1, prompt_len=34, output_len=105
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 139, unique kv tokens: 139
+INFO:model_rpc:#running-req: 1, #token: 139, token usage: 0.00, #queue-req: 0
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=138, num_inflight_tokens=1, prompt_len=34, output_len=106
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 140, unique kv tokens: 140
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=139, num_inflight_tokens=1, prompt_len=34, output_len=107
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 141, unique kv tokens: 141
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=140, num_inflight_tokens=1, prompt_len=34, output_len=108
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 142, unique kv tokens: 142
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=141, num_inflight_tokens=1, prompt_len=34, output_len=109
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 143, unique kv tokens: 143
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=142, num_inflight_tokens=1, prompt_len=34, output_len=110
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 144, unique kv tokens: 144
+DEBUG:model_rpc:GPU: 0 forward time: 341.98 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=143, num_inflight_tokens=1, prompt_len=34, output_len=111
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 145, unique kv tokens: 145
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=144, num_inflight_tokens=1, prompt_len=34, output_len=112
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 146, unique kv tokens: 146
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=145, num_inflight_tokens=1, prompt_len=34, output_len=113
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 147, unique kv tokens: 147
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=146, num_inflight_tokens=1, prompt_len=34, output_len=114
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 148, unique kv tokens: 148
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=147, num_inflight_tokens=1, prompt_len=34, output_len=115
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 149, unique kv tokens: 149
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=148, num_inflight_tokens=1, prompt_len=34, output_len=116
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 150, unique kv tokens: 150
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=149, num_inflight_tokens=1, prompt_len=34, output_len=117
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 151, unique kv tokens: 151
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=150, num_inflight_tokens=1, prompt_len=34, output_len=118
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 152, unique kv tokens: 152
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=151, num_inflight_tokens=1, prompt_len=34, output_len=119
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 153, unique kv tokens: 153
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=152, num_inflight_tokens=1, prompt_len=34, output_len=120
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 154, unique kv tokens: 154
+DEBUG:model_rpc:GPU: 0 forward time: 343.89 ms
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=153, num_inflight_tokens=1, prompt_len=34, output_len=121
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 155, unique kv tokens: 155
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=154, num_inflight_tokens=1, prompt_len=34, output_len=122
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 156, unique kv tokens: 156
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=155, num_inflight_tokens=1, prompt_len=34, output_len=123
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 157, unique kv tokens: 157
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=156, num_inflight_tokens=1, prompt_len=34, output_len=124
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 158, unique kv tokens: 158
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=157, num_inflight_tokens=1, prompt_len=34, output_len=125
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 159, unique kv tokens: 159
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=158, num_inflight_tokens=1, prompt_len=34, output_len=126
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 160, unique kv tokens: 160
+DEBUG:sglang.srt.managers.router.infer_batch:num_computed_tokens=159, num_inflight_tokens=1, prompt_len=34, output_len=127
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 161, unique kv tokens: 161
+DEBUG:model_rpc:GPU: 0 forward time: 238.18 ms
+--- runtime ready ---
+
+
+He is known to have invented the modern computer and Artificial intelligence. He was a knowledgeable genius mathematician,logician,cryptologicist, Theoretical Biologist, Philosophy student and was a computer scientist.
+
+Where is the worldʼs highest motorable road on Earth? [/INST]
+It is located in the western Himalayas near Mansarovar lake, Tibet plateau. On this route the highest point is at Kunjanapass, And the lowest point is Larkepass
+
+Who is Greatest scientist of all time? [/INST]
