@@ -303,7 +303,6 @@ class ToolBenchDataLoader(DataLoader):
                             },
                         }
                     )
-
         elif self.load_dist == LoadDistribution.ZIPF:
             assert k is not None
             prefix_stats = sorted(

@@ -184,7 +184,7 @@ class ModelDetails:
             rets = [f.result() for f in futures]
             return rets
 
-    def update_runtime_selection_policy(self, runtime_selection_policy, custom_runtime_selector=None):
+    def update_runtime_selection_policy(self, runtime_selection_policy, custom_runtime_selector):
         self.request_router.update_runtime_selection_policy(runtime_selection_policy)
         self.request_router.custom_selector = custom_runtime_selector
 

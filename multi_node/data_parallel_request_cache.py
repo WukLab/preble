@@ -41,6 +41,9 @@ class CustomPolicyType(Enum):
     GREEDY_LP = auto()
     GREEDY_LP_OLD = auto()
 
+    BASIC_MEM_SCHEDULER = auto()
+    BASIC_MEM_SCHEDULERV2 = auto()
+
 
 class DataParallelRequestRouter:
     def __init__(
@@ -60,7 +63,7 @@ class DataParallelRequestRouter:
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
             selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids, sampling_params)
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"Runtime selection policy {self.runtime_selection_policy} not implemented with {self.custom_selector}")
         self.model_selection_stats.append(
             {
                 "selected_runtime": selected_runtime,

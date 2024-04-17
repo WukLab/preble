@@ -244,6 +244,7 @@ class LPRadixCache:
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
         new_node.ref_counter = child.ref_counter
+        new_node.context_length = child.parent.context_length + split_len
 
         new_node.value = child.value[:split_len]
         child.parent = new_node
@@ -267,6 +268,7 @@ class LPRadixCache:
     ):
         node.last_access_time = time.time()
         node.ref_counter += 1
+
         for c_key, child in node.children.items():
             prefix_len = match(c_key, key)
             if prefix_len == len(c_key):
@@ -286,7 +288,7 @@ class LPRadixCache:
                         depth_limit=depth_limit,
                         current_depth=current_depth + 1,
                         split_nodes=split_nodes,
-                        parent_context_length=node.context_length + len(child.value),
+                        parent_context_length=parent_context_length + prefix_len,
                     )
 
             if prefix_len:
@@ -312,7 +314,7 @@ class LPRadixCache:
                     depth_limit=depth_limit,
                     current_depth=current_depth + 1,
                     split_nodes=split_nodes,
-                    parent_context_length=node.context_length + len(child.value),
+                    parent_context_length=parent_context_length + prefix_len,
                 )
 
         if len(key):
@@ -321,8 +323,9 @@ class LPRadixCache:
             new_node.parent = node
             new_node.value = value
             new_node.ref_counter = 1
+            new_node.context_length = parent_context_length + len(key)
+
             node.children[key] = new_node
-            node.context_length = parent_context_length + len(value) 
             self.evictable_size_ += len(value)
             # if current_depth < depth_limit:
             modified_nodes.add(new_node)
@@ -436,7 +439,8 @@ class LPGurobiGreedyTraversal:
                     break
                 total_recomputation_tokens += node.num_tokens
                 node = node.parent
-
+            breakpoint()
+            print(f"Total recomputation tokens {gpu_index}: {total_recomputation_tokens}")
             recomputation_time = 0
             if total_recomputation_tokens != 0:
                 recomputation_time = self.lp_forward_simulation(total_recomputation_tokens, leaf_node.context_length) * 1000

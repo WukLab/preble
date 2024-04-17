@@ -53,6 +53,7 @@ def create_toolbench_data_loader(configurations_to_test, model_name, exp_time, d
     for config in configurations_to_test:
         random.seed(10)
         np.random.seed(10)
+
         num_workloads, num_requests, request_rate = config
         if exp_time != float("inf"):
             num_requests = int(request_rate * exp_time)
@@ -92,8 +93,8 @@ def create_loogle_dataset(configurations_to_test, model_name, exp_time) -> Itera
         )
         requests = dataloader.generate_workload(max_length=32768)
         random.shuffle(requests)
+        requests = requests[:num_requests]
         send_out_times = calc_send_out_times(requests, request_rate, exp_time)
-
         workload_config = WorkloadConfig(
                 num_prefix_patterns=num_workloads,
                 num_requests=num_requests,

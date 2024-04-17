@@ -64,7 +64,7 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=oracle,
             )
-        if custom_policy == CustomPolicyType.ORACLE_HOT_COLD:
+        elif custom_policy == CustomPolicyType.ORACLE_HOT_COLD:
             oracle = OracleHotCold(
                 num_nodes=len(model_details.runtimes),
                 num_workloads=workload_config.num_prefix_patterns,
@@ -121,8 +121,22 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=greedy_lp,
             )
-    else:
-        model_details.update_runtime_selection_policy(policy)
+        elif custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULER:
+            from basic_mem_scheduler import BasicMemScheduler
+            mem_waste = BasicMemScheduler(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULERV2:
+            from basic_mem_scheduler import BasicMemSchedulerV2 
+            mem_waste = BasicMemSchedulerV2(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        else:
+            model_details.update_runtime_selection_policy(policy)
 
 
 def load_and_run_benchmark(
@@ -155,6 +169,9 @@ def load_and_run_benchmark(
     counts = model_details.request_router.get_model_selection_counts()
     exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     detail_log_path = directory + '/' + exp_params.replace(", ", "_").replace("/", "-") + '.json'
+    if custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULER:
+        model_details.request_router.custom_selector.print()
+
     bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(
         tokenizer=tokenizer,
         req_func_outputs=results,
@@ -181,6 +198,9 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             )  # TODO: clear cache instead of reload
             policy, custom_policy, custom_msg = selector_config
             load_and_run_benchmark(model_details, workload_config, policy, custom_policy, custom_msg, gpu_configs=gpu_configs)
+            if custom_policy == CustomPolicyType.GREEDY_LP:
+                lp_scheduler: GurobiGreedyLPScheduler = model_details.request_router.custom_selector
+                lp_scheduler.lp_tree_traversal.pretty_print(lp_scheduler.tree_cache.root_node, depth_limit=4)
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
             gc.collect()

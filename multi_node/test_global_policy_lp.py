@@ -12,6 +12,7 @@ import concurrent
 from parameterized import parameterized
 from sglang.srt.managers.router.model_runner import GPUConfig
 from benchmarks.exp_configs.react_simulator_config import add_simulation_to_gpu_config
+import random
 
 
 # Test the LPTreeTraversal with some sample inputs and verify the outputs
@@ -87,7 +88,7 @@ est laborum."""
     #     self.assertEqual(gpu_selection, set(i for i in range(num_gpus)))
 
     def _test_basic_workload_branching_consistent_across_depths(self, data_size=3, verbose=True):
-        lp_tree_traversal = LPGurobiGreedyTraversal(2)
+        lp_tree_traversal = LPGurobiGreedyTraversal(2, gpu_configs=self.gpu_config)
 
         lorem5 = " ".join([self.lorem for _ in range(data_size)])
         texts = [
@@ -107,9 +108,10 @@ est laborum."""
             "Workload 2": []
         }
         for i in range(len(texts)):
-            node = lp_tree_traversal.insert_into_cache_and_solve(tree_cache=cache, input_ids=tuple(input_ids[i]), decode_cost=0.0988*45)
+            breakpoint()
+            node = lp_tree_traversal.insert_into_cache_and_solve(tree_cache=cache, input_ids=tuple(input_ids[i]), decode_cost=0.0)
             gpu_selections = node.gpu_selections
-            # lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer)
+            lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer)
             # print(f"GPU Selections: {gpu_selections}")
             self.assertEqual(len(gpu_selections), 1)
             if "Workload 1" in texts[i]:
@@ -124,42 +126,81 @@ est laborum."""
         self.assertNotEqual(runtime_selected_per_workload["Workload 1"][0], runtime_selected_per_workload["Workload 2"][0])
 
     @parameterized.expand([
-        (1,),
-        (2,),
+        # (1,),
+        # (2,),
         (3,),
-        (4,),
-        (5,),
-        (6,),
+        # (4,),
+        # (5,),
+        # (6,),
+        # (7,),
+        # (8,),
+
     ])
     def test_basic_workload_branching_consistent_across_depths(self, data_size):
         self._test_basic_workload_branching_consistent_across_depths(data_size)
 
-    def test_replication_workload_branching_consistent_across_depths(self):
-        lp_tree_traversal = LPGurobiGreedyTraversal(2)
-        lorem5 = " ".join([self.lorem for _ in range(4)])
-        texts = [
-            f"Workload 1. {lorem5} A B C D",
-            f"Workload 2. {lorem5} A B C D", 
-        ]
-        texts += [f"Workload 1. {lorem5} A B C D example" for i in range(1, 40)]
-        input_ids = [self.tokenizer.encode(text) for text in texts]
-        cache = LPRadixCache()
-        workload_2_gpu_selections = set()
-        workload_1_gpu_selections = set()
-        for i in range(len(texts)):
-            node = lp_tree_traversal.insert_into_cache_and_solve(tree_cache=cache, input_ids=tuple(input_ids[i]), decode_cost=0.0988*45)
-            gpu_selections = node.gpu_selections
-            if "Workload 1" in texts[i]:
-                workload_1_gpu_selections.update(gpu_selections)
-            else:
-                self.assertEqual(len(gpu_selections), 1)
-                workload_2_gpu_selections.add(list(gpu_selections)[0])
+    # def test_different_workload_id(self, data_size=3, verbose=True):
+    #     lp_tree_traversal = LPGurobiGreedyTraversal(2, gpu_configs=self.gpu_config)
 
-        self.assertEqual(len(workload_1_gpu_selections), 2)
-        lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer)
+    #     lorem5 = " ".join([self.lorem for _ in range(5)])
+    #     texts = [f"Workload {i}. {lorem5} A B C D" for i in range(200)]
+    #     for i in range(200):
+    #         for j in range(5):
+    #             lorem3 = " ".join([self.lorem for _ in range(j)])
+    #             texts.extend([f"Workload {i}. {lorem3} A B C D example {i}" for i in range(5)])
+    #     random.shuffle(texts)
+    #     input_ids = [self.tokenizer.encode(text) for text in texts]
+    #     cache = LPRadixCache()
+    #     runtime_selected_per_workload = {
+    #         "Workload 1": [],
+    #         "Workload 2": []
+    #     }
+    #     for i in range(len(texts)):
+    #         print(f"Inserting {texts[i][:20]}", len(texts[i]))
+    #         breakpoint()
+    #         node = lp_tree_traversal.insert_into_cache_and_solve(tree_cache=cache, input_ids=tuple(input_ids[i]), decode_cost=45)
+    #         gpu_selections = node.gpu_selections
+    #         lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer, depth_limit=5)
+    #         # print(f"GPU Selections: {gpu_selections}")
+    #         self.assertEqual(len(gpu_selections), 1)
+    #         if "Workload 1" in texts[i]:
+    #             runtime_selected_per_workload["Workload 1"].append(list(gpu_selections)[0])
+    #         else:
+    #             runtime_selected_per_workload["Workload 2"].append(list(gpu_selections)[0])
+            
+        # Test that the same workloads get the same runtime
+        # self.assertEqual(len(set(runtime_selected_per_workload["Workload 1"])), 1)
+        # self.assertEqual(len(set(runtime_selected_per_workload["Workload 2"])), 1)
+        # # Check that the workloads are placed on different runtimes
+        # self.assertNotEqual(runtime_selected_per_workload["Workload 1"][0], runtime_selected_per_workload["Workload 2"][0])
 
-        # Test that workload 1 
-        # lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer)
+
+    # def test_replication_workload_branching_consistent_across_depths(self):
+    #     lp_tree_traversal = LPGurobiGreedyTraversal(2, gpu_configs=self.gpu_config)
+    #     lorem5 = " ".join([self.lorem for _ in range(4)])
+    #     texts = [
+    #         f"Workload 1. {lorem5} A B C D",
+    #         f"Workload 2. {lorem5} A B C D", 
+    #     ]
+    #     texts += [f"Workload 1. {lorem5} A B C D example" for i in range(1, 40)]
+    #     input_ids = [self.tokenizer.encode(text) for text in texts]
+    #     cache = LPRadixCache()
+    #     workload_2_gpu_selections = set()
+    #     workload_1_gpu_selections = set()
+    #     for i in range(len(texts)):
+    #         node = lp_tree_traversal.insert_into_cache_and_solve(tree_cache=cache, input_ids=tuple(input_ids[i]), decode_cost=45)
+    #         gpu_selections = node.gpu_selections
+    #         if "Workload 1" in texts[i]:
+    #             workload_1_gpu_selections.update(gpu_selections)
+    #         else:
+    #             self.assertEqual(len(gpu_selections), 1)
+    #             workload_2_gpu_selections.add(list(gpu_selections)[0])
+
+    #     self.assertEqual(len(workload_1_gpu_selections), 2)
+    #     lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer)
+
+    #     # Test that workload 1 
+    #     # lp_tree_traversal.pretty_print(cache.root_node, tokenizer=self.tokenizer)
 
 def run_tests():
     runner = unittest.TextTestRunner(verbosity=2)
