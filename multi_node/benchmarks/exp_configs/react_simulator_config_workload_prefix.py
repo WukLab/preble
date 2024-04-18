@@ -16,10 +16,10 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "basic_mem_scheduler_comp/load_only.log"
+log_file_path = "basic_mem_scheduler_comp/load_only/prefix_gen_v2.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 500
+exp_time = 200
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -46,7 +46,7 @@ server_args = {
     'gpu_configs': gpu_configs,
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True
 }
 
@@ -55,9 +55,9 @@ server_args = {
 #     [200, 400, 4],
 # ]s
 configurations_to_test = [
-    [ 24, 75, 0.5]
+    [ 250, 0.2, 75, 6]
 ]
-workload_configs = create_loogle_dataset(
+workload_configs = create_workload_prefix_configs(
     configurations_to_test, 
     model_name, 
     exp_time, 
@@ -71,7 +71,10 @@ workload_configs = create_loogle_dataset(
 selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2_5, 'load_to_node_scheduler'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2_5, 'load_to_node_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'greedy_v3'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'greedy_v3'),

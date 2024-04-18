@@ -133,7 +133,7 @@ def generate_random_workload(random_workload_path):
     global share_gpt_dataset
     if not share_gpt_dataset:
         if not random_workload_path:
-            random_workload_path = "ShareGPT_V3_unfiltered_cleaned_split.json"
+            random_workload_path = "datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
         with open(random_workload_path) as f:
             data = json.load(f)
         share_gpt_dataset = data
@@ -237,12 +237,12 @@ class WorkloadPrefixDataLoader(DataLoader):
                     "rid": uuid.uuid4().hex,
                 }
             )
-        # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
+        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
-            # prompt = random.choice(random_workload)
-            prompt = get_react_workload(
-                uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
-            )
+            prompt = random.choice(random_workload)
+            # prompt = get_react_workload(
+            #     uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
+            # )
             workload.append(
                 {
                     "text": prompt,
