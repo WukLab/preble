@@ -162,3 +162,64 @@ def _print_helper(node, indent=0, depth=0):
     for key, child in node.children.items():
         print(" " * indent, tokenizer.decode(child.value)[:20], child.gpu_selections, len(child.value))
         _print_helper(child, indent=indent + 2, depth=depth + 1)
+
+
+class HistogramBasedRecomp(HistogramBasedMemoryLoadScheduler):
+    def __init__(self, num_nodes=2) -> None:
+        super().__init__(num_nodes)
+        self.gpu_allocations = defaultdict(set)
+
+    def get_recomp_cost(self, node: LPTreeNode, gpu_id, histogram: SlidingWindowHistogram):
+        if not node or gpu_id in node.gpu_selections:
+            return 0
+        else:
+            return node.num_tokens * histogram.histogram.get(node, 0) + self.get_recomp_cost(node.parent, gpu_id, histogram)
+
+    def runtime_selector(
+        self,
+        text: str = None,
+        request_id: str = None,
+        input_ids=None,
+        sampling_params=None
+    ):
+        # Tokenize the text
+        start_time = time.time()
+        with self.lock:
+            split_nodes = {}
+            leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
+            self.handle_split_nodes(split_nodes, self.gpu_allocations)
+
+            for k, v in split_nodes.items():
+                if not self.is_large_node(v): # the parent key is larger and more important. This should be in the histogram
+                    self.hisotgram.rename_node(v, k)
+
+            important_node = self.get_important_node(leaf_node)
+            if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens:
+                gpu_selected = self.get_parent_gpu_selections(leaf_node)
+                # for gpu in gpu_selected:
+                #     self.mem_cost[gpu] += leaf_node.context_length
+            else:
+                # Current node is the important node
+                recom_costs = []
+                for gpu_id in range(self.num_gpus):
+                    recomputation_cost = self.get_recomp_cost(leaf_node.parent, gpu_id, self.hisotgram) + leaf_node.context_length
+                    recom_costs.append(recomputation_cost)
+                histogram_mem_cost = self.hisotgram.current_allocation_per_gpu()
+                gpu_selected = int(np.argmin([recom_costs[gpu_id] + histogram_mem_cost[gpu_id] for gpu_id in range(self.num_gpus)]))
+                self.mem_cost[gpu_selected] += leaf_node.context_length
+                gpu_selected = set([gpu_selected])
+            self.update_gpu_selections_of_parent(leaf_node, gpu_selected)
+            self.hisotgram.update(datetime.now(), important_node, leaf_node)
+        self.metrics_dict.append(
+            {
+                "text": text,
+                "rid": request_id,
+                "selected_runtime": gpu_selected,
+                "overhead": time.time() - start_time,
+            }
+        )
+        if len(gpu_selected) > 1:
+            random_gpu = np.random.choice(list(gpu_selected))
+            return int(random_gpu)
+        runtime_idx = list(gpu_selected)[0]
+        return int(runtime_idx)

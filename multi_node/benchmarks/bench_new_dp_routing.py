@@ -149,6 +149,13 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
+        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoad:
+            from histogram_based_scheduling import HistogramBasedRecomp
+            mem_waste = HistogramBasedRecomp(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
         else:
             model_details.update_runtime_selection_policy(policy)
 
@@ -222,7 +229,7 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    from benchmarks.exp_configs.react_simulator_config_workload_prefix import exp_args
+    from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
     # from benchmarks.exp_configs.debug_simulator import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
