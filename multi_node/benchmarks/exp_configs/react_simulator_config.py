@@ -29,7 +29,9 @@ def add_simulation_to_gpu_config(gpu_configs):
     for config in gpu_configs:
         config.regist_simulator_config(
             [mistral_7b_A6000_sglang_extend_flashinfer, mistrial_7b_A6000_sglang_decode_flashinfer], 
-            131072 * 198516)
+            kv_cache_memory=131072 * 198516,
+            lp_forward_simulation=LP_mistral_7b_A6000_sglang_extend_flashinfer
+        )
 
 # -----------------------------------------------------------------------------
 # Experiment Configuration
@@ -48,6 +50,7 @@ log_file_path = "logs/ref_correct_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
 
 
+
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 
@@ -55,8 +58,8 @@ model_name = "mistralai/Mistral-7B-v0.1"
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False),
     GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,

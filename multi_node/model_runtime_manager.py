@@ -15,6 +15,7 @@ import numpy as np
 import time
 import paramiko
 import sys, traceback
+from typing import Tuple
 from ssh_runtime import SSHRuntimeManager
 from dataclasses import field
 from sglang.srt.managers.router.model_runner import GPUConfig # FIXME wrong import
@@ -68,7 +69,7 @@ class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
 class SimulationRuntime(ServerRuntimeSimulator, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+    
 
 class ModelDetails:
     """
@@ -128,22 +129,23 @@ class ModelDetails:
                     gpu_config=config,
                     **kwargs,
                 )
+            #  VLLM Runtime
             self.runtimes.append(runtime)
 
         # parallelizae loading for each gpu
         for config in gpu_configs:
             load_runtime(config)
 
-    def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
+    def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> Tuple[int, str]:
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
-        request_id = sampling_params.pop("request_id", random_uuid_string())
-        runtime_id = self.request_router.select_runtime(text, experiment_id, request_id, input_ids)
-        return self.runtimes[runtime_id]
+        request_id = random_uuid_string()
+        # For now ignore sampling_params request_id
+        runtime_idx = self.request_router.select_runtime(text, experiment_id, request_id, input_ids, sampling_params)
+        return runtime_idx, request_id
 
     def finish_request(self, text, sampling_params, input_ids, func_output: RequestFuncOutput) -> EndpointRuntimeInterface:
-        experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
-        request_id = sampling_params.pop("request_id", random_uuid_string())
-        self.request_router.finish_request(text, experiment_id, request_id, input_ids, func_output)
+        request_id = sampling_params.get("request_id")
+        self.request_router.finish_request(text, None, request_id, input_ids, func_output)
 
     def async_wrap(f):
         async def _func(*args, **kwargs):
@@ -152,12 +154,12 @@ class ModelDetails:
         return _func
     
     @async_wrap
-    def async_select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> EndpointRuntimeInterface:
+    def async_select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> Tuple[int, str]:
         return self.select_runtime_with_identifiers(text, sampling_params, input_ids)
 
     def generate_request(self, text, sampling_params):
         runtime: EndpointRuntimeInterface = (
-            self.select_runtime_with_identifiers(text, sampling_params)
+            self.runtimes[self.select_runtime_with_identifiers(text, sampling_params)]
         )
         start_time = time.time()
         output =  requests.post(
@@ -183,7 +185,7 @@ class ModelDetails:
             rets = [f.result() for f in futures]
             return rets
 
-    def update_runtime_selection_policy(self, runtime_selection_policy, custom_runtime_selector=None):
+    def update_runtime_selection_policy(self, runtime_selection_policy, custom_runtime_selector):
         self.request_router.update_runtime_selection_policy(runtime_selection_policy)
         self.request_router.custom_selector = custom_runtime_selector
 
@@ -249,6 +251,7 @@ class ModelDetails:
 
             if exp_time != float("inf"):
                 remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
+                print(f"Waiting for remaining time", remaining_time)
                 done, pending = await asyncio.wait(tasks, timeout=remaining_time)
             else:
                 done, pending = await asyncio.wait(tasks)
@@ -269,19 +272,19 @@ class ModelDetails:
     ) -> RequestFuncOutput: 
         start_time = time.time()
         st = time.perf_counter()
-        if rid is None:
-            rid = random_uuid_string()
-        sampling_params["request_id"] = rid
-        runtime = await asyncio.to_thread(
+        runtime_idx, request_id = await asyncio.to_thread(
             self.select_runtime_with_identifiers, text, sampling_params, input_ids
         )
         scheduling_overhead = time.time() - start_time
 
-        api_url = runtime.generate_url
+        api_url = self.runtimes[runtime_idx].generate_url
+        # If request in sampling_params pop it
+        if "request_id" in sampling_params:
+            sampling_params.pop("request_id")
         payload = {
             "text": text,
             "sampling_params": sampling_params,
-            "rid": rid,
+            "rid": request_id,
             'stream': True
         }
         output = RequestFuncOutput()
@@ -289,6 +292,7 @@ class ModelDetails:
         output.prompt_text = text[:20]
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
+        output.runtime_selected = runtime_idx
 
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
@@ -326,24 +330,27 @@ class ModelDetails:
                             output.output_len = data['meta_info']['completion_tokens']
                             output.arrival_time = data['meta_info']['arrival_time'] - self.current_experiment_state_time
                             output.append_to_queue_time = data['meta_info']['append_to_queue_time'] - self.current_experiment_state_time
-                        output.global_time = time.time() - self.current_experiment_state_time
+                            output.global_time = time.time() - self.current_experiment_state_time
                         # print(data["meta_info"])
-                    else:
-                        output.error = response.reason
-                        output.success = False
+                    # else:
+                    #     output.error = response.reason
+                    #     output.success = False
             except Exception:
                 output.success = False
                 exc_info = sys.exc_info()
                 output.error = "".join(traceback.format_exception(*exc_info))
         #  throughput as token generated per second
         output.scheduling_overhead = scheduling_overhead
+        output.tpot = (output.request_latency - output.ttft)/max(1, output.output_len)
 
+        sampling_params["request_id"] = request_id
         await asyncio.to_thread(
             self.finish_request, text, sampling_params, input_ids, output
         )
 
         output.scheduling_overhead = scheduling_overhead
         return output
+
 
 def remove_prefix(text: str, prefix: str) -> str:
     if text.startswith(prefix):
