@@ -521,6 +521,7 @@ class Batch:
             "logit_bias",
         ]:
             setattr(new_batch, item, getattr(self, item)[new_indices])
+        return new_batch
             
     def merge(self, other):
         self.reqs.extend(other.reqs)
@@ -556,8 +557,11 @@ class Batch:
         self.extend_num_tokens = other.extend_num_tokens
         
         def cat_or_set(attr):
-            if getattr(self, attr) is None:
-                setattr(self, attr, getattr(other, attr))
+            s, t = getattr(self, attr), getattr(other, attr)
+            if t is None:
+                return
+            if s is None:
+                setattr(self, attr, t)
             else:
                 setattr(
                     self, attr, torch.cat([getattr(self, attr), getattr(other, attr)])

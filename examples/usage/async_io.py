@@ -38,7 +38,7 @@ async def generate(
 
 if __name__ == "__main__":
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(filename)s:%(lineno)d - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     
     # runtime = Runtime(model_path="meta-llama/Llama-2-7b-chat-hf")
     # runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=512, load_format='dummy')
-    runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=512, enable_flashinfer=True)
+    runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=64, enable_flashinfer=True)
     print("--- runtime ready ---\n")
     
     prefix = (
