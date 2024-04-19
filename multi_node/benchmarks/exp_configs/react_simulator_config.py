@@ -42,7 +42,7 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/greedy_new_equation_sim_hot_cold_rps18_600/exp.log"
-log_file_path = "logs/ref_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
+log_file_path = "logs/ref_correct_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
 
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"

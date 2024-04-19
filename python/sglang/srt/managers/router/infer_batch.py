@@ -148,7 +148,7 @@ class Req:
                     return
                 
     def get_num_unfinished_tokens(self):
-        return self.prompt_tokens + len(self.output_ids) - len(self.prefix_indices) - self.num_computed_tokens
+        return self.prompt_tokens + len(self.output_ids) - self.get_cached_len()
     
     # NOTE: Currently sglang clears output tokens when recompute (??)
     #       so a prefill chunk will never involve output tokens
@@ -161,6 +161,9 @@ class Req:
             assert self.num_inflight_tokens == 1
             return [self.output_ids[-1]]
         return self.input_ids[start_idx : start_idx + self.num_inflight_tokens]
+    
+    def get_cached_len(self):
+        return len(self.prefix_indices) + self.num_computed_tokens
     
     def get_context_len(self):
         return len(self.prefix_indices) + self.num_computed_tokens + self.num_inflight_tokens
@@ -585,7 +588,7 @@ class Batch:
         input_ids = sum(input_ids, [])
         self.input_ids = torch.tensor(input_ids, dtype=torch.int32, device=device)
         self.seq_lens = torch.tensor([r.get_context_len() for r in self.reqs], dtype=torch.int32, device=device)
-        self.prefix_lens = torch.tensor([r.get_context_len() - r.num_inflight_tokens for r in self.reqs], dtype=torch.int32, device=device)
+        self.prefix_lens = torch.tensor([r.get_cached_len() for r in self.reqs], dtype=torch.int32, device=device)
         
     
     def prepare_for_extend_v2(self, vocab_size: int, int_token_logit_bias: torch.Tensor):

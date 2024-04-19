@@ -290,6 +290,7 @@ class ModelRpcServer:
         preempted = []
         scheduled = []
         batch.out_cache_loc = None
+        out_cache_locs = [None] * len(current_running_idx)
         while current_running_idx:
             if budget.get_remaining_token_budget() <= 0:
                 break
@@ -330,13 +331,10 @@ class ModelRpcServer:
                 out_cache_loc = batch.token_to_kv_pool.alloc(new_tokens)
                 batch.req_to_token_pool.req_to_token[
                     req_pool_indices_np[target_idx],
-                    target_to_schedule.num_computed_tokens : target_to_schedule.num_computed_tokens + new_tokens
+                    target_to_schedule.get_cached_len() : target_to_schedule.get_cached_len() + new_tokens
                 ] = out_cache_loc
                 target_to_schedule.num_inflight_tokens = new_tokens
-                if batch.out_cache_loc is None:
-                    batch.out_cache_loc = out_cache_loc
-                else:
-                    batch.out_cache_loc = torch.cat([batch.out_cache_loc, out_cache_loc])
+                out_cache_locs[target_idx] = out_cache_loc
         
         if current_running_idx:
             delayed_batch = batch.copy_from(current_running_idx)
@@ -344,10 +342,13 @@ class ModelRpcServer:
             delayed_batch = None
                
         if len(scheduled) < len(batch.reqs):
-            out_cache_loc = batch.out_cache_loc
             logger.debug(f'GPU: {self.current_gpu} preempted {len(batch.reqs) - len(scheduled)} requests')
             batch.filter_batch(scheduled)
-            batch.out_cache_loc = out_cache_loc
+            
+        # set out_cache_loc based on sorted indices
+        out_cache_locs = [loc for loc in out_cache_locs if loc is not None]
+        out_cache_locs = torch.cat(out_cache_locs, dim=0)
+        batch.out_cache_loc = out_cache_locs
         batch.out_cache_cont_start = batch.out_cache_cont_end = None
         
         batch.prepare_for_decode_v2()
@@ -528,13 +529,14 @@ class ModelRpcServer:
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"batch.inflight_tokens: {num_batched_tokens}, "
                 f"attention tokens: {num_attention_tokens}, "
-                f"unique kv tokens: {unique_kvs}"
+                f"unique kv tokens: {unique_kvs}, "
+                f"#remaining_req: {len(self.forward_queue)}, "
             )
         forward_time = 0
         # Forward
         assert num_batched_tokens > 0, "max_token_len should be greater than 0"
         if forward_simulation is None:
-            logger.debug(self.running_batch)
+            # logger.debug(self.running_batch)
             s = time.time()
             if not self.use_sleep_forwarding:
                 start_event = torch.cuda.Event(enable_timing=True)
@@ -876,7 +878,7 @@ class ModelRpcServer:
             )
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
-                logger.debug(batch)
+                # logger.debug(batch)
                 # Forward
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
@@ -984,7 +986,7 @@ class ModelRpcServer:
         forward_time = 0
         # Forward
         if forward_simulation is None:
-            logger.debug(batch)
+            # logger.debug(batch)
             s = time.time()
             if not self.use_sleep_forwarding:
                 start_event = torch.cuda.Event(enable_timing=True)
@@ -1113,6 +1115,7 @@ class ModelRpcServer:
         # Forward
         if forward_simulation is None:
             s = time.time()
+            # logger.debug(batch)
             if not self.use_sleep_forwarding:
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
