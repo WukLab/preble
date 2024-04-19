@@ -41,7 +41,7 @@ import os
 
 logger = logging.getLogger("model_rpc")
 
-detail_batch_logger = logger.info
+detail_batch_logger = logger.debug
 
 class ModelRpcServer:
     def __init__(
@@ -290,7 +290,7 @@ class ModelRpcServer:
         preempted = []
         scheduled = []
         batch.out_cache_loc = None
-        out_cache_locs = [None] * len(current_running_idx)
+        out_cache_locs = []
         while current_running_idx:
             if budget.get_remaining_token_budget() <= 0:
                 break
@@ -334,7 +334,7 @@ class ModelRpcServer:
                     target_to_schedule.get_cached_len() : target_to_schedule.get_cached_len() + new_tokens
                 ] = out_cache_loc
                 target_to_schedule.num_inflight_tokens = new_tokens
-                out_cache_locs[target_idx] = out_cache_loc
+                out_cache_locs.append(out_cache_loc)
         
         if current_running_idx:
             delayed_batch = batch.copy_from(current_running_idx)
@@ -342,16 +342,26 @@ class ModelRpcServer:
             delayed_batch = None
                
         if len(scheduled) < len(batch.reqs):
-            logger.debug(f'GPU: {self.current_gpu} preempted {len(batch.reqs) - len(scheduled)} requests')
+            logger.debug(f'GPU: {self.current_gpu} preempted/delayed {len(batch.reqs) - len(scheduled)} requests')
             batch.filter_batch(scheduled)
             
-        # set out_cache_loc based on sorted indices
-        out_cache_locs = [loc for loc in out_cache_locs if loc is not None]
+        # set out_cache_loc
         out_cache_locs = torch.cat(out_cache_locs, dim=0)
         batch.out_cache_loc = out_cache_locs
         batch.out_cache_cont_start = batch.out_cache_cont_end = None
         
         batch.prepare_for_decode_v2()
+        num_batched_tokens = batch.input_ids.shape[0]
+        num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
+        detail_batch_logger(
+            f"GPU: {self.current_gpu} "
+            f"schedule running: "
+            f"batch.num_reqs: {len(batch.reqs)}, "
+            f"input ids: {num_batched_tokens}, "
+            f"attention tokens: {num_attention_tokens}, "
+            f"unique kv tokens: {unique_kvs}"
+        )
         return preempted, delayed_batch
     
     
@@ -483,6 +493,7 @@ class ModelRpcServer:
                 self.running_batch.concat(self.delayed_batch)
             else:
                 self.running_batch = self.delayed_batch
+            self.delayed_batch = None
         preempted, delayed_batch = self._schedule_running(budget)
         self.delayed_batch = delayed_batch
         self.forward_queue.extend(preempted)
@@ -1230,6 +1241,7 @@ class ModelRpcServer:
 
         # Send to detokenizer
         if output_rids:
+            logger.debug(f'finished reqs: {len(output_rids)}')
             self.out_pyobjs.append(
                 BatchTokenIDOut(
                     output_rids,
