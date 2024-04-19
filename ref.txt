@@ -1,0 +1,438 @@
+INFO:server:mem_fraction_static: None
+INFO:server:http://0.0.0.0:30000, ports: PortArgs(tokenizer_port=10000, router_port=10007, detokenizer_port=10008, nccl_port=10009, migrate_port=10010, model_rpc_ports=[10011, 10012, 10013])
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/config.json HTTP/1.1" 200 0
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_rpc:Use sleep forwarding: False
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/config.json HTTP/1.1" 200 0
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_runner:Rank 0: load weight begin.
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "GET /api/models/mistralai/Mistral-7B-v0.1 HTTP/1.1" 200 13646
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "GET /api/models/mistralai/Mistral-7B-v0.1/tree/main?recursive=False&expand=False HTTP/1.1" 200 2139
+DEBUG:filelock:Attempting to acquire lock 140140918961344 on /tmp/mistralai-Mistral-7B-v0.1.lock
+DEBUG:filelock:Lock 140140918961344 acquired on /tmp/mistralai-Mistral-7B-v0.1.lock
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "GET /api/models/mistralai/Mistral-7B-v0.1/revision/main HTTP/1.1" 200 13646
+DEBUG:filelock:Attempting to release lock 140140918961344 on /tmp/mistralai-Mistral-7B-v0.1.lock
+DEBUG:filelock:Lock 140140918961344 released on /tmp/mistralai-Mistral-7B-v0.1.lock
+INFO:model_runner:Rank 0: load weight end.
+INFO:model_runner:kv one token size: 8 * 128 * 32 * 2 * 2 = 131072 bytes
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_rpc:Rank 0: max_total_num_token=237245, max_prefill_num_token=39540, context_len=32768, 
+INFO:model_rpc:disable_radix_cache=False, enable_flashinfer=False, disable_regex_jump_forward=False, disable_disk_cache=False, attention_reduce_in_fp32=False
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+DEBUG:urllib3.connectionpool:Starting new HTTP connection (1): 0.0.0.0:30000
+DEBUG:urllib3.connectionpool:http://0.0.0.0:30000 "GET /get_model_info HTTP/1.1" 200 42
+DEBUG:urllib3.connectionpool:Starting new HTTP connection (1): 0.0.0.0:30000
+INFO:model_rpc:GPU: 0 new fill batch. #seq: 1. #cached_token: 0. #new_token: 9. #remaining_req: 0. #running_req: 0. tree_cache_hit_rate: 0.00%. hit_tokens: 0. free_gpu_mem: 1.00. 
+INFO:model_rpc:GPU: 0 batch.extend_num_tokens: 9, num reqs: 1, input ids: 9, attention tokens: 9, unique kv tokens: 9
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=0, inflight=9
+]
+input_ids=tensor([    1, 15753,   456,   349,   264,  6100,   715,  2159, 28723],
+       device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([9], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([0], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([0, 1, 2, 3, 4, 5, 6, 7, 8], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:GPU: 0 forward time: 600.64 ms
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 10, unique kv tokens: 10
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=9, inflight=1
+]
+input_ids=tensor([13], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([10], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([9], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([9], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 10, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 11, unique kv tokens: 11
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=10, inflight=1
+]
+input_ids=tensor([13], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([11], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([10], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([10], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 11, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 12, unique kv tokens: 12
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=11, inflight=1
+]
+input_ids=tensor([28737], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([12], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([11], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([11], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 12, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 13, unique kv tokens: 13
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=12, inflight=1
+]
+input_ids=tensor([28742], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([13], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([12], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([12], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 13, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 14, unique kv tokens: 14
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=13, inflight=1
+]
+input_ids=tensor([28719], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([14], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([13], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([13], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 14, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 15, unique kv tokens: 15
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=14, inflight=1
+]
+input_ids=tensor([2526], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([15], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([14], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([14], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 15, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 16, unique kv tokens: 16
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=15, inflight=1
+]
+input_ids=tensor([354], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([16], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([15], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([15], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 16, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 17, unique kv tokens: 17
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=16, inflight=1
+]
+input_ids=tensor([264], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([17], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([16], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([16], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 17, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 18, unique kv tokens: 18
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=17, inflight=1
+]
+input_ids=tensor([1069], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([18], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([17], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([17], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 18, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 19, unique kv tokens: 19
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=18, inflight=1
+]
+input_ids=tensor([298], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([19], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([18], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([18], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 19, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 forward time: 243.30 ms
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 20, unique kv tokens: 20
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=19, inflight=1
+]
+input_ids=tensor([625], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([20], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([19], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([19], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 20, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 21, unique kv tokens: 21
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=20, inflight=1
+]
+input_ids=tensor([272], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([21], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([20], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([20], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 21, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 22, unique kv tokens: 22
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=21, inflight=1
+]
+input_ids=tensor([1868], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([22], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([21], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([21], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 22, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 23, unique kv tokens: 23
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=22, inflight=1
+]
+input_ids=tensor([727], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([23], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([22], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([22], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 1, #token: 23, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 1, input ids: 1, attention tokens: 24, unique kv tokens: 24
+DEBUG:model_rpc:reqs=[rid(n=c43cb90bfd7b45288d93c0b9c288c110, input_ids=[1, 15753, 456, 349, 264, 6100, 715, 2159, 28723], prefix_len=0, computed=23, inflight=1
+]
+input_ids=tensor([297], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([24], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([23], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([23], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:GPU: 0 forward time: 118.76 ms
+DEBUG:urllib3.connectionpool:http://0.0.0.0:30000 "POST /generate HTTP/1.1" 200 275
+INFO:server:Warmup done. model response: 
+
+I'm looking for a way to get the current time in a
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /mistralai/Mistral-7B-v0.1/resolve/main/tokenizer_config.json HTTP/1.1" 200 0
+INFO:model_rpc:GPU: 0 new fill batch. #seq: 1. #cached_token: 1. #new_token: 127. #remaining_req: 0. #running_req: 0. tree_cache_hit_rate: 0.73%. hit_tokens: 1. free_gpu_mem: 1.00. 
+INFO:model_rpc:GPU: 0 batch.extend_num_tokens: 127, num reqs: 1, input ids: 127, attention tokens: 128, unique kv tokens: 128
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=0, inflight=127
+]
+input_ids=tensor([  995,   460,   396,  7583,  2052,  7518, 28725, 20799,   297, 11466,
+        16097, 18938,   304,  5084, 28723,   384,  2869, 28705, 28740, 28734,
+        28733, 28740, 28782,  4224,   354,   264,  4628,   907, 12146,  9655,
+         2263, 10333,   354,   586,   524, 28733, 28740, 28750, 28725,   544,
+        28733, 25404, 28713,   647,  7126,  2052,   369, 10574,  5004,  3618,
+        28725, 10186,  1007, 15043, 28725,   304,  1411, 28733,  4353,  5168,
+        28723,   415, 10169,   349,  3524,   297,   354,   264,   907, 28733,
+          888,  8357,  5927,   354,   264, 28705, 28783,   362, 12146,  6960,
+         9432,  3905, 28723,  1306,   506, 28705, 28782,  1267,   302,  3454,
+         9432,  2659,   390,   396, 13892,  8626,   438,   264,  1001, 28733,
+          286, 28725,   798,  2052,   395,  2659,   297,  4986,  2052, 11049,
+         9432, 28723, 17158,   356,  1167,  1871, 28725, 16427,   272,  2296,
+        18438, 28747, 22557, 28725,   586,  1141,   349], device='cuda:0',
+       dtype=torch.int32)
+req_pool_indices=tensor([0], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([128], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([1], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([ 24,  25,  26,  27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,
+         38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51,
+         52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,  64,  65,
+         66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,
+         80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,
+         94,  95,  96,  97,  98,  99, 100, 101, 102, 103, 104, 105, 106, 107,
+        108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121,
+        122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135,
+        136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+        150], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:GPU: 0 forward time: 29.48 ms
+INFO:model_rpc:GPU: 0 new fill batch. #seq: 3. #cached_token: 3. #new_token: 383. #remaining_req: 0. #running_req: 1. tree_cache_hit_rate: 0.76%. hit_tokens: 3. free_gpu_mem: 1.00. 
+INFO:model_rpc:GPU: 0 batch.extend_num_tokens: 383, num reqs: 3, input ids: 383, attention tokens: 386, unique kv tokens: 384
+DEBUG:model_rpc:reqs=[rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=0, inflight=129
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=0, inflight=127
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=0, inflight=127
+]
+input_ids=tensor([  995,   460,   396,  7583,  2052,  7518, 28725, 20799,   297, 11466,
+        16097, 18938,   304,  5084, 28723,   384,  2869, 28705, 28740, 28734,
+        28733, 28740, 28782,  4224,   354,   264,  4628,   907, 12146,  9655,
+         2263, 10333,   354,   586,   524, 28733, 28740, 28750, 28725,   544,
+        28733, 25404, 28713,   647,  7126,  2052,   369, 10574,  5004,  3618,
+        28725, 10186,  1007, 15043, 28725,   304,  1411, 28733,  4353,  5168,
+        28723,   415, 10169,   349,  3524,   297,   354,   264,   907, 28733,
+          888,  8357,  5927,   354,   264, 28705, 28783,   362, 12146,  6960,
+         9432,  3905, 28723,  1306,   506, 28705, 28782,  1267,   302,  3454,
+         9432,  2659,   390,   396, 13892,  8626,   438,   264,  1001, 28733,
+          286, 28725,   798,  2052,   395,  2659,   297,  4986,  2052, 11049,
+         9432, 28723, 17158,   356,  1167,  1871, 28725, 16427,   272,  2296,
+        18438, 28747,   415,  4951,   302,   272,  2969,  3543,   349,   995,
+          460,   396,  7583,  2052,  7518, 28725, 20799,   297, 11466, 16097,
+        18938,   304,  5084, 28723,   384,  2869, 28705, 28740, 28734, 28733,
+        28740, 28782,  4224,   354,   264,  4628,   907, 12146,  9655,  2263,
+        10333,   354,   586,   524, 28733, 28740, 28750, 28725,   544, 28733,
+        25404, 28713,   647,  7126,  2052,   369, 10574,  5004,  3618, 28725,
+        10186,  1007, 15043, 28725,   304,  1411, 28733,  4353,  5168, 28723,
+          415, 10169,   349,  3524,   297,   354,   264,   907, 28733,   888,
+         8357,  5927,   354,   264, 28705, 28783,   362, 12146,  6960,  9432,
+         3905, 28723,  1306,   506, 28705, 28782,  1267,   302,  3454,  9432,
+         2659,   390,   396, 13892,  8626,   438,   264,  1001, 28733,   286,
+        28725,   798,  2052,   395,  2659,   297,  4986,  2052, 11049,  9432,
+        28723, 17158,   356,  1167,  1871, 28725, 16427,   272,  2296, 18438,
+        28747,   415,  5565,   302,  4843,   349,   995,   460,   396,  7583,
+         2052,  7518, 28725, 20799,   297, 11466, 16097, 18938,   304,  5084,
+        28723,   384,  2869, 28705, 28740, 28734, 28733, 28740, 28782,  4224,
+          354,   264,  4628,   907, 12146,  9655,  2263, 10333,   354,   586,
+          524, 28733, 28740, 28750, 28725,   544, 28733, 25404, 28713,   647,
+         7126,  2052,   369, 10574,  5004,  3618, 28725, 10186,  1007, 15043,
+        28725,   304,  1411, 28733,  4353,  5168, 28723,   415, 10169,   349,
+         3524,   297,   354,   264,   907, 28733,   888,  8357,  5927,   354,
+          264, 28705, 28783,   362, 12146,  6960,  9432,  3905, 28723,  1306,
+          506, 28705, 28782,  1267,   302,  3454,  9432,  2659,   390,   396,
+        13892,  8626,   438,   264,  1001, 28733,   286, 28725,   798,  2052,
+          395,  2659,   297,  4986,  2052, 11049,  9432, 28723, 17158,   356,
+         1167,  1871, 28725, 16427,   272,  2296, 18438, 28747,   415,  3437,
+          302, 16107,   349], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([130, 128, 128], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([1, 1, 1], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164,
+        165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178,
+        179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192,
+        193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206,
+        207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220,
+        221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
+        235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248,
+        249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262,
+        263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276,
+        277, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290,
+        291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304,
+        305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318,
+        319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332,
+        333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345, 346,
+        347, 348, 349, 350, 351, 352, 353, 354, 355, 356, 357, 358, 359, 360,
+        361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 372, 373, 374,
+        375, 376, 377, 378, 379, 380, 381, 382, 383, 384, 385, 386, 387, 388,
+        389, 390, 391, 392, 393, 394, 395, 396, 397, 398, 399, 400, 401, 402,
+        403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416,
+        417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 429, 430,
+        431, 432, 433, 434, 435, 436, 437, 438, 439, 440, 441, 442, 443, 444,
+        445, 446, 447, 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458,
+        459, 460, 461, 462, 463, 464, 465, 466, 467, 468, 469, 470, 471, 472,
+        473, 474, 475, 476, 477, 478, 479, 480, 481, 482, 483, 484, 485, 486,
+        487, 488, 489, 490, 491, 492, 493, 494, 495, 496, 497, 498, 499, 500,
+        501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
+        515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526, 527, 528,
+        529, 530, 531, 532, 533], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:GPU: 0 forward time: 54.26 ms
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 518, unique kv tokens: 515
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=127, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=129, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=127, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=127, inflight=1
+]
+input_ids=tensor([ 583,  272, 5465, 6833], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([129, 131, 129, 129], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([128, 130, 128, 128], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([534, 535, 536, 537], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 515, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 522, unique kv tokens: 519
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=128, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=130, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=128, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=128, inflight=1
+]
+input_ids=tensor([3990,  907,  349,  596], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([130, 132, 130, 130], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([129, 131, 129, 129], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([538, 539, 540, 541], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 519, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 526, unique kv tokens: 523
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=129, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=131, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=129, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=129, inflight=1
+]
+input_ids=tensor([ 860, 7742,  272,  390], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([131, 133, 131, 131], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([130, 132, 130, 130], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([542, 543, 544, 545], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 523, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 530, unique kv tokens: 527
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=130, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=132, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=130, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=130, inflight=1
+]
+input_ids=tensor([2769, 4951, 1080,  272], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([132, 134, 132, 132], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([131, 133, 131, 131], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([546, 547, 548, 549], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 527, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 534, unique kv tokens: 531
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=131, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=133, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=131, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=131, inflight=1
+]
+input_ids=tensor([ 315,  302, 1852, 5514], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([133, 135, 133, 133], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([132, 134, 132, 132], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([550, 551, 552, 553], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 531, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 538, unique kv tokens: 535
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=132, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=134, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=132, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=132, inflight=1
+]
+input_ids=tensor([  837,   272,  9504, 10352], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([134, 136, 134, 134], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([133, 135, 133, 133], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([554, 555, 556, 557], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 535, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 542, unique kv tokens: 539
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=133, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=135, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=133, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=133, inflight=1
+]
+input_ids=tensor([ 272, 2969, 2990,  298], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([135, 137, 135, 135], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([134, 136, 134, 134], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([558, 559, 560, 561], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 539, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 546, unique kv tokens: 543
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=134, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=136, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=134, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=134, inflight=1
+]
+input_ids=tensor([9655, 3543,  297,  683], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([136, 138, 136, 136], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([135, 137, 135, 135], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([562, 563, 564, 565], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 543, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 550, unique kv tokens: 547
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=135, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=137, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=135, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=135, inflight=1
+]
+input_ids=tensor([  302, 28723,  4843,  5303], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([137, 139, 137, 137], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([136, 138, 136, 136], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([566, 567, 568, 569], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 547, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 554, unique kv tokens: 551
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=136, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=138, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=136, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=136, inflight=1
+]
+input_ids=tensor([ 4228,   415, 28725, 28723], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([138, 140, 138, 138], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([137, 139, 137, 137], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([570, 571, 572, 573], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:#running-req: 4, #token: 551, token usage: 0.00, #queue-req: 0
+INFO:model_rpc:GPU: 0 forward time: 264.56 ms
+INFO:model_rpc:GPU: 0 batch.num_reqs: 4, input ids: 4, attention tokens: 558, unique kv tokens: 555
+DEBUG:model_rpc:reqs=[rid(n=d48ea5a991b24103a69e8a8edcde3b64, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 22557, 28725, 586, 1141, 349], prefix_len=1, computed=137, inflight=1
+, rid(n=b268ebbf33284fb28b72b99ca601bc14, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 4951, 302, 272, 2969, 3543, 349], prefix_len=1, computed=139, inflight=1
+, rid(n=d2a09477db104f1d8a496f68457a3580, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 5565, 302, 4843, 349], prefix_len=1, computed=137, inflight=1
+, rid(n=4c26350a743a4a54ba8e0117e74cc6fe, input_ids=[1, 995, 460, 396, 7583, 2052, 7518, 28725, 20799, 297, 11466, 16097, 18938, 304, 5084, 28723, 384, 2869, 28705, 28740, 28734, 28733, 28740, 28782, 4224, 354, 264, 4628, 907, 12146, 9655, 2263, 10333, 354, 586, 524, 28733, 28740, 28750, 28725, 544, 28733, 25404, 28713, 647, 7126, 2052, 369, 10574, 5004, 3618, 28725, 10186, 1007, 15043, 28725, 304, 1411, 28733, 4353, 5168, 28723, 415, 10169, 349, 3524, 297, 354, 264, 907, 28733, 888, 8357, 5927, 354, 264, 28705, 28783, 362, 12146, 6960, 9432, 3905, 28723, 1306, 506, 28705, 28782, 1267, 302, 3454, 9432, 2659, 390, 396, 13892, 8626, 438, 264, 1001, 28733, 286, 28725, 798, 2052, 395, 2659, 297, 4986, 2052, 11049, 9432, 28723, 17158, 356, 1167, 1871, 28725, 16427, 272, 2296, 18438, 28747, 415, 3437, 302, 16107, 349], prefix_len=1, computed=137, inflight=1
+]
+input_ids=tensor([ 438, 4951,  395,   13], device='cuda:0', dtype=torch.int32)
+req_pool_indices=tensor([0, 1, 2, 3], device='cuda:0', dtype=torch.int32)
+seq_lens=tensor([139, 141, 139, 139], device='cuda:0', dtype=torch.int32)
+prefix_lens=tensor([138, 140, 138, 138], device='cuda:0', dtype=torch.int32)
+out_cache_loc=tensor([574, 575, 576, 577], device='cuda:0', dtype=torch.int32)
+INFO:model_rpc:GPU: 0 forward time: 26.37 ms
+--- runtime ready ---
+
+--------------------------------------------------
+ ________. I am the Head of School at _
+--------------------------------------------------
+--------------------------------------------------
+ the first female president of the United States. The president of
+--------------------------------------------------
+--------------------------------------------------
+ Paris is the most populous city in France, with a
+--------------------------------------------------
+--------------------------------------------------
+ brightens as the technology continues to evolve.
+
+
+--------------------------------------------------

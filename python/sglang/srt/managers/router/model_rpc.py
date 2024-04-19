@@ -4,7 +4,7 @@ import multiprocessing
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+from typing import List, Tuple
 import json
 from dataclasses import dataclass
 
@@ -41,7 +41,7 @@ import os
 
 logger = logging.getLogger("model_rpc")
 
-detail_batch_logger = logger.debug
+detail_batch_logger = logger.info
 
 class ModelRpcServer:
     def __init__(
@@ -55,8 +55,8 @@ class ModelRpcServer:
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
         self.gpu_config = gpu_config
         self.chunk_prefill_budget = server_args.chunk_prefill_budget
-        self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
-        # self.use_sleep_forwarding = False
+        # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
+        self.use_sleep_forwarding = False
         logger.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
         self.tp_rank = tp_rank
@@ -143,6 +143,7 @@ class ModelRpcServer:
         # Init running status
         self.forward_queue: List[Req] = []
         self.running_batch: Batch = None
+        self.delayed_batch : Batch = None
 
         # Store the length and running batch sizes in a buffer since they variance is noisy
         self.forward_queue_len_buffer = deque(maxlen=server_args.metrics_buffer_size)
@@ -262,7 +263,10 @@ class ModelRpcServer:
                     raise ValueError(f"Invalid request: {recv_req}")
 
             # Forward
-            self.forward_step()
+            if self.chunk_prefill_budget > 1:
+                self.budget_forward_step()
+            else:
+                self.forward_step()
         except Exception:
             logger.error("Exception in ModelRpcClient:\n" + get_exception_traceback())
 
@@ -271,15 +275,346 @@ class ModelRpcServer:
         self.out_pyobjs = []
         return ret
     
+    def _schedule_running(
+        self, 
+        budget: SchedulingBudget
+    ) -> Tuple[List[Req], Batch]:
+        batch = self.running_batch
+        if batch is None or batch.is_empty():
+            return [], None
+        current_running_idx = sorted(
+            [i for i in range(len(batch.reqs))],
+            key=lambda i: (batch.reqs[i].arrival_time, len(batch.reqs[i].output_ids))
+        )
+        req_pool_indices_np = batch.req_pool_indices.cpu().numpy()
+        preempted = []
+        scheduled = []
+        batch.out_cache_loc = None
+        while current_running_idx:
+            if budget.get_remaining_token_budget() <= 0:
+                break
+            # try to schedule each request
+            target_idx = current_running_idx.pop(0)
+            target_to_schedule = batch.reqs[target_idx]
+            # 1. check required new memory and evict if needed
+            # logger.debug(f'output_len: {len(target_to_schedule.output_ids)}, unfinished: {target_to_schedule.get_num_unfinished_tokens()}, budget: {budget.get_remaining_token_budget()}')
+            new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
+            if (batch.token_to_kv_pool.available_size() < new_tokens 
+                and not batch.tree_cache.disable):
+                batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.free)
+            # 2. if not enough, evict running requests
+            while batch.token_to_kv_pool.available_size() < new_tokens:
+                if not current_running_idx:
+                    evict_idx = target_idx
+                    evict_req = target_to_schedule
+                else:
+                    evict_idx = current_running_idx.pop()
+                    evict_req = batch.reqs[evict_idx]
+                    
+                preempted.append(evict_req)
+                batch.tree_cache.dec_ref_counter(evict_req.last_node)
+                evict_req.reset_state()
+                token_indices = batch.req_to_token_pool.req_to_token[
+                    req_pool_indices_np[evict_idx]
+                ][: evict_req.num_computed_tokens]
+                batch.token_to_kv_pool.free(token_indices)
+                batch.req_to_token_pool.free(req_pool_indices_np[evict_idx])
+                
+                # not enought memory to schedule
+                if evict_idx == target_idx:
+                    break
+            else:
+            #3. schedule it, allocate and set workload
+                budget.schedule_new_tokens(new_tokens)
+                scheduled.append(target_idx)
+                out_cache_loc = batch.token_to_kv_pool.alloc(new_tokens)
+                batch.req_to_token_pool.req_to_token[
+                    req_pool_indices_np[target_idx],
+                    target_to_schedule.num_computed_tokens : target_to_schedule.num_computed_tokens + new_tokens
+                ] = out_cache_loc
+                target_to_schedule.num_inflight_tokens = new_tokens
+                if batch.out_cache_loc is None:
+                    batch.out_cache_loc = out_cache_loc
+                else:
+                    batch.out_cache_loc = torch.cat([batch.out_cache_loc, out_cache_loc])
         
+        if current_running_idx:
+            delayed_batch = batch.copy_from(current_running_idx)
+        else:
+            delayed_batch = None
+               
+        if len(scheduled) < len(batch.reqs):
+            out_cache_loc = batch.out_cache_loc
+            logger.debug(f'GPU: {self.current_gpu} preempted {len(batch.reqs) - len(scheduled)} requests')
+            batch.filter_batch(scheduled)
+            batch.out_cache_loc = out_cache_loc
+        batch.out_cache_cont_start = batch.out_cache_cont_end = None
+        
+        batch.prepare_for_decode_v2()
+        return preempted, delayed_batch
     
+    
+    # NOTE: Sort the waiting_queue before calling this
+    def _schedule_waiting(
+        self,
+        budget: SchedulingBudget,
+    ):
+        waiting_queue = self.scheduler.get_priority_queue(self.forward_queue)
+        for req in waiting_queue:
+            prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
+            if req.return_logprob:
+                prefix_indices = prefix_indices[: req.logprob_start_len]
+            req.extend_input_len = len(req.input_ids) - len(prefix_indices)
+            req.prefix_indices = prefix_indices
+            req.last_node = last_node
+        
+        # Add requests if there is available space
+        can_run_list: List[Req] = []
+        new_batch_total_tokens = 0
+        new_batch_input_tokens = 0
+        total_batched_seq_len = 0
+        available_size = (
+            self.token_to_kv_pool.available_size() + self.tree_cache.evictable_size()
+        )
+        
+        # NOTE: disabled now - Reduce contention by not scheduling new requests
+        # if self.running_batch:
+        #     available_size -= sum(
+        #         [
+        #             (r.max_new_tokens() - len(r.output_ids)) * self.new_token_ratio
+        #             for r in self.running_batch.reqs
+        #         ]
+        #     )
+        req: Req
+        for req in waiting_queue:
+            if budget.get_remaining_token_budget() <= 0:
+                break
+            if req.return_logprob:
+                # Need at least two tokens to compute normalized logprob
+                if req.extend_input_len < 2:
+                    delta = 2 - req.extend_input_len
+                    req.extend_input_len += delta
+                    req.prefix_indices = req.prefix_indices[:-delta]
+                    if req.image_offset is not None:
+                        req.image_offset += delta
+            if req.extend_input_len == 0 and req.max_new_tokens() > 0:
+                # Need at least one token to compute logits
+                req.extend_input_len = 1
+                req.prefix_indices = req.prefix_indices[:-1]
+                if req.image_offset is not None:
+                    req.image_offset += 1
+            num_new_tokens = min(budget.get_remaining_token_budget(), req.extend_input_len)
+            
+            if (
+                req.extend_input_len + req.max_new_tokens() + new_batch_total_tokens
+                < available_size
+                and req.extend_input_len + new_batch_input_tokens
+                < self.max_prefill_num_token
+            ):
+                delta = self.tree_cache.inc_ref_counter(req.last_node)
+                available_size += delta
+
+                if not (
+                    req.extend_input_len + req.max_new_tokens() + new_batch_total_tokens
+                    < available_size
+                ):
+                    # Undo the insertion
+                    delta = self.tree_cache.dec_ref_counter(req.last_node)
+                    available_size += delta
+                else:
+                    req.num_inflight_tokens = num_new_tokens
+                    budget.schedule_new_tokens(num_new_tokens)
+                    # Add this request to the running batch
+                    self.token_to_kv_pool.add_refs(req.prefix_indices)
+                    can_run_list.append(req)
+                    # Add full length to batch memory estimation
+                    new_batch_total_tokens += (
+                        req.extend_input_len + req.max_new_tokens()
+                    )
+                    new_batch_input_tokens += req.num_inflight_tokens
+                    total_batched_seq_len += req.prompt_tokens
+                    
+        if len(can_run_list) == 0:
+            return None
+        
+        if self.tp_rank == 0:
+            running_req = (
+                0 if self.running_batch is None else len(self.running_batch.reqs)
+            )
+            hit_tokens = sum(len(x.prefix_indices) for x in can_run_list)
+            self.tree_cache_metrics["total"] += (
+                total_batched_seq_len
+            ) / 10**9
+            self.tree_cache_metrics["hit"] += hit_tokens / 10**9
+            tree_cache_hit_rate = (
+                self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
+            )
+            logger.info(
+                f"GPU: {self.current_gpu} "
+                f"new fill batch. #seq: {len(can_run_list)}. "
+                f"#cached_token: {hit_tokens}. "
+                f"#new_token: {new_batch_input_tokens}. "
+                f"#remaining_req: {len(self.forward_queue) - len(can_run_list)}. "
+                f"#running_req: {running_req}. "
+                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
+                f"hit_tokens: {hit_tokens}. "
+                f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+            )
+        
+        # Prepare Batch input
+        tmp_batch = Batch.init_new(
+            can_run_list,
+            self.req_to_token_pool,
+            self.token_to_kv_pool,
+            self.tree_cache,
+        )
+        # tmp_batch.prepare_for_extend_v2(self.model_config.vocab_size, self.int_token_logit_bias)
+        # self.running_batch.concat(tmp_batch)
+        self.forward_queue = [x for x in self.forward_queue if x not in can_run_list]
+        return tmp_batch
+    
+    # TODO: add log prob
     @torch.inference_mode()
     def budget_forward_step(self, forward_simulation=None):
-        pass
+        budget = SchedulingBudget(self.chunk_prefill_budget, 0)
+        if self.delayed_batch:
+            if self.running_batch:
+                self.running_batch.concat(self.delayed_batch)
+            else:
+                self.running_batch = self.delayed_batch
+        preempted, delayed_batch = self._schedule_running(budget)
+        self.delayed_batch = delayed_batch
+        self.forward_queue.extend(preempted)
+        if not self.disable_regex_jump_forward and self.running_batch:
+            # check for jump-forward
+            jump_forward_reqs = self.running_batch.check_for_jump_forward()
+
+            # check for image jump-forward
+            for req in jump_forward_reqs:
+                if req.pixel_values is not None:
+                    (
+                        req.input_ids,
+                        req.image_offset,
+                    ) = self.model_runner.model.pad_input_ids(
+                        req.input_ids,
+                        req.pad_value,
+                        req.pixel_values.shape,
+                        req.image_size,
+                    )
+            self.forward_queue.extend(jump_forward_reqs)
+            
+        if self.running_batch and not self.running_batch.is_empty():
+            self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
+        
+        scheduled_waiting_batch = self._schedule_waiting(budget)
+        if scheduled_waiting_batch is not None:
+            scheduled_waiting_batch.prepare_for_extend_v2(self.model_config.vocab_size, self.int_token_logit_bias)
+            if self.running_batch:
+                self.running_batch.concat(scheduled_waiting_batch)
+            else:
+                self.running_batch = scheduled_waiting_batch
+        
+        if not self.running_batch or self.running_batch.is_empty():
+            return 0
+        
+        # Logging
+        batch = self.running_batch
+        num_batched_tokens = batch.input_ids.shape[0]
+        num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
+        unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
+        if self.tp_rank == 0:
+            detail_batch_logger(
+                f"GPU: {self.current_gpu} "
+                f"batch.num_reqs: {len(batch.reqs)}, "
+                f"batch.inflight_tokens: {num_batched_tokens}, "
+                f"attention tokens: {num_attention_tokens}, "
+                f"unique kv tokens: {unique_kvs}"
+            )
+        forward_time = 0
+        # Forward
+        assert num_batched_tokens > 0, "max_token_len should be greater than 0"
+        if forward_simulation is None:
+            logger.debug(self.running_batch)
+            s = time.time()
+            if not self.use_sleep_forwarding:
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
+                logits, (_, _, last_logprobs) = self.model_runner.forward(
+                    batch, ForwardMode.EXTEND
+                )
+                end_event.record()
+                next_token_ids, _ = batch.sample(logits)
+            else:
+                vocab_size = self.model_config.vocab_size
+                logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+                next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+                time.sleep(self.gpu_config.forward_simulation[1](
+                    len(batch.reqs),
+                    num_batched_tokens,
+                    num_attention_tokens,
+                    unique_kvs
+                ))
+                _ = batch.sample(logits)
+                last_logprobs = None
+            forward_time = time.time() - s
+            forward_time = forward_time
+        else:
+            vocab_size = self.model_config.vocab_size
+            logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+            next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+            forward_time = forward_simulation[1](
+                len(batch.reqs),
+                num_batched_tokens,
+                num_attention_tokens,
+                unique_kvs
+            )
+            _ = batch.sample(logits)
+            last_logprobs = None
+        next_token_ids = next_token_ids.cpu().tolist()
+            
+        # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
+        reqs = batch.reqs
+        if last_logprobs is not None:
+            last_logprobs = last_logprobs[
+                torch.arange(len(reqs)), next_token_ids
+            ].tolist()
+
+        # Check finish condition
+        for i, (req, next_tok_id) in enumerate(zip(reqs, next_token_ids)):
+            req.update_after_step()
+            if req.get_num_unfinished_tokens() == 0:
+                req.completion_tokens_wo_jump_forward += 1
+                req.output_ids.append(next_tok_id)
+                req.check_finished()
+
+                if last_logprobs is not None:
+                    req.token_logprob.append((next_tok_id, last_logprobs[i]))
+
+        self.handle_finished_requests(batch)
+        if batch.is_empty():
+            self.running_batch = None
+        
+        model_forward_time = forward_time
+        if not self.use_sleep_forwarding and forward_simulation is None:
+            if start_event and end_event:
+                end_event.synchronize()
+                model_forward_time = start_event.elapsed_time(end_event)
+        if model_forward_time > 0:
+            detail_batch_logger(
+                f'GPU: {self.current_gpu} '
+                f"forward time: {model_forward_time:.2f} ms"
+            )
+        return [forward_time]
+        
 
     @torch.inference_mode()
     def forward_step(self, forward_simulation=None):
-        new_batch = self.get_new_fill_batch()
+        if self.chunk_prefill_budget:
+            budget = SchedulingBudget(self.max_prefill_num_token, 0)
+            new_batch = self._schedule_waiting(budget)
+        else:
+            new_batch = self.get_new_fill_batch()
         forward_times = []
         if new_batch is not None:
             # Run new fill batch
@@ -296,7 +631,7 @@ class ModelRpcServer:
                 # Run a few decode batches continuously for reducing overhead
                 for _ in range(10):
                     if self.chunk_prefill_budget:
-                        forward_time = self.forward_batch_v2(self.running_batch, forward_simulation)
+                        forward_time = self.test_extend_decode(self.running_batch, forward_simulation)
                     else:
                         forward_time = self.forward_decode_batch(self.running_batch, forward_simulation)
                     forward_times.append(forward_time)
@@ -424,7 +759,7 @@ class ModelRpcServer:
                     for r in self.running_batch.reqs
                 ]
             )
-        # logger.debug(f'free ratio: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}')
+        req: Req
         for req in self.forward_queue:
             if req.return_logprob:
                 # Need at least two tokens to compute normalized logprob
@@ -465,6 +800,8 @@ class ModelRpcServer:
                         req.extend_input_len + req.max_new_tokens()
                     )
                     new_batch_input_tokens += req.extend_input_len
+                    req.num_inflight_tokens = req.extend_input_len
+                    
         if len(can_run_list) == 0:
             return None
 
@@ -518,7 +855,7 @@ class ModelRpcServer:
 
     def forward_fill_batch(self, batch: Batch, forward_simulation=None):
         # Build batch tensors
-        batch.prepare_for_extend(
+        batch.prepare_for_extend_v2(
             self.model_config.vocab_size, self.int_token_logit_bias
         )
 
@@ -539,6 +876,7 @@ class ModelRpcServer:
             )
         if batch.extend_num_tokens != 0:
             if forward_simulation is None:
+                logger.debug(batch)
                 # Forward
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
@@ -625,41 +963,13 @@ class ModelRpcServer:
         if forward_simulation is None:
             return start_event, end_event
         return forward_time
-
-    def forward_batch_v2(self, batch: Batch, forward_simulation=None):
+    
+    def test_extend_decode(self, batch: Batch, forward_simulation=None):
         budget = SchedulingBudget(self.max_num_running_seq, 0)
-        preempted = batch._schedule_running(budget)
+        preempted, delayed_batch = self._schedule_running(budget)
+        assert delayed_batch is None
         self.forward_queue.extend(preempted)
         
-        if not self.disable_regex_jump_forward:
-            # check for jump-forward
-            jump_forward_reqs = batch.check_for_jump_forward()
-
-            # check for image jump-forward
-            for req in jump_forward_reqs:
-                if req.pixel_values is not None:
-                    (
-                        req.input_ids,
-                        req.image_offset,
-                    ) = self.model_runner.model.pad_input_ids(
-                        req.input_ids,
-                        req.pad_value,
-                        req.pixel_values.shape,
-                        req.image_size,
-                    )
-
-            self.forward_queue.extend(jump_forward_reqs)
-            if batch.is_empty():
-                if self.use_sleep_forwarding:
-                    return 0
-                if forward_simulation is None:
-                    return None, None
-                return 0
-            
-        # Update batch tensors
-        self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
-        batch.prepare_for_inference()
-        # Logging
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
@@ -674,13 +984,14 @@ class ModelRpcServer:
         forward_time = 0
         # Forward
         if forward_simulation is None:
+            logger.debug(batch)
             s = time.time()
             if not self.use_sleep_forwarding:
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
                 start_event.record()        
                 logits, (_, _, last_logprobs) = self.model_runner.forward(
-                    batch, ForwardMode.DECODE
+                    batch, ForwardMode.EXTEND
                 )
                 end_event.record()
                 next_token_ids, _ = batch.sample(logits)
@@ -711,7 +1022,7 @@ class ModelRpcServer:
             _ = batch.sample(logits)
             last_logprobs = None
         next_token_ids = next_token_ids.cpu().tolist()
-        
+
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
         reqs = batch.reqs
         if last_logprobs is not None:
@@ -736,7 +1047,7 @@ class ModelRpcServer:
         if forward_simulation is None:
             return start_event, end_event
         return forward_time
-
+    
     def forward_decode_batch(self, batch: Batch, forward_simulation=None):
         # check if decode out of memory
         if not batch.check_decode_mem():
@@ -784,6 +1095,8 @@ class ModelRpcServer:
         # Update batch tensors
         self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
         batch.prepare_for_decode()
+        for req in batch.reqs:
+            req.num_inflight_tokens = 1
 
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
@@ -846,12 +1159,14 @@ class ModelRpcServer:
 
         # Check finish condition
         for i, (req, next_tok_id) in enumerate(zip(reqs, next_token_ids)):
-            req.completion_tokens_wo_jump_forward += 1
-            req.output_ids.append(next_tok_id)
-            req.check_finished()
+            req.update_after_step()
+            if req.get_num_unfinished_tokens() == 0:
+                req.completion_tokens_wo_jump_forward += 1
+                req.output_ids.append(next_tok_id)
+                req.check_finished()
 
-            if last_logprobs is not None:
-                req.token_logprob.append((next_tok_id, last_logprobs[i]))
+                if last_logprobs is not None:
+                    req.token_logprob.append((next_tok_id, last_logprobs[i]))
 
         self.handle_finished_requests(batch)
         if self.use_sleep_forwarding:
@@ -879,7 +1194,7 @@ class ModelRpcServer:
             if req.finished or (
                 (
                     req.stream
-                    and req.get_num_unfinished_tokens() == 0
+                    and req.output_ids
                     and (
                         self.decode_forward_ct % self.stream_interval == 0
                         or len(req.output_ids) == 1

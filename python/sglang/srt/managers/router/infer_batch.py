@@ -178,7 +178,9 @@ class Req:
         self.num_computed_tokens = 0
 
     def __repr__(self):
-        return f"rid(n={self.rid}, " f"input_ids={self.input_ids}, "
+        return (f"rid(n={self.rid}, " f"input_ids={self.input_ids}, "
+                f"prefix_len={len(self.prefix_indices)}, computed={self.num_computed_tokens}, inflight={self.num_inflight_tokens}\n"
+                )
 
 
 @dataclass
@@ -194,7 +196,7 @@ class SchedulingBudget:
         self.scheduled_tokens += num_tokens
 
 
-@dataclass
+@dataclass(repr=False)
 class Batch:
     reqs: List[Req]
     req_to_token_pool: ReqToTokenPool
@@ -231,6 +233,17 @@ class Batch:
     
     # for simulator
     input_id_lengths: List[int] = None
+    
+    def __repr__(self):
+        items = [
+            "reqs",
+            "input_ids",
+            "req_pool_indices",
+            "seq_lens",
+            "prefix_lens",
+            'out_cache_loc',
+        ]
+        return '\n'.join([item + "=" + str(getattr(self, item)) for item in items])
 
     @classmethod
     def init_new(cls, reqs, req_to_token_pool, token_to_kv_pool, tree_cache):
@@ -275,7 +288,6 @@ class Batch:
                 ] = prefix_indices[i]
 
             seq_lens.append(prefix_lens[-1] + extend_lens[-1])
-            self.reqs[i].num_inflight_tokens = extend_lens[-1]
 
         position_ids_offsets = torch.zeros((bs,), dtype=torch.int32, device=device)
         self.input_id_lengths = extend_lens
@@ -368,7 +380,7 @@ class Batch:
         #     key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
         # )
         sorted_indices.sort(
-            key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
+            key=lambda i: (self.reqs[i].arrival_time)
         )
 
         retracted_reqs = []
@@ -448,6 +460,7 @@ class Batch:
         # Alloc mem
         bs = len(self.reqs)
         alloc_res = self.token_to_kv_pool.alloc_contiguous(bs)
+        self.out_cache_loc = None
         if alloc_res is None:
             self.out_cache_loc = self.token_to_kv_pool.alloc(bs)
 
@@ -487,7 +500,25 @@ class Batch:
             "logit_bias",
         ]:
             setattr(self, item, getattr(self, item)[new_indices])
-
+    
+    def copy_from(self, selected_indices: List[int]):
+        reqs = [self.reqs[i] for i in selected_indices]
+        new_indices = torch.tensor(selected_indices, dtype=torch.int32, device="cuda")
+        new_batch = Batch.init_new(reqs, self.req_to_token_pool, self.token_to_kv_pool, self.tree_cache)
+        new_batch.seq_lens = self.seq_lens[new_indices]
+        new_batch.req_pool_indices = self.req_pool_indices[new_indices]
+        new_batch.position_ids_offsets = self.position_ids_offsets[new_indices]
+        new_batch.return_logprob = any(req.return_logprob for req in reqs)
+        for item in [
+            "temperatures",
+            "top_ps",
+            "top_ks",
+            "frequency_penalties",
+            "presence_penalties",
+            "logit_bias",
+        ]:
+            setattr(new_batch, item, getattr(self, item)[new_indices])
+            
     def merge(self, other):
         self.reqs.extend(other.reqs)
 
@@ -513,77 +544,149 @@ class Batch:
             setattr(
                 self, item, torch.concat([getattr(self, item), getattr(other, item)])
             )
-    
-    def _schedule_running(
-        self, 
-        budget: SchedulingBudget
-    ) -> List[Req]:
-        current_running_idx = sorted(
-            [i for i in range(len(self.reqs))],
-            key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
-        )
-        req_pool_indices_np = self.req_pool_indices.cpu().numpy()
-        preempted = []
-        scheduled = []
-        self.out_cache_loc = None
-        while current_running_idx:
-            # try to schedule each request
-            target_idx = current_running_idx.pop(0)
-            target_to_schedule = self.reqs[target_idx]
-            # 1. check required new memory and evict if needed
-            new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
-            if (self.token_to_kv_pool.available_size() < new_tokens 
-                and not self.tree_cache.disable):
-                self.tree_cache.evict(new_tokens, self.token_to_kv_pool.free)
-            # 2. if not enough, evict running requests
-            while self.token_to_kv_pool.available_size() < new_tokens:
-                if not current_running_idx:
-                    evict_idx = target_idx
-                    evict_req = target_to_schedule
-                else:
-                    evict_idx = current_running_idx.pop()
-                    evict_req = self.reqs[evict_idx]
-                    
-                preempted.append(evict_req)
-                self.tree_cache.dec_ref_counter(evict_req.last_node)
-                evict_req.reset_state()
-                token_indices = self.req_to_token_pool.req_to_token[
-                    req_pool_indices_np[evict_idx]
-                ][: evict_req.num_computed_tokens]
-                self.token_to_kv_pool.free(token_indices)
-                self.req_to_token_pool.free(req_pool_indices_np[evict_idx])
-                
-                # not enought memory to schedule
-                if evict_idx == target_idx:
-                    break
-            else:
-            #3. schedule it, allocate and set workload
-                budget.schedule_new_tokens(new_tokens)
-                scheduled.append(target_idx)
-                out_cache_loc = self.token_to_kv_pool.alloc(new_tokens)
-                self.req_to_token_pool.req_to_token[
-                    req_pool_indices_np[target_idx],
-                    target_to_schedule.num_computed_tokens : target_to_schedule.num_computed_tokens + new_tokens
-                ] = out_cache_loc
-                target_to_schedule.num_inflight_tokens = new_tokens
-                if self.out_cache_loc is None:
-                    self.out_cache_loc = out_cache_loc
-                else:
-                    self.out_cache_loc = torch.cat([self.out_cache_loc, out_cache_loc])
-        if len(scheduled) < len(self.reqs):
-            self.filter_batch(scheduled)
+
+    def concat(self, other):
+        self.reqs.extend(other.reqs)
+        
         self.out_cache_cont_start = self.out_cache_cont_end = None
-        return preempted
+        self.return_logprob = any(req.return_logprob for req in self.reqs)
+        self.extend_num_tokens = other.extend_num_tokens
+        
+        def cat_or_set(attr):
+            if getattr(self, attr) is None:
+                setattr(self, attr, getattr(other, attr))
+            else:
+                setattr(
+                    self, attr, torch.cat([getattr(self, attr), getattr(other, attr)])
+                )
+        
+        for item in [
+            "input_ids",
+            "req_pool_indices",
+            "seq_lens",
+            "prefix_lens",
+            "position_ids_offsets",
+            "out_cache_loc",
+            "temperatures",
+            "top_ps",
+            "top_ks",
+            "frequency_penalties",
+            "presence_penalties",
+            "logit_bias",
+        ]:
+            cat_or_set(item)
     
-    def prepare_for_inference(self):
+    
+    # TODO: Add image input support
+    def prepare_for_decode_v2(self):
         device = 'cuda'
         input_ids = [r.get_inflight_token_ids() for r in self.reqs]
         self.input_id_lengths = [len(ids) for ids in input_ids]
         input_ids = sum(input_ids, [])
         self.input_ids = torch.tensor(input_ids, dtype=torch.int32, device=device)
         self.seq_lens = torch.tensor([r.get_context_len() for r in self.reqs], dtype=torch.int32, device=device)
-        self.prefix_lens = None
+        self.prefix_lens = torch.tensor([r.get_context_len() - r.num_inflight_tokens for r in self.reqs], dtype=torch.int32, device=device)
         
+    
+    def prepare_for_extend_v2(self, vocab_size: int, int_token_logit_bias: torch.Tensor):
+        device = "cuda"
+        bs = len(self.reqs)
+        reqs = self.reqs
+        input_ids = [r.input_ids[len(r.prefix_indices) : len(r.prefix_indices) + r.num_inflight_tokens] for r in reqs]
+        prefix_indices = [r.prefix_indices for r in reqs]
+
+        # Handle prefix
+        flatten_input_ids = []
+        extend_lens = []
+        prefix_lens = []
+        seq_lens = [r.get_context_len() for r in reqs]
+
+        req_pool_indices = self.req_to_token_pool.alloc(bs)
+        req_pool_indices_cpu = req_pool_indices.cpu().numpy()
+        for i in range(bs):
+            flatten_input_ids.extend(input_ids[i])
+            extend_lens.append(len(input_ids[i]))
+
+            if len(prefix_indices[i]) == 0:
+                prefix_lens.append(0)
+            else:
+                prefix_lens.append(len(prefix_indices[i]))
+                self.req_to_token_pool.req_to_token[req_pool_indices_cpu[i]][
+                    : len(prefix_indices[i])
+                ] = prefix_indices[i]
+
+
+        position_ids_offsets = torch.zeros((bs,), dtype=torch.int32, device=device)
+        self.input_id_lengths = extend_lens
+        
+        # Alloc mem
+        seq_lens, prefix_lens = np.array(seq_lens), np.array(prefix_lens)
+        extend_num_tokens = seq_lens.sum() - prefix_lens.sum()
+        assert extend_num_tokens == sum(extend_lens)
+        
+        out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
+        if out_cache_loc is None:
+            if not self.tree_cache.disable:
+                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free)
+                out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
+
+            if out_cache_loc is None:
+                print("Prefill out of memory. This should nerver happen.")
+                self.tree_cache.pretty_print()
+                exit()
+
+        pt = 0
+        for i in range(bs):
+            self.req_to_token_pool.req_to_token[req_pool_indices_cpu[i]][
+                prefix_lens[i] : prefix_lens[i] + extend_lens[i]
+            ] = out_cache_loc[pt : pt + extend_lens[i]]
+            pt += extend_lens[i]
+
+        # Handle logit bias
+        logit_bias = torch.zeros((bs, vocab_size), dtype=torch.float32, device=device)
+        for i in range(bs):
+            if reqs[i].sampling_params.dtype == "int":
+                logit_bias[i] = int_token_logit_bias
+
+        # Set fields
+        self.input_ids = torch.tensor(
+            flatten_input_ids, dtype=torch.int32, device=device
+        )
+        self.pixel_values = [r.pixel_values for r in reqs]
+        self.image_sizes = [r.image_size for r in reqs]
+        self.image_offsets = [
+            r.image_offset - p_len for r, p_len in zip(reqs, prefix_lens)
+        ]
+        self.req_pool_indices = req_pool_indices
+        self.seq_lens = torch.tensor(seq_lens, dtype=torch.int32, device=device)
+        cached_prefix_lens = [r.get_context_len() - r.num_inflight_tokens for r in reqs]
+        self.prefix_lens = torch.tensor(cached_prefix_lens, dtype=torch.int32, device=device)
+        self.position_ids_offsets = position_ids_offsets
+        self.extend_num_tokens = extend_num_tokens
+        self.out_cache_loc = out_cache_loc
+
+        self.temperatures = torch.tensor(
+            [r.sampling_params.temperature for r in reqs],
+            dtype=torch.float,
+            device=device,
+        ).view(-1, 1)
+        self.top_ps = torch.tensor(
+            [r.sampling_params.top_p for r in reqs], dtype=torch.float, device=device
+        ).view(-1, 1)
+        self.top_ks = torch.tensor(
+            [r.sampling_params.top_k for r in reqs], dtype=torch.int, device=device
+        ).view(-1, 1)
+        self.frequency_penalties = torch.tensor(
+            [r.sampling_params.frequency_penalty for r in reqs],
+            dtype=torch.float,
+            device=device,
+        )
+        self.presence_penalties = torch.tensor(
+            [r.sampling_params.presence_penalty for r in reqs],
+            dtype=torch.float,
+            device=device,
+        )
+        self.logit_bias = logit_bias
             
     def sample(self, logits: torch.Tensor):
         # Post process logits
