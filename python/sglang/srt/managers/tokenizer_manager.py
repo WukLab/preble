@@ -301,6 +301,7 @@ class TokenizerManager:
                     return_logprob=obj.return_logprob[i],
                     logprob_start_len=obj.logprob_start_len[i],
                     stream=obj.stream,
+                    arrival_time=arrival_time,
                 )
                 self.send_to_router.send_pyobj(tokenized_obj)
 

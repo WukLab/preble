@@ -118,7 +118,7 @@ class BenchmarkMetrics:
     p99_latency: float
     average_ttft: float
     average_topt: float
-    prefill_decode_ratio: float
+    prefill_decode_ratio: List[float]
     overall_latency: float
     requests_per_sec: float
     gpu_counts: Dict[int, int]
@@ -168,9 +168,8 @@ class BenchmarkMetrics:
         average_finished_tpot = np.average(finished_tpot)
         p50_tpot, p90_tpot, p99_tpot = np.percentile(tpots, [50, 90, 99])
         
-        prefill_decode_ratio = np.average(
-            [result.prefill_decode_ratio for result in req_func_outputs if result.prefill_decode_ratio]
-        )
+        prefill_decode_ratio = [result.prefill_decode_ratio for result in req_func_outputs if result.prefill_decode_ratio]
+       
 
         finished_request_latencies = [result.request_latency for result in req_func_outputs if result.success and result.global_time <= time_limit]
         average_request_latency, std_request_latency, average_p90 = (
@@ -265,7 +264,10 @@ class BenchmarkMetrics:
             f"Params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.4f}, {self.p90_latency:.4f}, {self.p99_latency:.4f}"
         )
         logging.info(
-            f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"
+            f"Params=({exp_params}) PrefillRatio p50, p90, p99: {np.percentile(self.prefill_decode_ratio, 50):.2f}, {np.percentile(self.prefill_decode_ratio, 90):.2f}, {np.percentile(self.prefill_decode_ratio, 99):.2f}"
+        )
+        logging.info(
+            f"Params=({exp_params}) Overall PrefillRatio: {np.average(self.prefill_decode_ratio)}"
         )
         logging.info(
             f"Params=({exp_params}) Average Scheduling Overhead: {self.avg_scheduling_overhead}"

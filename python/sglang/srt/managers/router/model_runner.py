@@ -111,6 +111,7 @@ class InputMetadata:
             ],
             dim=0,
         ).contiguous()
+        # logger.debug(f'received kv_indices: {self.kv_indices}')
         self.kv_last_page_len = torch.ones(
             (self.batch_size,), dtype=torch.int32, device="cuda"
         )
