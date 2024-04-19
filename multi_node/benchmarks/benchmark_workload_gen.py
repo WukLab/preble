@@ -133,7 +133,7 @@ def generate_random_workload(random_workload_path):
     global share_gpt_dataset
     if not share_gpt_dataset:
         if not random_workload_path:
-            random_workload_path = "ShareGPT_V3_unfiltered_cleaned_split.json"
+            random_workload_path = "datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
         with open(random_workload_path) as f:
             data = json.load(f)
         share_gpt_dataset = data
@@ -237,12 +237,12 @@ class WorkloadPrefixDataLoader(DataLoader):
                     "rid": uuid.uuid4().hex,
                 }
             )
-        # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
+        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
-            # prompt = random.choice(random_workload)
-            prompt = get_react_workload(
-                uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
-            )
+            prompt = random.choice(random_workload)
+            # prompt = get_react_workload(
+            #     uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
+            # )
             workload.append(
                 {
                     "text": prompt,
@@ -303,7 +303,6 @@ class ToolBenchDataLoader(DataLoader):
                             },
                         }
                     )
-
         elif self.load_dist == LoadDistribution.ZIPF:
             assert k is not None
             prefix_stats = sorted(
@@ -327,6 +326,7 @@ class ToolBenchDataLoader(DataLoader):
             # prob = ss.norm.cdf(xU, scale = 3, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = 3, loc=self.num_patterns//2)
             # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
             # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
+            import matplotlib.pyplot as plt
 
             plt.hist(hist, bins=self.num_patterns)
             plt.savefig(f"zipf_distribution_{k}.png")
@@ -401,7 +401,7 @@ class Oracle(CustomRuntimeSelector):
     num_workloads: int
     trace = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         num_nodes = self.num_nodes
         self.trace[request_id] = text[:50]
         for i in range(self.num_workloads):
@@ -415,7 +415,7 @@ class OracleHotCold(CustomRuntimeSelector):
     num_workloads: int
     trace = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         num_nodes = self.num_nodes
         if num_nodes == 1:
             return 0
@@ -438,7 +438,7 @@ class TBOracle:
     num_nodes: int
     counter = {}
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -457,7 +457,7 @@ class TBOracleB(CustomRuntimeSelector):
     tbl = {}
     counter: int = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -582,7 +582,7 @@ class LoogleOracle(CustomRuntimeSelector):
         self.tbl = {}
         self.counter = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         match = re.search(r"(.*)Question:", text, re.DOTALL)
         if match:
             tool = match.group(1)

@@ -209,7 +209,8 @@ class Simulation:
         self.events = []
         # rid -> RequestFuncOutput
         self.request_output: Dict[str, RequestFuncOutput] = {}
-        
+        self.rid_to_input = {} # rid -> input request
+ 
     def add_event(self, event: SimulationEvent):
         heapq.heappush(self.events, event)
     
@@ -314,7 +315,7 @@ class SendRequestEvent(SimulationEvent):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         if rid is None:
             rid = random_uuid_string()
-        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids)
+        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params)
         generate_input = GenerateReqInput(
             text=text,
             sampling_params=sampling_params,
@@ -322,12 +323,15 @@ class SendRequestEvent(SimulationEvent):
             stream=True,
         )
         return runtime_id, generate_input
-        
+
     def process_event(self, simulator: Simulation):
         start = time.time()
         runtime_id, generate_input = self.select_and_prepare_input(simulator, **self.request)
         runtime = simulator.runtimes[runtime_id]
         overhead = time.time() - start
+        if overhead > 0.03:
+            logging.debug(f"Select runtime overhead: {overhead}")
+
         self.update_lock(overhead, simulator)
         simulator.request_output[generate_input.rid] = RequestFuncOutput(
             rid=generate_input.rid,
@@ -335,7 +339,11 @@ class SendRequestEvent(SimulationEvent):
             prompt_len=len(self.request['input_ids']), 
             send_out_time=self.time,
             route_dest=runtime_id,
+            scheduling_overhead=overhead,
+            runtime_selected=runtime_id,
+            max_new_tokens=self.request['sampling_params']['max_new_tokens'],
         )
+        simulator.rid_to_input[generate_input.rid] = self.request
         simulator.add_event(GenerateRequestEvent(self.time, generate_input, runtime_id))
 
 class GenerateRequestEvent(SimulationEvent):
@@ -432,9 +440,15 @@ class ModelStepEvent(SimulationEvent):
                         request_output.ttft = runtime.manager_clock - request_output.send_out_time
                     request_output.request_latency = runtime.manager_clock - request_output.send_out_time
                     request_output.output_len = len(output_token_ids)
+                    request_output.tpot = (request_output.request_latency - request_output.ttft) / request_output.output_len
                     if finished:
                         request_output.success = True
                         request_output.global_time = runtime.manager_clock
+                        if rid in simulator.rid_to_input:
+                            request = simulator.rid_to_input[rid]
+                            text = request['text']
+                            input_ids = request['input_ids']
+                            simulator.router.finish_request(text=text, request_id=rid, input_ids=input_ids, experiment_id=None, func_output=request_output)
     
     def process_event(self, simulator: Simulation):
         start = time.time()
