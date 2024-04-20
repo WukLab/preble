@@ -694,7 +694,7 @@ class ModelRpcServer:
         #         f"forward time: {total_forward_time:.2f} ms"
         #     )
 
-        return forward_time
+        return forward_times
     
     def handle_generate_request(
         self,

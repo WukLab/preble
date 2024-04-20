@@ -84,6 +84,7 @@ class ServerRuntimeSimulator:
         cuda_devices: Optional[List[int]] = None,
         freeze: bool = False,
         log_prefix_hit: bool = False,
+        chunk_prefill_budget: int = 0,
     ):
         host = "0.0.0.0"
         port, additional_ports = 0, [0] * 100
@@ -114,6 +115,7 @@ class ServerRuntimeSimulator:
             disable_regex_jump_forward=disable_regex_jump_forward,
             disable_disk_cache=disable_disk_cache,
             api_key=api_key,
+            chunk_prefill_budget=chunk_prefill_budget,
         )
         self.server_args = server_args
         self.url = random_uuid_string()

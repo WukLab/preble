@@ -48,6 +48,9 @@ class CustomPolicyType(Enum):
     HistogramBasedMemoryLoadScheduler = auto()
     HiostgramBasedRecompLoad = auto()
 
+    MemSchedulerEvictBasedOnLoad = auto()
+    MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes = auto()
+
 class DataParallelRequestRouter:
     def __init__(
         self,

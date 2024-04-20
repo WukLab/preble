@@ -117,7 +117,6 @@ class HistogramBasedMemoryLoadScheduler:
             for k, v in split_nodes.items():
                 if not self.is_large_node(v): # the parent key is larger and more important. This should be in the histogram
                     self.hisotgram.rename_node(v, k)
-
             important_node = self.get_important_node(leaf_node)
             self.hisotgram.update(datetime.now(), important_node, leaf_node)
             if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens:
