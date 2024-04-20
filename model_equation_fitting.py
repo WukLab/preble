@@ -26,16 +26,16 @@ model = LinearRegression()
 model.fit(X, y)
 
 # Print the coefficients and intercept
-print("Coefficients:", model.coef_)
-print("Intercept:", model.intercept_)
+print("multi query attention Coefficients:", model.coef_)
+print("multi query attention Intercept:", model.intercept_)
 
 # Calculate and print the R2 value
 r2_score = model.score(X, y)
-print("R2 value:", r2_score)
+print("multi query attention R2 value:", r2_score)
 
-new_query = 512
-new_ctx = 7900
+# new_query = 500
+# new_ctx = 8192
 
-p = model.predict([[new_query, new_ctx, new_query * new_ctx]])
+# p = model.predict([[new_query, new_ctx, new_query * new_ctx]])
 # p = model.predict(X)
-print(p)
+# print(p)
