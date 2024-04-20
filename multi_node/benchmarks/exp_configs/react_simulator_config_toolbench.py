@@ -16,10 +16,10 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "basic_mem_scheduler_comp/toolbench_recomp_cost/recomp_with_zipf_12.log"
+log_file_path = "evict_based_on_load_dont_ignore_small/toolbench_global_eviction.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 200
+exp_time = 800
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -59,43 +59,44 @@ server_args = {
 # Workload Configuration
 # configurations_to_test = [
 #     [200, 400, 4],
-# ]s
+# ]
 configurations_to_test = [
-    [200, 400, 24],
+    [200, 400, 6],
+    # [200, 400, 12],
 ]
 workload_configs = create_toolbench_data_loader(
     configurations_to_test, 
     model_name, 
     exp_time, 
     data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
-    load_dist=LoadDistribution.ZIPF,
-    k = 1.1
+    load_dist=LoadDistribution.EVEN,
+    # k = 1.1
 )
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_load'),
+# (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_load'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerWithGlobalEviction, 'global_evict'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
-
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_load'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'greedy_v3'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'greedy_v3'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, 'loogle_oracle'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, 'loogle_oracle'),
 
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
     # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
 
     # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
     # # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
 
-    (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
-    (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'oracle'),
