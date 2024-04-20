@@ -228,7 +228,7 @@ if __name__ == "__main__":
           f'queries per mul: {args.mul_qs}')
     # prompt + mul cannot be scheduled together with gen
     if args.num_prompt + args.num_mul > 0 and args.num_gen > 0:
-        raise ValueError("Prompt and Multi Query cannot be scheduled together with normal decoding.")
+        assert False, "Use chunk prefill schedule when mixing decoding and multi query in one batch"
     if args.num_gen > 0 and not args.stream_interval:
         args.stream_interval = 1
     main(args)

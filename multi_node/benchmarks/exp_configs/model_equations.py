@@ -1,4 +1,5 @@
 from sglang.srt.managers.router.infer_batch import Batch
+import torch
 
 """Principles
 Linear layer consider batching only
@@ -57,15 +58,21 @@ def mistral_7b_A6000_sglang_extend_flashinfer(
     num_reqs, 
     num_batched_tokens, 
     total_context, 
-    input_id_lens, 
-    num_unique_kv = None
+    input_id_lens,
+    num_unique_kv = None,
+    seq_lens: torch.Tensor = None,
 ):
     base = mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv)
     attn_quad = 0
-    for extend_lengths in input_id_lens:
-        if extend_lengths >= 4096:
-            #  -7.37 + 3.86E-03x + 2.16E-06x^2
-            attn_quad += -7.37 + 3.86e-3 * extend_lengths + 2.16e-6 * extend_lengths**2
+    for i, extend_lengths in enumerate(input_id_lens):
+        if seq_lens is None:
+            if extend_lengths >= 4096:
+                #  -7.37 + 3.86E-03x + 2.16E-06x^2
+                attn_quad += -7.37 + 3.86e-3 * extend_lengths + 2.16e-6 * extend_lengths**2
+        else:
+            seq_len = seq_lens[i].item()
+            if extend_lengths * seq_len > 1024 * 1024:
+                attn_quad += 1.13e-3 * extend_lengths + 1.75e-3 * seq_len + 2.19e-6 * extend_lengths * seq_len
     attn_quad /= 1e3
     return (base + attn_quad) / 0.95
 

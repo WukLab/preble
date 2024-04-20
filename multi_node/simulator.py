@@ -84,6 +84,7 @@ class ServerRuntimeSimulator:
         cuda_devices: Optional[List[int]] = None,
         freeze: bool = False,
         log_prefix_hit: bool = False,
+        chunk_prefill_budget: int = 0,
     ):
         host = "0.0.0.0"
         port, additional_ports = 0, [0] * 100
@@ -114,6 +115,7 @@ class ServerRuntimeSimulator:
             disable_regex_jump_forward=disable_regex_jump_forward,
             disable_disk_cache=disable_disk_cache,
             api_key=api_key,
+            chunk_prefill_budget=chunk_prefill_budget,
         )
         self.server_args = server_args
         self.url = random_uuid_string()
@@ -147,7 +149,10 @@ class ServerRuntimeSimulator:
     def simulate_step(self, recv_reqs) -> int:
         for recv_req in recv_reqs:
             self.model_rpc.handle_generate_request(recv_req)
-        forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
+        if self.model_rpc.chunk_prefill_budget > 1:
+            forward_times = self.model_rpc.budget_forward_step(self.gpu_config.forward_simulation)
+        else:
+            forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
         forward_time = sum(forward_times)
         ret = self.model_rpc.out_pyobjs
         self.model_rpc.out_pyobjs = []
@@ -188,7 +193,7 @@ class SimulationEvent(ABC):
             
     def wrapper_process_event(self, simulator: "Simulation"):
         runtime = simulator.runtimes[self.runtime_id]
-        logging.debug(f"{self.runtime_id} processing {self.task} scheduled at {self.time}, global clock: {simulator.global_clock}, local lock: {runtime.local_clock}, {runtime.tokenizer_clock}, {runtime.manager_clock}")
+        # logging.debug(f"{self.runtime_id} processing {self.task} scheduled at {self.time}, global clock: {simulator.global_clock}, local lock: {runtime.local_clock}, {runtime.tokenizer_clock}, {runtime.manager_clock}")
         self.process_event(simulator)
     
     @abstractclassmethod
@@ -284,10 +289,11 @@ class Simulation:
         self.time_litmit = time
         if rps != float('inf') and time != float('inf'):
             assert len(requests) >= int(rps * time)
-        
+        max_prompt_len = 0
         if not send_out_times:
             send_time = self.global_clock
             for request in requests:
+                max_prompt_len = max(max_prompt_len, len(request['input_ids']))
                 self.add_event(SendRequestEvent(send_time, request))
                 if rps == float('inf'):
                     interval = 0
@@ -296,8 +302,10 @@ class Simulation:
                 send_time += interval
         else:
             for request, send_time in zip(requests, send_out_times):
+                max_prompt_len = max(max_prompt_len, len(request['input_ids']))
                 self.add_event(SendRequestEvent(send_time, request))
         self.unfinished_requests = len(requests)
+        logging.info(f"Max prompt len: {max_prompt_len}")
     
     def start_model_forwarding_loop(self):
         for i in range(len(self.runtimes)):

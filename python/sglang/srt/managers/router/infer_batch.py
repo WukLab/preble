@@ -148,16 +148,18 @@ class Req:
                     return
                 
     def get_num_unfinished_tokens(self):
-        return self.prompt_tokens + len(self.output_ids) - self.get_cached_len()
+        return len(self.input_ids) + len(self.output_ids) - self.get_cached_len()
     
     # NOTE: Currently sglang clears output tokens when recompute (??)
     #       so a prefill chunk will never involve output tokens
     #       Change this function if this is nolonger true
     def get_inflight_token_ids(self) -> List[int]:
-        # logger.debug(f"num_computed_tokens={self.num_computed_tokens}, num_inflight_tokens={self.num_inflight_tokens}, prompt_len={self.prompt_tokens}, output_len={len(self.output_ids)}")
+        # logger.debug(f"num_computed_tokens={self.num_computed_tokens}, num_inflight_tokens={self.num_inflight_tokens}, prompt_len={len(self.input_ids)}, output_len={len(self.output_ids)}")
         start_idx = len(self.prefix_indices) + self.num_computed_tokens
-        if start_idx >= self.prompt_tokens:
-            assert self.num_computed_tokens + len(self.prefix_indices) == self.prompt_tokens + len(self.output_ids) - 1
+        prompt_len = len(self.input_ids)
+        if start_idx >= prompt_len:
+            assert self.num_computed_tokens + len(self.prefix_indices) == prompt_len + len(self.output_ids) - 1, \
+            f'prompt: {prompt_len}, computed: {self.num_computed_tokens}, prefix: {len(self.prefix_indices)}, output: {len(self.output_ids)}'
             assert self.num_inflight_tokens == 1
             return [self.output_ids[-1]]
         return self.input_ids[start_idx : start_idx + self.num_inflight_tokens]
@@ -216,6 +218,8 @@ class Batch:
     out_cache_cont_start: torch.Tensor = None
     out_cache_cont_end: torch.Tensor = None
     return_logprob: bool = False
+    num_decoding_inputs: int = 0
+    multiplex_extend_decode: bool = False
 
     # for multimodal
     pixel_values: List[torch.Tensor] = None
@@ -379,12 +383,12 @@ class Batch:
         #     key=lambda i: (len(self.reqs[i].output_ids), -len(self.reqs[i].input_ids)),
         #     reverse=True,
         # )
-        # sorted_indices.sort(
-        #     key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
-        # )
         sorted_indices.sort(
-            key=lambda i: (self.reqs[i].arrival_time)
+            key=lambda i: (self.reqs[i].arrival_time, len(self.reqs[i].output_ids))
         )
+        # sorted_indices.sort(
+        #     key=lambda i: (self.reqs[i].arrival_time)
+        # )
 
         retracted_reqs = []
         seq_lens_np = self.seq_lens.cpu().numpy()
@@ -478,7 +482,12 @@ class Batch:
             self.out_cache_loc = alloc_res[0]
             self.out_cache_cont_start = alloc_res[1]
             self.out_cache_cont_end = alloc_res[2]
-
+        for req in self.reqs:
+            logger.debug(f'output_len: {len(req.output_ids)}, finished: {req.finished}, max_new_tokens: {req.max_new_tokens()}')
+        logger.debug(f'req_to_token_size: {self.req_to_token_pool.req_to_token.size()}\n'
+                     f'req_pool_indices: {self.req_pool_indices}\n'
+                     f'seq_lens: {self.seq_lens}\n'
+                     )
         self.req_to_token_pool.req_to_token[
             self.req_pool_indices, self.seq_lens - 1
         ] = self.out_cache_loc
@@ -522,6 +531,54 @@ class Batch:
         ]:
             setattr(new_batch, item, getattr(self, item)[new_indices])
         return new_batch
+    
+    # TODO: reduce metadata overhead
+    # NOTE: consider all requests with input id length 1 as normal decoding
+    #       this can exploit more normal decoding optimization than before
+    def prepare_for_isolate_extend_decode(self):
+        return
+        assert self.reqs, "Received Empty batch"
+        decode_indices, extend_indices = [], []
+        for i, r in enumerate(self.reqs):
+            if r.num_inflight_tokens == 1:
+                decode_indices.append(i)
+            else:
+                extend_indices.append(i)
+        new_indices = torch.tensor(decode_indices + extend_indices, device="cuda")
+        self.reqs = [self.reqs[i] for i in new_indices]
+        self.input_id_lengths = [self.input_id_lengths[i] for i in new_indices]
+        
+        # token level reordering
+        new_input_ids = torch.empty_like(self.input_ids)
+        
+        def reorder_by_sequence(attr):
+            if getattr(self, attr) is not None:
+                setattr(self, attr, getattr(self, attr)[new_indices])
+        
+        for item in [
+            # 'input_ids',
+            'req_pool_indices',
+            'seq_lens',
+            'prefix_lens',
+            'position_ids_offsets',
+            # 'out_cache_loc',
+            'out_cache_cont_start',
+            'out_cache_cont_end',
+            # 'return_logprob',
+            # 'pixel_values',
+            # 'image_sizes',
+            # 'image_offsets',
+            # 'output_ids', # not used
+            'temperatures',
+            'top_ps',
+            'top_ks',
+            'frequency_penalties',
+            'presence_penalties',
+            'logit_bias',
+        ]:
+            reorder_by_sequence(item)
+        self.num_decoding_inputs = len(decode_indices)
+        self.multiplex_extend_decode = True
             
     def merge(self, other):
         self.reqs.extend(other.reqs)
