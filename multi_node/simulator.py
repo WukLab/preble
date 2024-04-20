@@ -193,7 +193,7 @@ class SimulationEvent(ABC):
             
     def wrapper_process_event(self, simulator: "Simulation"):
         runtime = simulator.runtimes[self.runtime_id]
-        logging.debug(f"{self.runtime_id} processing {self.task} scheduled at {self.time}, global clock: {simulator.global_clock}, local lock: {runtime.local_clock}, {runtime.tokenizer_clock}, {runtime.manager_clock}")
+        # logging.debug(f"{self.runtime_id} processing {self.task} scheduled at {self.time}, global clock: {simulator.global_clock}, local lock: {runtime.local_clock}, {runtime.tokenizer_clock}, {runtime.manager_clock}")
         self.process_event(simulator)
     
     @abstractclassmethod
@@ -289,10 +289,11 @@ class Simulation:
         self.time_litmit = time
         if rps != float('inf') and time != float('inf'):
             assert len(requests) >= int(rps * time)
-        
+        max_prompt_len = 0
         if not send_out_times:
             send_time = self.global_clock
             for request in requests:
+                max_prompt_len = max(max_prompt_len, len(request['input_ids']))
                 self.add_event(SendRequestEvent(send_time, request))
                 if rps == float('inf'):
                     interval = 0
@@ -301,8 +302,10 @@ class Simulation:
                 send_time += interval
         else:
             for request, send_time in zip(requests, send_out_times):
+                max_prompt_len = max(max_prompt_len, len(request['input_ids']))
                 self.add_event(SendRequestEvent(send_time, request))
         self.unfinished_requests = len(requests)
+        logging.info(f"Max prompt len: {max_prompt_len}")
     
     def start_model_forwarding_loop(self):
         for i in range(len(self.runtimes)):

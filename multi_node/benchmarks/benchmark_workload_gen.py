@@ -557,14 +557,14 @@ class LooGLEDataset(DataLoader):
                 max_new_tokens = self.max_decode_loogle[self.loogle_dataset_type]
             request["sampling_params"]["max_new_tokens"] = max_new_tokens
             request["input_ids"] = input_ids
-            if len(tokenized_prompt) > max_length:
+            if len(input_ids) > max_length:
                 half = int(max_length / 2)
-                prompt = self.tokenizer.decode(
-                    tokenized_prompt[:half]
-                ) + self.tokenizer.decode(tokenized_prompt[-half:])
-                tokenized_prompt = self.tokenizer.encode(prompt)
-                request["text"] = prompt
-                request["input_ids"] = tokenized_prompt
+                new_prompt = self.tokenizer.decode(
+                    input_ids[:half]
+                ) + self.tokenizer.decode(input_ids[-half:])
+                new_tokenized_prompt = self.tokenizer.encode(new_prompt)
+                request["text"] = new_prompt
+                request["input_ids"] = new_tokenized_prompt
             return request
 
         with ThreadPoolExecutor(64) as executor:

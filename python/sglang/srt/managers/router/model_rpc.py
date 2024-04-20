@@ -444,7 +444,7 @@ class ModelRpcServer:
                         req.extend_input_len + req.max_new_tokens()
                     )
                     new_batch_input_tokens += req.num_inflight_tokens
-                    total_batched_seq_len += req.prompt_tokens
+                    total_batched_seq_len += len(req.input_ids)
                     
         if len(can_run_list) == 0:
             return None
@@ -1236,7 +1236,7 @@ class ModelRpcServer:
                 )
 
                 meta_info = {
-                    "prompt_tokens": req.prompt_tokens,
+                    "prompt_tokens": len(req.input_ids),
                     "completion_tokens": len(req.input_ids)
                     + len(req.output_ids)
                     - req.prompt_tokens,
