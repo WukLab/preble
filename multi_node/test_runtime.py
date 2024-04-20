@@ -36,7 +36,7 @@ class TestModelLoadingAndExecution(unittest.TestCase):
             context_length=65536,
         )
         self.model_details.append(model_details)
-        model_details.update_runtime_selection_policy(DataParallelRuntimeSelectionPolicy.RANDOM)
+        model_details.update_runtime_selection_policy(DataParallelRuntimeSelectionPolicy.RANDOM, "")
         model_details.current_experiment_state_time = time.time()
         model_details.start_time = time.time()
         # prompt = self.read_prompts('multi_node/benchmarks/text.txt')
@@ -94,36 +94,40 @@ class TestModelLoadingAndExecution(unittest.TestCase):
             enable_prefix_caching=True,
         )
         self.model_details.append(model_details)
-        model_details.update_runtime_selection_policy(DataParallelRuntimeSelectionPolicy.RANDOM)
+        model_details.update_runtime_selection_policy(DataParallelRuntimeSelectionPolicy.RANDOM, "")
 
         model_details.current_experiment_state_time = time.time()
         model_details.start_time = time.time()
 
+        # prompt = self.read_prompts('multi_node/benchmarks/text.txt')
+        prompt = "Hello, how are you? I am"
+        # print(prompt)
         output = asyncio.run(model_details.async_send_request(
-            text="Hello, how are you? I am",
+            text=prompt,
             sampling_params={
                 "temperature": 0.0,
                 "max_new_tokens": 10,
             },
             input_ids=[0] * 10,
-            rid=982734,
+            rid='982734',
         ))
         print(output)
 
         # payload = {
-        #     "prompt": "Hello, how are you? I am",
+        #     "prompt": prompt,
         #     "sampling_params": {
         #         "temperature": 0.0,
         #         "max_tokens": 10,
         #     },
-        #     "model": "Qwen/Qwen1.5-7B-Chat",
-        #     "rid": 982734,
+        #     "model": "mistralai/Mistral-7B-v0.1",
+        #     "rid": '982734',
         #     "stream": True,
         #     # "model": "llama2"
         # }
         # print(model_details.runtimes[0].generate_url)
         # response = requests.post(model_details.runtimes[0].generate_url, json=payload, stream=True)
         # # print(response.json())
+        # print(response.status_code, response.reason)
         # for chunk in response.iter_content(chunk_size=None):
         #     print(chunk.decode("utf-8"))
 

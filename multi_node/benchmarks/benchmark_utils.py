@@ -70,6 +70,8 @@ class RequestFuncOutput:
     append_to_queue_time: float = 0.0
     route_dest: int = None
     scheduling_overhead: float = 0.0
+    runtime_selected :int = 0
+    max_new_tokens: int = 0
 
     def update_metrics(
         self,
@@ -116,11 +118,12 @@ class BenchmarkMetrics:
     p99_latency: float
     average_ttft: float
     average_topt: float
-    prefill_decode_ratio: float
+    prefill_decode_ratio: List[float]
     overall_latency: float
     requests_per_sec: float
     gpu_counts: Dict[int, int]
     avg_scheduling_overhead: float
+    max_scheduling_overhead: float
 
     def gen_benchmark_metrics(
         tokenizer,
@@ -165,9 +168,8 @@ class BenchmarkMetrics:
         average_finished_tpot = np.average(finished_tpot)
         p50_tpot, p90_tpot, p99_tpot = np.percentile(tpots, [50, 90, 99])
         
-        prefill_decode_ratio = np.average(
-            [result.prefill_decode_ratio for result in req_func_outputs if result.prefill_decode_ratio]
-        )
+        prefill_decode_ratio = [result.prefill_decode_ratio for result in req_func_outputs if result.prefill_decode_ratio]
+       
 
         finished_request_latencies = [result.request_latency for result in req_func_outputs if result.success and result.global_time <= time_limit]
         average_request_latency, std_request_latency, average_p90 = (
@@ -182,6 +184,7 @@ class BenchmarkMetrics:
         requests_per_sec = len([req for req in req_func_outputs if req.success]) / overall_latency
 
         avg_scheduling_overhead = np.mean([result.scheduling_overhead for result in req_func_outputs])
+        max_scheduling_overhead = np.max([result.scheduling_overhead for result in req_func_outputs])
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
             average_finished_topt=average_finished_tpot,
@@ -205,7 +208,8 @@ class BenchmarkMetrics:
             prefill_decode_ratio=prefill_decode_ratio,
             requests_per_sec=requests_per_sec,
             gpu_counts=gpu_counts,
-            avg_scheduling_overhead=avg_scheduling_overhead
+            avg_scheduling_overhead=avg_scheduling_overhead,
+            max_scheduling_overhead=max_scheduling_overhead
         )
 
     @property
@@ -251,18 +255,24 @@ class BenchmarkMetrics:
             f"Params=({exp_params}) Overall Max Latency: {self.max_latency}, P99: {self.p99_latency}"
         )
         logging.info(
-            f"Params=({exp_params}) TPOT p50, p90, p99: {self.p50_tpot:.2f}, {self.p90_tpot:.2f}, {self.p99_tpot:.2f}"
+            f"Params=({exp_params}) TPOT p50, p90, p99: {self.p50_tpot:.4f}, {self.p90_tpot:.4f}, {self.p99_tpot:.4f}"
         )
         logging.info(
-            f"Params=({exp_params}) TTFT p50, p90, p99: {np.percentile(self.ttfts, 50):.2f}, {np.percentile(self.ttfts, 90):.2f}, {np.percentile(self.ttfts, 99):.2f}"
+            f"Params=({exp_params}) TTFT p50, p90, p99: {np.percentile(self.ttfts, 50):.4f}, {np.percentile(self.ttfts, 90):.4f}, {np.percentile(self.ttfts, 99):.4f}"
         )
         logging.info(
-            f"Params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.2f}, {self.p90_latency:.2f}, {self.p99_latency:.2f}"
+            f"Params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.4f}, {self.p90_latency:.4f}, {self.p99_latency:.4f}"
         )
         logging.info(
-            f"Params=({exp_params}) Overall PrefillRatio: {self.prefill_decode_ratio}"
+            f"Params=({exp_params}) PrefillRatio p50, p90, p99: {np.percentile(self.prefill_decode_ratio, 50):.2f}, {np.percentile(self.prefill_decode_ratio, 90):.2f}, {np.percentile(self.prefill_decode_ratio, 99):.2f}"
+        )
+        logging.info(
+            f"Params=({exp_params}) Overall PrefillRatio: {np.average(self.prefill_decode_ratio)}"
         )
         logging.info(
             f"Params=({exp_params}) Average Scheduling Overhead: {self.avg_scheduling_overhead}"
+        )
+        logging.info(
+            f"Params=({exp_params}) Max Scheduling Overhead: {self.max_scheduling_overhead}"
         )
         logging.info(f"Params=({exp_params}) Counts: {self.gpu_counts}")

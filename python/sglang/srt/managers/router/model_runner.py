@@ -111,6 +111,7 @@ class InputMetadata:
             ],
             dim=0,
         ).contiguous()
+        # logger.debug(f'received kv_indices: {self.kv_indices}')
         self.kv_last_page_len = torch.ones(
             (self.batch_size,), dtype=torch.int32, device="cuda"
         )
@@ -267,11 +268,12 @@ class GPUConfig:
         self.forward_simulation = None
         self.kv_cache_memory = None
         self.vllm_config = vllm_config
+        self.lp_forward_simulation = None
     
-    def regist_simulator_config(self, forward_simulation, kv_cache_memory):
+    def regist_simulator_config(self, forward_simulation, kv_cache_memory, lp_forward_simulation):
         self.forward_simulation = forward_simulation
         self.kv_cache_memory = kv_cache_memory
-    
+        self.lp_forward_simulation = lp_forward_simulation
     def __repr__(self) -> str:
         return (
             f"GPUConfig: id={self.gpu_id}\n"

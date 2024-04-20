@@ -125,7 +125,7 @@ def test_oracle_random_basic(
             mem_fraction_static=0.8,
             context_length=65536,
             enable_flashinfer=False,
-            enable_prefix_caching=True,
+            enable_prefix_caching=True,  # this is needed for vllm
         )
 
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
@@ -180,7 +180,7 @@ def test_oracle_random_basic(
                 )
                 
         else:
-            model_details.update_runtime_selection_policy(policy)
+            model_details.update_runtime_selection_policy(policy, "")
 
         tic_benchmark = time.time()
         results: List[RequestFuncOutput] = model_details.get_experiment_results(

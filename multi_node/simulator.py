@@ -209,7 +209,9 @@ class Simulation:
         self.events = []
         # rid -> RequestFuncOutput
         self.request_output: Dict[str, RequestFuncOutput] = {}
-        
+        self.unfinished_requests = 0
+        self.rid_to_input = {} # rid -> input request
+ 
     def add_event(self, event: SimulationEvent):
         heapq.heappush(self.events, event)
     
@@ -257,6 +259,8 @@ class Simulation:
         while self.events:
             if self.global_clock > self.time_litmit:
                 break
+            if not self.unfinished_requests:
+                break
             if self.global_clock - previous_stamp >= 10.0:
                 logging.info(f"------------ Global clock: {self.global_clock} ------------")
                 previous_stamp = self.global_clock
@@ -293,6 +297,7 @@ class Simulation:
         else:
             for request, send_time in zip(requests, send_out_times):
                 self.add_event(SendRequestEvent(send_time, request))
+        self.unfinished_requests = len(requests)
     
     def start_model_forwarding_loop(self):
         for i in range(len(self.runtimes)):
@@ -314,7 +319,7 @@ class SendRequestEvent(SimulationEvent):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         if rid is None:
             rid = random_uuid_string()
-        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids)
+        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params)
         generate_input = GenerateReqInput(
             text=text,
             sampling_params=sampling_params,
@@ -322,12 +327,15 @@ class SendRequestEvent(SimulationEvent):
             stream=True,
         )
         return runtime_id, generate_input
-        
+
     def process_event(self, simulator: Simulation):
         start = time.time()
         runtime_id, generate_input = self.select_and_prepare_input(simulator, **self.request)
         runtime = simulator.runtimes[runtime_id]
         overhead = time.time() - start
+        if overhead > 0.03:
+            logging.debug(f"Select runtime overhead: {overhead}")
+
         self.update_lock(overhead, simulator)
         simulator.request_output[generate_input.rid] = RequestFuncOutput(
             rid=generate_input.rid,
@@ -335,7 +343,11 @@ class SendRequestEvent(SimulationEvent):
             prompt_len=len(self.request['input_ids']), 
             send_out_time=self.time,
             route_dest=runtime_id,
+            scheduling_overhead=overhead,
+            runtime_selected=runtime_id,
+            max_new_tokens=self.request['sampling_params']['max_new_tokens'],
         )
+        simulator.rid_to_input[generate_input.rid] = self.request
         simulator.add_event(GenerateRequestEvent(self.time, generate_input, runtime_id))
 
 class GenerateRequestEvent(SimulationEvent):
@@ -432,9 +444,16 @@ class ModelStepEvent(SimulationEvent):
                         request_output.ttft = runtime.manager_clock - request_output.send_out_time
                     request_output.request_latency = runtime.manager_clock - request_output.send_out_time
                     request_output.output_len = len(output_token_ids)
+                    request_output.tpot = (request_output.request_latency - request_output.ttft) / request_output.output_len
                     if finished:
                         request_output.success = True
                         request_output.global_time = runtime.manager_clock
+                        simulator.unfinished_requests -= 1
+                        if rid in simulator.rid_to_input:
+                            request = simulator.rid_to_input[rid]
+                            text = request['text']
+                            input_ids = request['input_ids']
+                            simulator.router.finish_request(text=text, request_id=rid, input_ids=input_ids, experiment_id=None, func_output=request_output)
     
     def process_event(self, simulator: Simulation):
         start = time.time()
@@ -452,7 +471,7 @@ class ModelStepEvent(SimulationEvent):
         overhead = time.time() - start + forward_time + sleep_time
         self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.MANAGER)
         self.update_metric(simulator, out_pyobjs)
-        logging.debug(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock}, total {overhead}, overhead {overhead - forward_time - sleep_time}, model {forward_time}")
+        # logging.info(f"{self.runtime_id}: new step scheduled at manager time {runtime.manager_clock:.4f}, total {overhead:.4f}, overhead {overhead - forward_time - sleep_time:.4f}, model {forward_time:.4f}")
         simulator.add_event(ModelStepEvent(runtime.manager_clock, self.runtime_id))
 
 if __name__ == "__main__":

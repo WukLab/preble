@@ -78,9 +78,10 @@ def mistrial_7b_A6000_sglang_decode_flashinfer(
     return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.95
 
 
-def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context, is_leaf):
-    if num_extend_tokens < 192 and not is_leaf:
-        print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")
+def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
+    # if num_extend_tokens < 192:
+    #     print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")
+    #     return num_extend_tokens / 1000
     return mistral_7b_A6000_sglang_extend_flashinfer(
         1, num_extend_tokens, total_context, [num_extend_tokens], num_extend_tokens
     )

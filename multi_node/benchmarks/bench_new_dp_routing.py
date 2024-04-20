@@ -52,7 +52,7 @@ log = logging.getLogger(__name__)
 
 
 def regist_selector(
-    policy, custom_policy, model_details: ModelDetails, workload_config: WorkloadConfig
+    policy, custom_policy, model_details: ModelDetails, workload_config: WorkloadConfig, gpu_configs
 ):
     if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
         if custom_policy == CustomPolicyType.ORACLE:
@@ -64,7 +64,7 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=oracle,
             )
-        if custom_policy == CustomPolicyType.ORACLE_HOT_COLD:
+        elif custom_policy == CustomPolicyType.ORACLE_HOT_COLD:
             oracle = OracleHotCold(
                 num_nodes=len(model_details.runtimes),
                 num_workloads=workload_config.num_prefix_patterns,
@@ -109,13 +109,55 @@ def regist_selector(
                 custom_runtime_selector=glpm,
             )
         elif custom_policy == CustomPolicyType.GREEDY_LP:
-            greedy_lp = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes))
+            greedy_lp = GurobiGreedyLPScheduler(num_nodes=len(model_details.runtimes), gpu_configs=gpu_configs)
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=greedy_lp,
             )
-    else:
-        model_details.update_runtime_selection_policy(policy)
+        elif custom_policy == CustomPolicyType.GREEDY_LP_OLD:
+            from greedy_lp_old import GurobiGreedyLPSchedulerV1
+            greedy_lp =  GurobiGreedyLPSchedulerV1(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=greedy_lp,
+            )
+        elif custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULER:
+            from basic_mem_scheduler import BasicMemScheduler
+            mem_waste = BasicMemScheduler(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULERV2:
+            from basic_mem_scheduler import BasicMemSchedulerV2 
+            mem_waste = BasicMemSchedulerV2(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULERV2_5:
+            from basic_mem_scheduler import BasicMemSchedulerLoadOnly 
+            mem_waste = BasicMemSchedulerLoadOnly(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.HistogramBasedMemoryLoadScheduler:
+            from histogram_based_scheduling import HistogramBasedMemoryLoadScheduler
+            mem_waste = HistogramBasedMemoryLoadScheduler(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoad:
+            from histogram_based_scheduling import HistogramBasedRecomp
+            mem_waste = HistogramBasedRecomp(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        else:
+            model_details.update_runtime_selection_policy(policy)
 
 
 def load_and_run_benchmark(
@@ -124,6 +166,7 @@ def load_and_run_benchmark(
     policy,
     custom_policy=None,
     custom_msg="",
+    gpu_configs=None
 ):
     num_workloads = workload_config.num_prefix_patterns
     distribution_of_non_shared = workload_config.random_ratio
@@ -136,7 +179,7 @@ def load_and_run_benchmark(
     logging.info(
         f"=====STARTING Policy {policy}-{custom_policy}:{custom_msg}, {num_workloads} WORKLOADS, {distribution_of_non_shared} NON-SHARED, {num_requests} REQUESTS, {rps} REQ/s, {exp_time} seconds ====="
     )
-    regist_selector(policy, custom_policy, model_details, workload_config)
+    regist_selector(policy, custom_policy, model_details, workload_config,gpu_configs=gpu_configs)
 
     tic_benchmark = time.time()
     results: List[RequestFuncOutput] = model_details.get_experiment_results(
@@ -147,6 +190,9 @@ def load_and_run_benchmark(
     counts = model_details.request_router.get_model_selection_counts()
     exp_params = f"{model_name}, {num_workloads}, {distribution_of_non_shared}, {num_requests}, {rps}, {policy}-{custom_policy}:{custom_msg}, {exp_time}"
     detail_log_path = directory + '/' + exp_params.replace(", ", "_").replace("/", "-") + '.json'
+    if custom_policy == CustomPolicyType.BASIC_MEM_SCHEDULER:
+        model_details.request_router.custom_selector.print()
+
     bench_metrics = BenchmarkMetrics.gen_benchmark_metrics(
         tokenizer=tokenizer,
         req_func_outputs=results,
@@ -160,6 +206,7 @@ def load_and_run_benchmark(
 
 def test_oracle_random_basic(exp_args: MajorExperimentArgs):
     loader = MultiNodeLoader(exp_args.simulate)
+    gpu_configs = exp_args.gpu_configs
     for workload_config in exp_args.workload_configs:
         logging.info(workload_config)
         logging.info(
@@ -170,7 +217,11 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             model_details = loader.load_model(
                 **exp_args.runtime_args
             )  # TODO: clear cache instead of reload
-            load_and_run_benchmark(model_details, workload_config, *selector_config)
+            policy, custom_policy, custom_msg = selector_config
+            load_and_run_benchmark(model_details, workload_config, policy, custom_policy, custom_msg, gpu_configs=gpu_configs)
+            if custom_policy == CustomPolicyType.GREEDY_LP:
+                lp_scheduler: GurobiGreedyLPScheduler = model_details.request_router.custom_selector
+                lp_scheduler.lp_tree_traversal.pretty_print(lp_scheduler.tree_cache.root_node, depth_limit=4)
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
             gc.collect()
@@ -178,8 +229,8 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    from benchmarks.exp_configs.react_simulator_config import exp_args
-    # from exp_configs.react_simulator_config_greedy import exp_args
+    from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
+    # from benchmarks.exp_configs.debug_simulator import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
     if not os.path.exists(directory):
