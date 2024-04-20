@@ -266,8 +266,9 @@ class BasicMemSchedulerV3:
         self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
     ):
         with self.lock:
-            self.cache.remove_completed_input_ids(input_ids)
-            self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
+            pass
+            # self.cache.remove_completed_input_ids(input_ids)
+            # self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
 
     def print(self):
         _print_helper(self.cache.root_node, 0)
