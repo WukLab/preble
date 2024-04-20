@@ -536,62 +536,66 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
-        if self.tp_rank == 0:
-            logger.info(
-                f"GPU: {self.current_gpu} "
-                f"batch.num_reqs: {len(batch.reqs)}, "
-                f"batch.inflight_tokens: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}, "
-                f"unique kv tokens: {unique_kvs}, "
-                f"#remaining_req: {len(self.forward_queue)}, "
-            )
-        assert num_batched_tokens > 0, "max_token_len should be greater than 0"
+        # if self.tp_rank == 0:
+        #     logger.info(
+        #         f"GPU: {self.current_gpu} "
+        #         f"batch.num_reqs: {len(batch.reqs)}, "
+        #         f"batch.inflight_tokens: {num_batched_tokens}, "
+        #         f"attention tokens: {num_attention_tokens}, "
+        #         f"unique kv tokens: {unique_kvs}, "
+        #         f"#remaining_req: {len(self.forward_queue)}, "
+        #     )
         # self.running_batch.prepare_for_isolate_extend_decode()
         forward_time = 0
-        # Forward
-        if forward_simulation is None:
-            # logger.debug(self.running_batch)
-            s = time.time()
-            if not self.use_sleep_forwarding:
-                start_event = torch.cuda.Event(enable_timing=True)
-                end_event = torch.cuda.Event(enable_timing=True)
-                start_event.record()
-                logits, (_, _, last_logprobs) = self.model_runner.forward(
-                    batch, ForwardMode.EXTEND
-                )
-                end_event.record()
-                next_token_ids, _ = batch.sample(logits)
+        if num_batched_tokens > 0:
+            # Forward
+            if forward_simulation is None:
+                # logger.debug(self.running_batch)
+                s = time.time()
+                if not self.use_sleep_forwarding:
+                    start_event = torch.cuda.Event(enable_timing=True)
+                    end_event = torch.cuda.Event(enable_timing=True)
+                    start_event.record()
+                    logits, (_, _, last_logprobs) = self.model_runner.forward(
+                        batch, ForwardMode.EXTEND
+                    )
+                    end_event.record()
+                    next_token_ids, _ = batch.sample(logits)
+                else:
+                    vocab_size = self.model_config.vocab_size
+                    logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
+                    next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
+                    time.sleep(self.gpu_config.forward_simulation[0](
+                        len(batch.reqs),
+                        num_batched_tokens,
+                        num_attention_tokens,
+                        batch.input_id_lengths,
+                        unique_kvs,
+                        batch.seq_lens,
+                    ))
+                    _ = batch.sample(logits)
+                    last_logprobs = None
+                forward_time = time.time() - s
+                forward_time = forward_time
             else:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                time.sleep(self.gpu_config.forward_simulation[0](
+                forward_time = forward_simulation[0](
                     len(batch.reqs),
                     num_batched_tokens,
                     num_attention_tokens,
                     batch.input_id_lengths,
                     unique_kvs,
                     batch.seq_lens,
-                ))
+                )
                 _ = batch.sample(logits)
                 last_logprobs = None
-            forward_time = time.time() - s
-            forward_time = forward_time
+            next_token_ids = next_token_ids.cpu().tolist()
         else:
-            vocab_size = self.model_config.vocab_size
-            logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
-            next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation[0](
-                len(batch.reqs),
-                num_batched_tokens,
-                num_attention_tokens,
-                batch.input_id_lengths,
-                unique_kvs,
-                batch.seq_lens,
-            )
-            _ = batch.sample(logits)
-            last_logprobs = None
-        next_token_ids = next_token_ids.cpu().tolist()
+            next_token_ids = [self.tokenizer.eos_token_id] * len(batch.reqs)
+            logits = last_logprobs = None
+            start_event, end_event = None, None
             
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
         reqs = batch.reqs

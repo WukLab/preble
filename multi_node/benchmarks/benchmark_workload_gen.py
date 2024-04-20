@@ -593,3 +593,171 @@ class LoogleOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+
+class MultiDomainToolBenchDataLoader(DataLoader):
+    def __init__(
+        self,
+        data_path: str,
+        num_patterns: int,
+        total_num_requests: int,
+        num_domains: int,
+        domain_size: int,
+        tokenizer,
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
+    ):
+        super().__init__(
+            data_path, num_patterns, total_num_requests, tokenizer, load_dist
+        )
+        self.data = self.read_data()
+        self.num_domains = num_domains
+        self.domain_size = domain_size
+
+    def read_data(self):
+        data = json.load(open(self.data_path, "r"))
+        return data
+
+    def generate_workload(self, k=None):
+        workload = []
+        if self.load_dist == LoadDistribution.EVEN:
+            load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
+            prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
+            selected_prefixs = np.random.choice(
+                prefix_stats, self.num_patterns, replace=True
+            )
+            for p in selected_prefixs:
+                selected_instances = np.random.choice(
+                    self.data[p], load_threshold, replace=True
+                )
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
+                    workload.append(
+                        {
+                            "text": e['prompt'], 
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len,
+                            },
+                        }
+                    )
+        elif self.load_dist == LoadDistribution.ZIPF:
+            assert k is not None
+            prefix_stats = sorted(
+                [(p, len(l)) for p, l in self.data.items()],
+                key=lambda x: x[1],
+                reverse=True,
+            )[: self.num_patterns]
+            # ZIPF distribution
+            # sample hit to each selected prefix with the given distribution
+            hist = []
+            while len(hist) < self.total_num_requests:
+                tool_uses = (
+                    np.random.zipf(a=k, size=self.num_patterns) - 1
+                )  # sampled index start from 1, but previous result is still valid
+                valid_tool_uses = [t for t in tool_uses if t < self.num_patterns]
+                hist.extend(valid_tool_uses[: self.total_num_requests - len(hist)])
+
+            # Normal distribution
+            # x = np.arange(0, self.num_patterns)
+            # xU, xL = x + 0.5, x - 0.5
+            # prob = ss.norm.cdf(xU, scale = 3, loc=self.num_patterns//2) - ss.norm.cdf(xL, scale = 3, loc=self.num_patterns//2)
+            # prob = prob / prob.sum() # normalize the probabilities so their sum is 1
+            # hist = np.random.choice(x, size = self.total_num_requests, p = prob)
+            import matplotlib.pyplot as plt
+
+            plt.hist(hist, bins=self.num_patterns)
+            plt.savefig(f"zipf_distribution_{k}.png")
+            tool_usage = defaultdict(int)
+            for tool_index in hist:
+                tool_usage[tool_index] += 1
+            workload = []
+            for tool_index, num_requests in tool_usage.items():
+                prefix = prefix_stats[tool_index][0]
+                selected_instances = np.random.choice(
+                    self.data[prefix], num_requests, replace=True
+                )
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
+                    workload.append(
+                        {
+                            "text": e["prompt"],
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len,
+                            },
+                        }
+                    )
+        elif self.load_dist == LoadDistribution.NORMAL:
+            assert k is not None
+            prefix_stats = sorted(
+                [(p, len(l)) for p, l in self.data.items()],
+                key=lambda x: x[1],
+                reverse=True,
+            )[: self.num_patterns]
+            # Normal distribution
+            x = np.arange(0, self.num_patterns)
+            xU, xL = x + 0.5, x - 0.5
+            prob = ss.norm.cdf(xU, scale=k, loc=self.num_patterns // 2) - ss.norm.cdf(
+                xL, scale=k, loc=self.num_patterns // 2
+            )
+            prob = prob / prob.sum()
+            hist = np.random.choice(x, size=self.total_num_requests, p=prob)
+            import matplotlib.pyplot as plt
+
+            plt.hist(hist, bins=self.num_patterns)
+            plt.savefig(f"normal_distribution_{k}.png")
+            tool_usage = defaultdict(int)
+            for tool_index in hist:
+                tool_usage[tool_index] += 1
+            workload = []
+            for tool_index, num_requests in tool_usage.items():
+                prefix = prefix_stats[tool_index][0]
+                selected_instances = np.random.choice(
+                    self.data[prefix], num_requests, replace=True
+                )
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
+                    workload.append(
+                        {
+                            "text": e["prompt"],
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len,
+                            },
+                        }
+                    )
+        else:
+            raise NotImplementedError()
+        new_workload_with_domains = []
+        domain_string = []
+        for i in range(self.num_domains):
+            random_domain_string = ""
+            if self.domain_size != 0:
+                random_domain_string = "ID: " + gen_random_string(self.domain_size) + " "
+            domain_string.append(f"Domain: {i} {random_domain_string}")
+        for domain_num in range(self.num_domains):
+            for item in workload:
+                new_text_prompt = domain_string[domain_num] + item["text"]
+                new_workload_with_domains.append({
+                    "text": new_text_prompt,
+                    "sampling_params": item["sampling_params"]
+                })
+        self.add_input_token_ids_to_workload(new_workload_with_domains)
+        random.shuffle(new_workload_with_domains)
+        return new_workload_with_domains
+
+@dataclass
+class TBMultiDomainOracle(CustomRuntimeSelector):
+    trace = {}
+    tbl = {}
+    counter: int = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+        match = re.search(r"Domain: (.+?)", text)
+        if match:
+            tool = match.group(1)
+            if tool not in self.tbl:
+                self.tbl[tool] = self.counter % self.num_nodes
+                self.counter += 1
+            return self.tbl[tool]
+        else:
+            return random.randint(0, self.num_nodes - 1)

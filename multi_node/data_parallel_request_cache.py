@@ -32,6 +32,7 @@ class CustomPolicyType(Enum):
 
     TBORACLE = auto()
     TBORACLE_B = auto()
+    TB_DOMAIN_ORACLE = auto()
 
     LPM = auto()
     GLPM = auto()
