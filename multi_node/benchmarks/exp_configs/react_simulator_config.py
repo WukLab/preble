@@ -44,10 +44,11 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/greedy_new_equation_sim_hot_cold_rps18_600/exp.log"
-log_file_path = "logs/ref_correct_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
+log_file_path = "logs/sim_log_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
 
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
+# log_file_path = 'logs/debug/exp.log'
 
 
 
@@ -58,8 +59,8 @@ model_name = "mistralai/Mistral-7B-v0.1"
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False),
     GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -125,8 +126,8 @@ workload_configs = create_workload_prefix_configs(configurations_to_test, model_
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    (DataParallelRuntimeSelectionPolicy.RANDOM, None, 'normal-kernel'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, 'normal-kernel'),
+    (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, ''),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "5r_2h_3c"),
@@ -139,7 +140,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

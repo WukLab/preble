@@ -229,14 +229,18 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
+    # from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
+    from benchmarks.exp_configs.react_simulator_config import exp_args
     # from benchmarks.exp_configs.debug_simulator import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
     if not os.path.exists(directory):
         os.makedirs(directory)
     logging.basicConfig(level=logging.INFO, filename=exp_args.log_file_path)
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+    formatter = logging.Formatter('%(filename)s:%(lineno)d - %(levelname)s - %(message)s')
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
     # Add current time to log file
     start_date = datetime.datetime.utcnow()
     start_time = time.time()

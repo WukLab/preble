@@ -216,6 +216,8 @@ class Batch:
     out_cache_cont_start: torch.Tensor = None
     out_cache_cont_end: torch.Tensor = None
     return_logprob: bool = False
+    num_decoding_inputs: int = 0
+    multiplex_extend_decode: bool = False
 
     # for multimodal
     pixel_values: List[torch.Tensor] = None
@@ -522,6 +524,54 @@ class Batch:
         ]:
             setattr(new_batch, item, getattr(self, item)[new_indices])
         return new_batch
+    
+    # TODO: reduce metadata overhead
+    # NOTE: consider all requests with input id length 1 as normal decoding
+    #       this can exploit more normal decoding optimization than before
+    def prepare_for_isolate_extend_decode(self):
+        return
+        assert self.reqs, "Received Empty batch"
+        decode_indices, extend_indices = [], []
+        for i, r in enumerate(self.reqs):
+            if r.num_inflight_tokens == 1:
+                decode_indices.append(i)
+            else:
+                extend_indices.append(i)
+        new_indices = torch.tensor(decode_indices + extend_indices, device="cuda")
+        self.reqs = [self.reqs[i] for i in new_indices]
+        self.input_id_lengths = [self.input_id_lengths[i] for i in new_indices]
+        
+        # token level reordering
+        new_input_ids = torch.empty_like(self.input_ids)
+        
+        def reorder_by_sequence(attr):
+            if getattr(self, attr) is not None:
+                setattr(self, attr, getattr(self, attr)[new_indices])
+        
+        for item in [
+            # 'input_ids',
+            'req_pool_indices',
+            'seq_lens',
+            'prefix_lens',
+            'position_ids_offsets',
+            # 'out_cache_loc',
+            'out_cache_cont_start',
+            'out_cache_cont_end',
+            # 'return_logprob',
+            # 'pixel_values',
+            # 'image_sizes',
+            # 'image_offsets',
+            # 'output_ids', # not used
+            'temperatures',
+            'top_ps',
+            'top_ks',
+            'frequency_penalties',
+            'presence_penalties',
+            'logit_bias',
+        ]:
+            reorder_by_sequence(item)
+        self.num_decoding_inputs = len(decode_indices)
+        self.multiplex_extend_decode = True
             
     def merge(self, other):
         self.reqs.extend(other.reqs)

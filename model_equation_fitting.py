@@ -33,9 +33,9 @@ print("multi query attention Intercept:", model.intercept_)
 r2_score = model.score(X, y)
 print("multi query attention R2 value:", r2_score)
 
-# new_query = 500
-# new_ctx = 8192
+new_query = 512
+new_ctx = 8192
 
-# p = model.predict([[new_query, new_ctx, new_query * new_ctx]])
+p = model.predict([[new_query, new_ctx, new_query * new_ctx]])
 # p = model.predict(X)
-# print(p)
+print(p)

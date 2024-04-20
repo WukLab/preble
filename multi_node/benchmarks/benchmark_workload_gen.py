@@ -237,12 +237,12 @@ class WorkloadPrefixDataLoader(DataLoader):
                     "rid": uuid.uuid4().hex,
                 }
             )
-        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
+        # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
-            prompt = random.choice(random_workload)
-            # prompt = get_react_workload(
-            #     uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
-            # )
+            # prompt = random.choice(random_workload)
+            prompt = get_react_workload(
+                uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
+            )
             workload.append(
                 {
                     "text": prompt,

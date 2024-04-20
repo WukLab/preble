@@ -461,7 +461,7 @@ class ModelRpcServer:
             tree_cache_hit_rate = (
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
-            logger.info(
+            detail_batch_logger(
                 f"GPU: {self.current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
@@ -528,7 +528,8 @@ class ModelRpcServer:
                 self.running_batch = scheduled_waiting_batch
         
         if not self.running_batch or self.running_batch.is_empty():
-            return 0
+            return []
+        
         
         # Logging
         batch = self.running_batch
@@ -536,7 +537,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            detail_batch_logger(
+            logger.info(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"batch.inflight_tokens: {num_batched_tokens}, "
@@ -544,9 +545,10 @@ class ModelRpcServer:
                 f"unique kv tokens: {unique_kvs}, "
                 f"#remaining_req: {len(self.forward_queue)}, "
             )
+        assert num_batched_tokens > 0, "max_token_len should be greater than 0"
+        # self.running_batch.prepare_for_isolate_extend_decode()
         forward_time = 0
         # Forward
-        assert num_batched_tokens > 0, "max_token_len should be greater than 0"
         if forward_simulation is None:
             # logger.debug(self.running_batch)
             s = time.time()
@@ -563,11 +565,13 @@ class ModelRpcServer:
                 vocab_size = self.model_config.vocab_size
                 logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
                 next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-                time.sleep(self.gpu_config.forward_simulation[1](
+                time.sleep(self.gpu_config.forward_simulation[0](
                     len(batch.reqs),
                     num_batched_tokens,
                     num_attention_tokens,
-                    unique_kvs
+                    batch.input_id_lengths,
+                    unique_kvs,
+                    batch.seq_lens,
                 ))
                 _ = batch.sample(logits)
                 last_logprobs = None
@@ -577,11 +581,13 @@ class ModelRpcServer:
             vocab_size = self.model_config.vocab_size
             logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
             next_token_ids = torch.ones((len(batch.reqs)), dtype=torch.int32, device="cuda")
-            forward_time = forward_simulation[1](
+            forward_time = forward_simulation[0](
                 len(batch.reqs),
                 num_batched_tokens,
                 num_attention_tokens,
-                unique_kvs
+                batch.input_id_lengths,
+                unique_kvs,
+                batch.seq_lens,
             )
             _ = batch.sample(logits)
             last_logprobs = None
@@ -609,7 +615,7 @@ class ModelRpcServer:
         if batch.is_empty():
             self.running_batch = None
         
-        model_forward_time = forward_time
+        model_forward_time = forward_time * 1000
         if not self.use_sleep_forwarding and forward_simulation is None:
             if start_event and end_event:
                 end_event.synchronize()
@@ -917,7 +923,8 @@ class ModelRpcServer:
                         num_batched_tokens,
                         num_attention_tokens,
                         batch.input_id_lengths,
-                        unique_kvs
+                        unique_kvs,
+                        batch.seq_lens,
                     ))
                     _ = batch.sample(logits)
                     logprobs = normalized_logprobs = last_logprobs = None
@@ -933,7 +940,8 @@ class ModelRpcServer:
                     num_batched_tokens,
                     num_attention_tokens,
                     batch.input_id_lengths,
-                    unique_kvs
+                    unique_kvs,
+                    batch.seq_lens,
                 )
                 _ = batch.sample(logits)
                 logprobs = normalized_logprobs = last_logprobs = None
@@ -1117,14 +1125,14 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
-        # if self.tp_rank == 0:
-        #     logging.info(
-        #         f"GPU: {self.current_gpu} "
-        #         f"batch.num_reqs: {len(batch.reqs)}, "
-        #         f"input ids: {num_batched_tokens}, "
-        #         f"attention tokens: {num_attention_tokens}, "
-        #         f"tree unique ref nodes : {unique_kvs}"
-        #     )
+        if self.tp_rank == 0:
+            detail_batch_logger(
+                f"GPU: {self.current_gpu} "
+                f"batch.num_reqs: {len(batch.reqs)}, "
+                f"input ids: {num_batched_tokens}, "
+                f"attention tokens: {num_attention_tokens}, "
+                f"tree unique ref nodes : {unique_kvs}"
+            )
 
         forward_time = 0
         # Forward

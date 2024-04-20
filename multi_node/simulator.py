@@ -84,6 +84,7 @@ class ServerRuntimeSimulator:
         cuda_devices: Optional[List[int]] = None,
         freeze: bool = False,
         log_prefix_hit: bool = False,
+        chunk_prefill_budget: int = 0,
     ):
         host = "0.0.0.0"
         port, additional_ports = 0, [0] * 100
@@ -114,6 +115,7 @@ class ServerRuntimeSimulator:
             disable_regex_jump_forward=disable_regex_jump_forward,
             disable_disk_cache=disable_disk_cache,
             api_key=api_key,
+            chunk_prefill_budget=chunk_prefill_budget,
         )
         self.server_args = server_args
         self.url = random_uuid_string()
@@ -147,7 +149,10 @@ class ServerRuntimeSimulator:
     def simulate_step(self, recv_reqs) -> int:
         for recv_req in recv_reqs:
             self.model_rpc.handle_generate_request(recv_req)
-        forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
+        if self.model_rpc.chunk_prefill_budget > 1:
+            forward_times = self.model_rpc.budget_forward_step(self.gpu_config.forward_simulation)
+        else:
+            forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
         forward_time = sum(forward_times)
         ret = self.model_rpc.out_pyobjs
         self.model_rpc.out_pyobjs = []
