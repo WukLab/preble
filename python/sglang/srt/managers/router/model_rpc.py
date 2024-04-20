@@ -688,13 +688,13 @@ class ModelRpcServer:
                 if start and end:
                     end.synchronize()
                     total_forward_time += start.elapsed_time(end)
-        # if total_forward_time > 0:
-        #     logger.info(
-        #         f'GPU: {self.current_gpu} '
-        #         f"forward time: {total_forward_time:.2f} ms"
-        #     )
+        if total_forward_time > 0:
+            detail_batch_logger(
+                f'GPU: {self.current_gpu} '
+                f"forward time: {total_forward_time:.2f} ms"
+            )
 
-        return forward_time
+        return forward_times
     
     def handle_generate_request(
         self,
