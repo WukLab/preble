@@ -8,11 +8,12 @@ import copy
 import threading
 import logging
 from benchmarks.benchmark_utils import RequestFuncOutput
-from histogram_based_scheduling import SlidingWindowHistogram
 from datetime import datetime, timedelta
+from typing import List, Tuple
 
 logging = logging.getLogger(__name__)
 DEBUG_COUNTER = 0
+
 class LpNode:
     def __init__(self, node_id, num_gpus):
         self.node_id = node_id
@@ -68,6 +69,60 @@ class LPTreeNode:
     def __repr__(self) -> str:
         return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter}, gpu_selections={self.gpu_selections})"
 
+class SlidingWindowHistogram:
+    def __init__(self, window_duration, num_gpus=2):
+        self.window_duration = window_duration
+        self.histogram = defaultdict(int)
+        self.timestamps: List[Tuple[datetime, LPTreeNode]] = []
+        self.num_gpus = num_gpus
+
+    def update(self, node: LPTreeNode):
+        timestamp = datetime.now()
+        self.timestamps.append((timestamp, node))
+        self.histogram[node] += 1
+        self._remove_old_entries(timestamp)
+
+    def _remove_old_entries(self, current_timestamp):
+        window_start = current_timestamp - self.window_duration
+        while self.timestamps and self.timestamps[0][0] < window_start:
+            timestamp, node = self.timestamps.pop(0)
+            self.histogram[node] -= 1
+            if self.histogram[node] == 0: # Remove the gpu selections from it if there's no load
+                node.gpu_selections = set() # Reset the gpu selections for older entries
+            if self.histogram[node] <= 0:
+                del self.histogram[node]
+            
+    
+    def rename_node(self, old_node, new_node):
+        if old_node in self.histogram:
+            self.histogram[new_node] = self.histogram.get(old_node)
+            rename_mapping = {old_node: new_node}
+            self.timestamps = [(timestamp, rename_mapping.get(node, node)) for timestamp, node in self.timestamps]
+    
+    def copy_node(self, old_node, new_node):
+        if old_node not in self.histogram:
+            return 
+        self.histogram[new_node] = self.histogram.get(old_node) # the counts of both should be the same
+        new_timestamps = []
+        for timestamp, node in self.timestamps:
+            if node == old_node:
+                new_timestamps.append((timestamp, new_node))
+                new_timestamps.append((timestamp, old_node))
+        self.timestamps = new_timestamps
+
+    def query(self):
+        return dict(self.histogram)
+
+    def get(self, node):
+        return self.histogram.get(node, 0)
+
+    def current_allocation_per_gpu(self):
+        allocation = [0 for _ in range(self.num_gpus)]
+        node: LPTreeNode
+        for node, cost in self.histogram.items():
+            for gpu in node.gpu_selections:
+                allocation[gpu] += cost # potentionally divide by length of node.gpu_selections here
+        return allocation
 
 def match(key, seq):
     i = 0
@@ -79,10 +134,11 @@ def match(key, seq):
 
 
 class LPRadixCache:
-    def __init__(self, histogram, disable=False):
+    def __init__(self, histogram, disable=False, num_gpus=2):
+        self.num_gpus = num_gpus
         self.reset()
         self.disable = disable
-        self.histogram = histogram
+        self.histogram: SlidingWindowHistogram = histogram
 
     ##### Public API #####
 
@@ -90,7 +146,7 @@ class LPRadixCache:
         self.root_node = LPTreeNode()
         self.root_node.value = []
         self.root_node.ref_counter = 1
-        self.evictable_size_ = 0
+        self.evictable_size_ = [0 for _ in range(self.num_gpus)]
 
     def find_node(self, key):
         if self.disable:
@@ -169,13 +225,18 @@ class LPRadixCache:
             current_depth=0,
             split_nodes=split_nodes,
         )
+        for old_node, new_node in split_nodes.items():
+            self.histogram.copy_node(old_node=old_node, new_node=new_node)
 
         node: LPTreeNode = created_node
         while node is not None:
             if node in all_modified_nodes:
                 break
+            self.histogram.update(node)
             all_modified_nodes.add(node)
             node = node.parent
+        
+
         return created_node
 
     def pretty_print(self):
@@ -207,11 +268,11 @@ class LPRadixCache:
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
 
-    def smart_evict(self, num_tokens, evict_callback):
+    def smart_evict(self, num_tokens, evict_callback, runtime_id):
         if self.disable:
             raise RuntimeError()
 
-        nodes = self.create_priority_queue()
+        nodes = self.create_priority_queue(runtime_id)
 
         num_evicted = 0
         while num_evicted < num_tokens and len(nodes):
@@ -225,26 +286,13 @@ class LPRadixCache:
                 continue
 
             num_evicted += evict_callback(x)
-            self._delete_node(x)
+            self._delete_node(x, runtime_id)
             if len(x.parent.children) == 0:
                 heapq.heappush(nodes, (x.parent.load * x.parent.num_tokens, x.parent))
-    
-    def inc_ref_counter(self, node):
-        delta = 0
-        while node != self.root_node:
-            if node.ref_counter == 0:
-                self.evictable_size_ -= len(node.value)
-                delta -= len(node.value)
-            node.ref_counter += 1
-            node = node.parent
-        return delta
 
     def dec_ref_counter(self, node):
         delta = 0
         while node != self.root_node:
-            # if node.ref_counter == 1: TODO why does this exist?
-            #     self.evictable_size_ += len(node.value)
-            #     delta += len(node.value)
             node.ref_counter -= 1
             node = node.parent
         return delta
@@ -253,8 +301,8 @@ class LPRadixCache:
         node = self.find_node(input_ids)
         self.dec_ref_counter(node)  # remove reference counter up to parent
     
-    def evictable_size(self):
-        return self.evictable_size_
+    def evictable_size(self, runtime_id):
+        return self.evictable_size_[runtime_id]
 
     def _split_node(
         self, key, child: LPTreeNode, split_len, node_map, depth_limit, current_depth
@@ -265,6 +313,8 @@ class LPRadixCache:
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
         new_node.ref_counter = child.ref_counter
+        new_node.load = child.load
+
         new_node.context_length = child.parent.context_length + split_len
 
         new_node.value = child.value[:split_len]
@@ -352,12 +402,15 @@ class LPRadixCache:
             new_node.context_length = parent_context_length + len(key)
 
             node.children[key] = new_node
-            self.evictable_size_ += len(value)
+            # self.evictable_size_ += len(value)
             # if current_depth < depth_limit:
             modified_nodes.add(new_node)
             # return new_node
             return new_node
         return node
+    
+    def update_evictable_size(self, node: LPTreeNode, runtime_id):
+        self.evictable_size_[runtime_id] += len(node.value)
 
     def _print_helper(self, node, indent, depth=0):
         if depth == 5:
@@ -366,27 +419,20 @@ class LPRadixCache:
             print(" " * indent, len(key), key[:10], f"r={child.ref_counter} {child.gpu_selections}")
             self._print_helper(child, indent=indent + 2, depth=depth + 1)
 
-    def _delete_leaf(self, node):
-        for k, v in node.parent.children.items():
-            if v == node:
-                break
-        del node.parent.children[k]
-        self.evictable_size_ -= len(k)
-    
-    def recursive_delete(self, cur_node, parent):
+    def recursive_delete(self, cur_node, parent, runtime_id):
         if cur_node.children:
             for child_size, child_node in list(cur_node.children.items()):
-                self.recursive_delete(child_node, cur_node)
+                self.recursive_delete(child_node, cur_node, runtime_id)
         if parent is not None:
             children = list(parent.children.items())
             for key, value in children:
                 value: LPTreeNode
                 if value == cur_node:
                     value.is_evicted = True
-                    self.evictable_size_ -= len(key)  # Adjust evictable size based on the node's size
+                    self.evictable_size_[runtime_id] -= len(key)  # Adjust evictable size based on the node's size
 
-    def _delete_node(self, cur_node):
-        self.recursive_delete(cur_node, cur_node.parent)
+    def _delete_node(self, cur_node, runtime_id):
+        self.recursive_delete(cur_node, cur_node.parent, runtime_id)
 
     def _total_size_helper(self, node):
         x = len(node.value)
@@ -419,138 +465,28 @@ class LPRadixCache:
         dfs_(self.root_node)
         return ret_list
 
-    def create_priority_queue(self):
+    def create_priority_queue(self, runtime_id):
         nodes = self._collect_nodes()
         priority_queue = []
         for node in nodes:
             node: LPTreeNode
-            if node.ref_counter == 0 and not node.is_evicted:
-                assert node.load >= node.ref_counter
-                priority = node.load * node.num_tokens # Min heap python
+            if node.ref_counter == 0 and not node.is_evicted and runtime_id in node.gpu_selections:
+                load = self.histogram.get(node)
+                assert load >= node.ref_counter
+                priority = load * node.num_tokens # Min heap python
                 heapq.heappush(priority_queue, (priority, node))
         return priority_queue
 
-class MemSchedulerEvictBasedOnLoadHistogram:
+
+class MemSchedulerWithGlobalEviction:
     def __init__(self, num_nodes=2) -> None:
         self.mem_cost = [0 for _ in range(num_nodes)]
         self.gpu_allocations = defaultdict(set)
         self.num_gpus = num_nodes
         self.lock = threading.Lock()
-        self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), num_buckets=10, num_gpus=2)
-        self.cache = LPRadixCache(histogram=self.histogram)
-
+        self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=1), num_gpus=num_nodes)
+        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=num_nodes)
         self.metrics_dict = []
-        self.runtime_caches = [LPRadixCache(histogram=self.histogram) for _ in range(num_nodes)]
-        self.max_tokens_gpu = [198516, 198516]
-        self.counter = 0
-
-    def get_recomp_cost(self, node: LPTreeNode, gpu_id):
-        if not node or gpu_id in node.gpu_selections:
-            return 0
-        else:
-            return node.num_tokens + self.get_recomp_cost(node.parent, gpu_id)
-
-    def update_gpu_selections_of_parent(self,node: LPTreeNode, gpu_id):
-        if not node:
-            return
-        node.gpu_selections = node.gpu_selections.union(gpu_id)
-        self.update_gpu_selections_of_parent(node.parent, gpu_id)
-
-    def get_parent_gpu_selections(self, node: LPTreeNode):
-        if not node:
-            return set()
-        if node.gpu_selections:
-            return node.gpu_selections
-        return self.get_parent_gpu_selections(node.parent)
-
-    def insert_then_evict_from_runtime_cache(self, input_ids, runtime_selected):
-        runtime_cache = self.runtime_caches[runtime_selected]
-        node = runtime_cache.insert(tuple(input_ids))
-        current_max_tokens = self.max_tokens_gpu[runtime_selected]
-        if runtime_cache.evictable_size() > current_max_tokens:
-            num_tokens = runtime_cache.evictable_size() - current_max_tokens
-            runtime_cache.smart_evict(num_tokens, lambda node: self.evict_callback(node, runtime_selected))
-            print(f"GPU {runtime_selected} Evictable size: ", runtime_cache.evictable_size(), current_max_tokens)
-
-
-    def evict_callback(self, node: LPTreeNode, runtime_selected: int):
-        """Method to handle eviction logic."""
-        # TODO: Maybe update the parent if child has no parent
-        num_tokens = len(node.value)
-        self.mem_cost[runtime_selected] -= num_tokens
-        return len(node.value)
-
-    def runtime_selector(
-        self,
-        text: str = None,
-        request_id: str = None,
-        input_ids=None,
-        sampling_params=None
-    ):
-        # Tokenize the text
-        start_time = time.time()
-        with self.lock:
-            split_nodes = {}
-            leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
-            recom_costs = []
-            for gpu_id in range(self.num_gpus):
-                recomputation_cost = self.get_recomp_cost(leaf_node, gpu_id)
-                recom_costs.append(recomputation_cost)
-            
-            is_small_node = leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens
-            cost_f = lambda gpu_id: recom_costs[gpu_id] + self.mem_cost[gpu_id]
-            if is_small_node:
-                gpu_selected = self.get_parent_gpu_selections(leaf_node.parent)
-                if len(gpu_selected) != 1:
-                    runtime_idx = min(list(gpu_selected), key=cost_f)
-                else:
-                    runtime_idx = list(gpu_selected)[0]
-                self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-                self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
-            else:
-                gpu_selected = min(range(self.num_gpus), key=cost_f)
-                gpu_selected = set([gpu_selected])
-                runtime_idx = list(gpu_selected)[0]
-                self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-                self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
-            # self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-            # Maybe memory cost should only be updated for the one that gets selected not scheduled
-            self.counter += 1
-            if self.counter % 100 == 0:
-                print(self.mem_cost)
-            self.insert_then_evict_from_runtime_cache(input_ids, runtime_idx, leaf_node)
-            self.metrics_dict.append(
-                {
-                    "text": text[:100],
-                    "rid": request_id,
-                    "selected_runtime": runtime_idx,
-                    "overhead": time.time() - start_time,
-                    "mem_costs": self.mem_cost,
-                    "parent_memory_cost": self.get_recomp_cost(leaf_node.parent, runtime_idx),
-                    "current_leaf_node_cost": leaf_node.num_tokens,
-                }
-            )
-
-            return int(runtime_idx)
-
-    def finish_request(
-        self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
-    ):
-        with self.lock:
-            self.cache.remove_completed_input_ids(input_ids)
-            self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
-
-class MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes:
-    def __init__(self, num_nodes=2) -> None:
-        self.mem_cost = [0 for _ in range(num_nodes)]
-        self.gpu_allocations = defaultdict(set)
-        self.num_gpus = num_nodes
-        self.lock = threading.Lock()
-        self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), num_buckets=10, num_gpus=2)
-        self.cache = LPRadixCache(histogram=self.histogram)
-
-        self.metrics_dict = []
-        self.runtime_caches = [LPRadixCache(histogram=self.histogram) for _ in range(num_nodes)]
         self.max_tokens_gpu = [198516, 198516]
         self.counter = 0
         self.rid_to_node = {}
@@ -574,15 +510,12 @@ class MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes:
             return node.gpu_selections
         return self.get_parent_gpu_selections(node.parent)
 
-    def insert_then_evict_from_runtime_cache(self, input_ids, runtime_selected, leaf_node):
-        runtime_cache = self.runtime_caches[runtime_selected]
-        new_node = runtime_cache.insert(tuple(input_ids))
-
+    def handle_eviction(self, runtime_selected):
         current_max_tokens = self.max_tokens_gpu[runtime_selected]
-        if runtime_cache.evictable_size() > current_max_tokens:
-            num_tokens = runtime_cache.evictable_size() - current_max_tokens
-            runtime_cache.smart_evict(num_tokens, lambda node: self.evict_callback(node, runtime_selected))
-            print(f"GPU {runtime_selected} Evictable size: ", runtime_cache.evictable_size(), current_max_tokens)
+        if self.cache.evictable_size(runtime_selected) > current_max_tokens:
+            num_tokens = self.cache.evictable_size(runtime_selected) - current_max_tokens
+            self.cache.smart_evict(num_tokens, lambda node: self.evict_callback(node, runtime_selected), runtime_selected)
+            print(f"GPU {runtime_selected} Evictable size: ", self.cache.evictable_size(runtime_selected), current_max_tokens)
 
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
@@ -604,21 +537,32 @@ class MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes:
         with self.lock:
             split_nodes = {}
             leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
-            self.rid_to_node[request_id] = leaf_node
+
             recom_costs = []
             for gpu_id in range(self.num_gpus):
                 recomputation_cost = self.get_recomp_cost(leaf_node, gpu_id)
                 recom_costs.append(recomputation_cost)
+            is_small_node = leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens
             cost_f = lambda gpu_id: recom_costs[gpu_id] + self.mem_cost[gpu_id]
-            gpu_selected = min(range(self.num_gpus), key=cost_f)
-            gpu_selected = set([gpu_selected])
-            runtime_idx = list(gpu_selected)[0]
-            self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-            self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
+            if is_small_node:
+                gpu_selected = self.get_parent_gpu_selections(leaf_node.parent)
+                if len(gpu_selected) != 1:
+                    runtime_idx = min(list(gpu_selected), key=cost_f)
+                else:
+                    runtime_idx = list(gpu_selected)[0]
+                self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
+                self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
+            else:
+                gpu_selected = min(range(self.num_gpus), key=cost_f)
+                gpu_selected = set([gpu_selected])
+                runtime_idx = list(gpu_selected)[0]
+                self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
+                self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
+            self.cache.update_evictable_size(leaf_node, runtime_idx)
             # self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
             # Maybe memory cost should only be updated for the one that gets selected not scheduled
             self.counter += 1
-            self.insert_then_evict_from_runtime_cache(input_ids, runtime_idx)
+            self.handle_eviction(runtime_idx)
             if self.counter % 100 == 0:
                 print(self.mem_cost)
             self.metrics_dict.append(
@@ -640,4 +584,4 @@ class MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes:
     ):
         with self.lock:
             self.cache.remove_completed_input_ids(input_ids)
-            self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
+            # self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)

@@ -163,9 +163,9 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
-        elif custom_policy == CustomPolicyType.MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes:
-            from mem_scheduler_evict_based_on_load_histogram import MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes
-            mem_waste = MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes(num_nodes=len(model_details.runtimes))
+        elif custom_policy == CustomPolicyType.MemSchedulerWithGlobalEviction:
+            from mem_scheduler_evict_based_on_load_with_global import MemSchedulerWithGlobalEviction
+            mem_waste = MemSchedulerWithGlobalEviction(num_nodes=len(model_details.runtimes))
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,

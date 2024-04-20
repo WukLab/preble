@@ -49,7 +49,7 @@ class CustomPolicyType(Enum):
     HiostgramBasedRecompLoad = auto()
 
     MemSchedulerEvictBasedOnLoad = auto()
-    MemSchedulerEvictBasedOnLoadHistogramWithoutHeavyNodes = auto()
+    MemSchedulerWithGlobalEviction = auto()
 
 class DataParallelRequestRouter:
     def __init__(
