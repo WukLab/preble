@@ -290,10 +290,12 @@ class Simulation:
         if rps != float('inf') and time != float('inf'):
             assert len(requests) >= int(rps * time)
         max_prompt_len = 0
+        min_new_tokens = float('inf')
         if not send_out_times:
             send_time = self.global_clock
             for request in requests:
                 max_prompt_len = max(max_prompt_len, len(request['input_ids']))
+                min_new_tokens = min(min_new_tokens, request['sampling_params']['max_new_tokens'])
                 self.add_event(SendRequestEvent(send_time, request))
                 if rps == float('inf'):
                     interval = 0
@@ -303,9 +305,10 @@ class Simulation:
         else:
             for request, send_time in zip(requests, send_out_times):
                 max_prompt_len = max(max_prompt_len, len(request['input_ids']))
+                min_new_tokens = min(min_new_tokens, request['sampling_params']['max_new_tokens'])
                 self.add_event(SendRequestEvent(send_time, request))
         self.unfinished_requests = len(requests)
-        logging.info(f"Max prompt len: {max_prompt_len}")
+        logging.info(f"Max prompt len: {max_prompt_len}, Min new tokens: {min_new_tokens}")
     
     def start_model_forwarding_loop(self):
         for i in range(len(self.runtimes)):
