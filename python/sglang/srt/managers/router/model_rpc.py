@@ -536,15 +536,15 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
-        if self.tp_rank == 0:
-            logger.info(
-                f"GPU: {self.current_gpu} "
-                f"batch.num_reqs: {len(batch.reqs)}, "
-                f"batch.inflight_tokens: {num_batched_tokens}, "
-                f"attention tokens: {num_attention_tokens}, "
-                f"unique kv tokens: {unique_kvs}, "
-                f"#remaining_req: {len(self.forward_queue)}, "
-            )
+        # if self.tp_rank == 0:
+        #     logger.info(
+        #         f"GPU: {self.current_gpu} "
+        #         f"batch.num_reqs: {len(batch.reqs)}, "
+        #         f"batch.inflight_tokens: {num_batched_tokens}, "
+        #         f"attention tokens: {num_attention_tokens}, "
+        #         f"unique kv tokens: {unique_kvs}, "
+        #         f"#remaining_req: {len(self.forward_queue)}, "
+        #     )
         assert num_batched_tokens > 0, "max_token_len should be greater than 0"
         # self.running_batch.prepare_for_isolate_extend_decode()
         forward_time = 0

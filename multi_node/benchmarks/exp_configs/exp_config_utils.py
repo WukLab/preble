@@ -1,7 +1,7 @@
 from transformers import AutoTokenizer
 import random
 from benchmark_utils import WorkloadConfig
-from benchmark_workload_gen import WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType
+from benchmark_workload_gen import WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType, MultiDomainToolBenchDataLoader
 from typing import Iterator
 from benchmark_workload_gen import LoadDistribution
 import numpy as np
@@ -74,6 +74,39 @@ def create_toolbench_data_loader(configurations_to_test, model_name, exp_time, d
                 dataloader=dataloader,
                 exp_time=exp_time,
                 random_ratio=0.0,
+                send_out_times=send_out_times
+            )        
+        yield workload_config
+
+def create_multi_domain_toolbench_data_loader(configurations_to_test, model_name, exp_time, data_path, load_dist, k=None) -> Iterator[WorkloadConfig]:
+    workload_configs = []
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    for config in configurations_to_test:
+        random.seed(10)
+        np.random.seed(10)
+
+        num_workloads, num_domains, domain_size, num_requests, request_rate = config
+        if exp_time != float("inf"):
+            num_requests = int(request_rate * exp_time)
+        dataloader = MultiDomainToolBenchDataLoader(
+            num_patterns=num_workloads,
+            total_num_requests=num_requests,
+            tokenizer=tokenizer,
+            data_path=data_path,
+            load_dist=load_dist,
+            num_domains=num_domains,
+            domain_size=domain_size
+        )
+        requests = dataloader.generate_workload(k=k)
+        send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+        workload_config = WorkloadConfig(
+                num_prefix_patterns=num_workloads,
+                num_requests=num_requests,
+                request_rate=request_rate,
+                requests=requests,
+                dataloader=dataloader,
+                exp_time=exp_time,
+                random_ratio=f"{num_domains}-{domain_size}",
                 send_out_times=send_out_times
             )        
         yield workload_config

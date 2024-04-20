@@ -487,7 +487,7 @@ class MemSchedulerWithGlobalEviction:
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=1), num_gpus=num_nodes)
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=num_nodes)
         self.metrics_dict = []
-        self.max_tokens_gpu = [198516, 198516]
+        self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.counter = 0
         self.rid_to_node = {}
 
