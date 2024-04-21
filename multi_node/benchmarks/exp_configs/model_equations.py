@@ -28,7 +28,7 @@ def llama2_7b_A6000_vllm(batch: Batch):
 
 def mistral_7b_A6000_sglang_linear(num_batched_tokens: int):
     if num_batched_tokens >= 384:
-        forward_time = 0.115 * num_batched_tokens - 1.13
+        forward_time = 0.10842571 * num_batched_tokens + 4.209777054806409
     elif num_batched_tokens >= 192:
     #    -118 + 1.25x + -2.56E-03x^2 
         forward_time = -118 + 1.25 * num_batched_tokens - 2.56e-3 * num_batched_tokens**2
@@ -74,7 +74,7 @@ def mistral_7b_A6000_sglang_extend_flashinfer(
             if extend_lengths * seq_len > 1024 * 1024:
                 attn_quad += 1.13e-3 * extend_lengths + 1.75e-3 * seq_len + 2.19e-6 * extend_lengths * seq_len
     attn_quad /= 1e3
-    return (base + attn_quad) / 0.95
+    return (base + attn_quad) / 0.9
 
 def mistrial_7b_A6000_sglang_decode_flashinfer(
     num_reqs, 
@@ -82,7 +82,7 @@ def mistrial_7b_A6000_sglang_decode_flashinfer(
     total_context, 
     num_unique_kv = None
 ):
-    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.95
+    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.9
 
 
 def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
@@ -92,3 +92,14 @@ def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_contex
     return mistral_7b_A6000_sglang_extend_flashinfer(
         1, num_extend_tokens, total_context, [num_extend_tokens], num_extend_tokens
     )
+
+if __name__ == '__main__':
+    test_extend = mistral_7b_A6000_sglang_extend_flashinfer(
+        1, 512, 4097, [512], 7218, torch.Tensor([4097])
+    )
+    print(test_extend * 1000)
+    
+    test_mix = mistral_7b_A6000_sglang_extend_flashinfer(
+        13, 512, 87722, [1]*12 + [512], 79629, torch.Tensor([7267]*12 + [7000])
+    )
+    print(test_mix * 1000)

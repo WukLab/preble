@@ -468,9 +468,11 @@ class ModelRpcServer:
                 f"#new_token: {new_batch_input_tokens}. "
                 f"#remaining_req: {len(self.forward_queue) - len(can_run_list)}. "
                 f"#running_req: {running_req}. "
-                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
                 f"hit_tokens: {hit_tokens}. "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+            )
+            logger.info(
+                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
             )
         
         # Prepare Batch input
@@ -536,15 +538,16 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
-        # if self.tp_rank == 0:
-        #     logger.info(
-        #         f"GPU: {self.current_gpu} "
-        #         f"batch.num_reqs: {len(batch.reqs)}, "
-        #         f"batch.inflight_tokens: {num_batched_tokens}, "
-        #         f"attention tokens: {num_attention_tokens}, "
-        #         f"unique kv tokens: {unique_kvs}, "
-        #         f"#remaining_req: {len(self.forward_queue)}, "
-        #     )
+        if self.tp_rank == 0:
+            logger.info(
+                f"GPU: {self.current_gpu} "
+                f"batch.num_reqs: {len(batch.reqs)}, "
+                f"batch.inflight_tokens: {num_batched_tokens}, "
+                f"attention tokens: {num_attention_tokens}, "
+                f"unique kv tokens: {unique_kvs}, "
+                f"#remaining_req: {len(self.forward_queue)}, "
+                f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+            )
         # self.running_batch.prepare_for_isolate_extend_decode()
         forward_time = 0
         if num_batched_tokens > 0:

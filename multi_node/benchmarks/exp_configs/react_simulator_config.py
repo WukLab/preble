@@ -44,12 +44,12 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "logs/new_equation_sim_hot_cold_rps18_600/exp.log"
 # log_file_path = "logs/greedy_new_equation_sim_hot_cold_rps18_600/exp.log"
-log_file_path = "logs/sim_log_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
+# log_file_path = "logs/sim_log_chunk_prefill_react_8K_30_0.2_300_2/exp.log"
 
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
 # log_file_path = 'logs/debug/exp.log'
-
+log_file_path = "hc_logs_run_to_complete/sim_0.9_log_base_line_chunk_prefill/exp.log"
 
 
 # model_name = "meta-llama/Llama-2-7b-hf"
@@ -119,15 +119,15 @@ configurations_to_test = [
     # [300, 0.2, 4096, 8],
     # [300, 0.2, 4096, 12],
     # [100, 0.2, 4096, 18],
-    [30, 0.2, 300, 2],
+    [30, 0.2, 600, 2],
 ]
 workload_configs = create_workload_prefix_configs(configurations_to_test, model_name, exp_time, 16)
 
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, ''),
+    (DataParallelRuntimeSelectionPolicy.RANDOM, None, 'other-0.9'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, 'other-0.9'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_1h_3c"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "5r_2h_3c"),
