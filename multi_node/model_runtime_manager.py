@@ -17,6 +17,7 @@ import paramiko
 import sys, traceback
 from typing import Tuple
 from ssh_runtime import SSHRuntimeManager
+from vllm_runtime import VLLMRuntimeManager
 from dataclasses import field
 from sglang.srt.managers.router.model_runner import GPUConfig # FIXME wrong import
 from simulator import ServerRuntimeSimulator, Simulation
@@ -34,7 +35,9 @@ class EndpointRuntimeInterface:
     def __post_init__(self):
         self.runtime_id = str(uuid.uuid4())
         assert self.url is not None
-        self._generate_url = f"{self.url}/generate"
+        self._generate_url = f"{self.url}/generate" \
+            if getattr(self, "_generate_url", None) is None \
+                else self._generate_url
 
     @property
     def generate_url(self):
@@ -51,6 +54,29 @@ class EndpointRuntimeInterface:
     def shutdown(self):
         pass
 
+    def prepare_request_payload(self, 
+                                text: str, 
+                                sampling_params: dict, 
+                                rid: str, 
+                                stream: bool):
+        return {
+            "text": text,
+            "sampling_params": sampling_params,
+            "rid": rid,
+            "stream": stream
+        }
+    
+    def process_stream_output(self,
+                              chunk: dict,
+                              output: RequestFuncOutput,
+                              **kwargs):
+        assert 'current_experiment_state_time' in kwargs
+        current_experiment_state_time = kwargs['current_experiment_state_time']
+        output.generated_text = chunk["text"]
+        output.output_len = chunk['meta_info']['completion_tokens']
+        output.arrival_time = chunk['meta_info']['arrival_time'] - current_experiment_state_time
+        output.append_to_queue_time = chunk['meta_info']['append_to_queue_time'] - current_experiment_state_time
+
 class URLRuntime(EndpointRuntimeInterface):
     def __init__(self, url, gpu):
         super().__init__()
@@ -65,6 +91,35 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
 class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+class VLLMRuntime(VLLMRuntimeManager, EndpointRuntimeInterface):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def prepare_request_payload(self, 
+                                text: str, 
+                                sampling_params: dict, 
+                                rid: str, 
+                                stream: bool):
+        # vllm runtime uses different keys for max tokens
+        if "max_new_tokens" in sampling_params:
+            sampling_params["max_tokens"] = sampling_params.pop("max_new_tokens")
+        return {
+            "prompt": text,
+            "sampling_params": sampling_params,
+            "rid": rid,
+            "model": self.model_path,
+            "stream": stream
+        }
+    
+    def process_stream_output(self,
+                              chunk: dict,
+                              output: RequestFuncOutput,
+                              **kwargs):
+        choices = chunk["choices"]
+        output.generated_text += choices[0]["text"]
+        if chunk.get('usage', None) is not None:
+            output.output_len = chunk['usage']['completion_tokens']
         
 class SimulationRuntime(ServerRuntimeSimulator, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
@@ -108,7 +163,7 @@ class ModelDetails:
                     gpu_config=config,
                     **kwargs,
                 )
-            elif config.use_ssh:
+            elif config.use_ssh and config.vllm_config is None:
                 runtime = SSHRuntime(
                     model_path=model_path,
                     ssh_config=config.ssh_config,
@@ -121,6 +176,14 @@ class ModelDetails:
                     config.url, 
                     cuda_devices=[gpu_id],
                     **kwargs)
+            elif config.vllm_config is not None:
+                runtime = VLLMRuntime(
+                    model_path=model_path,
+                    ssh_config=config.ssh_config,
+                    gpu=gpu_id,
+                    **config.vllm_config,
+                    **kwargs,
+                )
             else:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
@@ -281,12 +344,7 @@ class ModelDetails:
         # If request in sampling_params pop it
         if "request_id" in sampling_params:
             sampling_params.pop("request_id")
-        payload = {
-            "text": text,
-            "sampling_params": sampling_params,
-            "rid": request_id,
-            'stream': True
-        }
+        payload = self.runtimes[runtime_idx].prepare_request_payload(text, sampling_params, request_id, stream=True)
         output = RequestFuncOutput()
         output.rid = rid
         output.prompt_text = text[:20]
@@ -326,29 +384,27 @@ class ModelDetails:
 
                                 most_recent_timestamp = timestamp
                             output.request_latency = time.perf_counter() - st
-                            output.generated_text = data["text"]
-                            output.output_len = data['meta_info']['completion_tokens']
-                            output.arrival_time = data['meta_info']['arrival_time'] - self.current_experiment_state_time
-                            output.append_to_queue_time = data['meta_info']['append_to_queue_time'] - self.current_experiment_state_time
+                            self.runtimes[runtime_idx].process_stream_output(
+                                data, output, current_experiment_state_time=self.current_experiment_state_time)
                             output.global_time = time.time() - self.current_experiment_state_time
                         # print(data["meta_info"])
-                    # else:
-                    #     output.error = response.reason
-                    #     output.success = False
+                    else:
+                        # handle error. This is needed because for vllm, if the context is too long, it will not generate
+                        output.error = response.reason
+                        output.success = False
             except Exception:
                 output.success = False
                 exc_info = sys.exc_info()
                 output.error = "".join(traceback.format_exception(*exc_info))
         #  throughput as token generated per second
         output.scheduling_overhead = scheduling_overhead
-        output.tpot = (output.request_latency - output.ttft)/max(1, output.output_len)
+        if output.success:
+            output.tpot = (output.request_latency - output.ttft)/max(1, output.output_len)
 
         sampling_params["request_id"] = request_id
         await asyncio.to_thread(
             self.finish_request, text, sampling_params, input_ids, output
         )
-
-        output.scheduling_overhead = scheduling_overhead
         return output
 
 
