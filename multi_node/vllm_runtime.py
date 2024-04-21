@@ -35,7 +35,9 @@ def stream_logger(node_name, stream):
 class VLLMRuntimeManager:
     def __init__(self, model_path, ssh_config, gpu, vllm_port=8080,
                  enable_prefix_caching=False,
-                 mem_fraction_static=0.9, **kwargs):
+                 mem_fraction_static=0.9, 
+                 **kwargs,   # additional args not specific to vllm
+    ):
         self.model_path = model_path
         self.ssh_config = ssh_config
         self.gpu = gpu
@@ -53,7 +55,7 @@ class VLLMRuntimeManager:
             kwargs.pop('context_length')
             logger.warning("context_length is not supported in VLLMRuntimeManager")
         self.port = vllm_port
-        self.start_remote_runtime(port=vllm_port, **kwargs)
+        self.start_remote_runtime(port=vllm_port)
         # Initialize server with running these configs
         # Save url to url
         super().__init__()

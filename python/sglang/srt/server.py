@@ -670,6 +670,7 @@ class Runtime:
         log_prefix_hit: bool = False,
         gpu_config: Optional[GPUConfig] = None,
         chunk_prefill_budget: int = 0,
+        **kwargs,   # additional args not specific to sglang
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
         # host = "127.0.0.1"

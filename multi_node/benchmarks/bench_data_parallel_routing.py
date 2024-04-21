@@ -247,21 +247,21 @@ if __name__ == "__main__":
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
-        # GPUConfig(gpu_id=0, url=None, use_ssh=False),
+        GPUConfig(gpu_id=0, url=None, use_ssh=False),
         # GPUConfig(gpu_id=1, url=None, use_ssh=False),
-        GPUConfig(
-            gpu_id=0,
-            url=None,
-            use_ssh=True,
-            ssh_config={
-                "hostname": "192.168.1.16",
-                "username": "dongming",
-                "port": 456,
-                "python_process": "/mnt/data/ssd/dongming/vllm_env/bin/python",
-                "password": os.environ.get('SSH_PASSWORD')
-            },
-            vllm_config={'vllm_port': 8080}
-        ),
+        # GPUConfig(
+        #     gpu_id=0,
+        #     url=None,
+        #     use_ssh=True,
+        #     ssh_config={
+        #         "hostname": "192.168.1.16",
+        #         "username": "dongming",
+        #         "port": 456,
+        #         "python_process": "/mnt/data/ssd/dongming/vllm_env/bin/python",
+        #         "password": os.environ.get('SSH_PASSWORD')
+        #     },
+        #     vllm_config={'vllm_port': 8080}
+        # ),
         GPUConfig(
             gpu_id=1,
             url=None,
