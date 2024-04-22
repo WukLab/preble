@@ -124,6 +124,7 @@ class SlidingWindowHistogram:
                 allocation[gpu] += cost # potentionally divide by length of node.gpu_selections here
         return allocation
 
+
 def match(key, seq):
     i = 0
     for k, w in zip(key, seq):
@@ -408,7 +409,8 @@ class LPRadixCache:
             # return new_node
             return new_node
         return node
-    
+
+    # allocated memory
     def update_evictable_size(self, node: LPTreeNode, runtime_id):
         self.evictable_size_[runtime_id] += len(node.value)
 
@@ -471,13 +473,13 @@ class LPRadixCache:
         for node in nodes:
             node: LPTreeNode
             if node.ref_counter == 0 and not node.is_evicted and runtime_id in node.gpu_selections:
-                load = self.histogram.get(node)
+                load = self.histogram.get(node) / len(node.gpu_selections)
                 assert load >= node.ref_counter
                 priority = load * node.num_tokens # Min heap python
                 heapq.heappush(priority_queue, (priority, node))
         return priority_queue
 
-
+# TODO rename evictable_size to allocated_memory
 class MemSchedulerWithGlobalEviction:
     def __init__(self, num_nodes=2) -> None:
         self.mem_cost = [0 for _ in range(num_nodes)]
@@ -517,6 +519,8 @@ class MemSchedulerWithGlobalEviction:
             self.cache.smart_evict(num_tokens, lambda node: self.evict_callback(node, runtime_selected), runtime_selected)
             print(f"GPU {runtime_selected} Evictable size: ", self.cache.evictable_size(runtime_selected), current_max_tokens)
 
+            # higher load thing, it'll be evicted less likely
+            # lru
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
         """Method to handle eviction logic."""
@@ -537,6 +541,7 @@ class MemSchedulerWithGlobalEviction:
         with self.lock:
             split_nodes = {}
             leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
+            # recomputation cost
 
             recom_costs = []
             for gpu_id in range(self.num_gpus):
@@ -559,12 +564,13 @@ class MemSchedulerWithGlobalEviction:
                 self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
                 self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
             self.cache.update_evictable_size(leaf_node, runtime_idx)
+
             # self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
             # Maybe memory cost should only be updated for the one that gets selected not scheduled
             self.counter += 1
             self.handle_eviction(runtime_idx)
-            if self.counter % 100 == 0:
-                print(self.mem_cost)
+            # self.handle_replication()
+
             self.metrics_dict.append(
                 {
                     "text": text[:100],
@@ -585,3 +591,54 @@ class MemSchedulerWithGlobalEviction:
         with self.lock:
             self.cache.remove_completed_input_ids(input_ids)
             # self.runtime_caches[func_output.runtime_selected].remove_completed_input_ids(input_ids)
+    
+    def handle_replication(self):
+        allocation = [0 for _ in range(self.num_gpus)]
+        node: LPTreeNode
+        per_gpu_nodes = defaultdict(list)
+        for node, cost in self.histogram.histogram.items():
+            is_small_node = node.num_tokens < node.context_length - node.num_tokens
+            for gpu in node.gpu_selections:
+                if not is_small_node:
+                    heapq.heappush(per_gpu_nodes[gpu], (-cost * node.num_tokens / len(node.gpu_selections), node))
+                allocation[gpu] += cost * node.num_tokens/ len(node.gpu_selections)
+        normalized_allocation = [x / sum(allocation) for x in allocation]
+        gpu_with_max_load = max(range(self.num_gpus), key=lambda x: normalized_allocation[x])
+        gpu_with_min_load = min(range(self.num_gpus), key=lambda x: normalized_allocation[x])
+        
+        load_too_large = normalized_allocation[gpu_with_max_load] > 0.8
+        if normalized_allocation[gpu_with_min_load] == 0:
+            load_too_node_too_small = True
+        else:
+            load_too_node_too_small = normalized_allocation[gpu_with_max_load] / normalized_allocation[gpu_with_min_load] > 2
+
+        if not load_too_large and not load_too_node_too_small:
+            return
+
+        # get the largest node on gpu
+        while per_gpu_nodes[gpu_with_max_load]:
+            largest_node: LPTreeNode
+            neg_cost, largest_node = heapq.heappop(per_gpu_nodes[gpu_with_max_load])
+            if self.histogram.get(largest_node) < 10: # Avoid replicating the small nodes
+                return
+            # min recomputation cost
+            recom_costs = {}
+            current_min_recomp_cost = float("inf")
+            gpu_with_min_recomp = None
+            for gpu_id in range(self.num_gpus):
+                if gpu_id in largest_node.gpu_selections:
+                    continue
+                recomputation_cost = self.get_recomp_cost(largest_node, gpu_id)
+                recom_costs[gpu_id] = recomputation_cost
+                cost_f = lambda gpu_id: recomputation_cost + self.mem_cost[gpu_id]
+                if cost_f(gpu_id) < current_min_recomp_cost:
+                    current_min_recomp_cost = cost_f(gpu_id)
+                    gpu_with_min_recomp = gpu_id
+            if gpu_with_min_recomp is None:
+                continue
+            print(f"Replicating node {largest_node.num_tokens} from {gpu_with_max_load} to {gpu_with_min_recomp}")
+            self.mem_cost[gpu_with_min_recomp] += recom_costs[gpu_with_min_recomp]
+            self.update_gpu_selections_of_parent(largest_node, {gpu_with_min_recomp})
+            breakpoint()
+            break
+
