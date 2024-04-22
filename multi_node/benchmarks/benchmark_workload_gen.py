@@ -752,7 +752,7 @@ class TBMultiDomainOracle(CustomRuntimeSelector):
     counter: int = 0
 
     def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
-        match = re.search(r"Domain: (.+?)", text)
+        match = re.search(r"Domain: (.+?) ", text)
         if match:
             tool = match.group(1)
             if tool not in self.tbl:
