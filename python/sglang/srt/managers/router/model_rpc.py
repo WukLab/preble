@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 import json
 from dataclasses import dataclass
+import math
 
 import rpyc
 import torch
@@ -145,6 +146,8 @@ class ModelRpcServer:
         self.forward_queue: List[Req] = []
         self.running_batch: Batch = None
         self.delayed_batch : Batch = None
+        self.multi_priority_queue: List[List[Req]] = [[] for _ in range(10)]
+        self.start_schedule_from = 9
 
         # Store the length and running batch sizes in a buffer since they variance is noisy
         self.forward_queue_len_buffer = deque(maxlen=server_args.metrics_buffer_size)
@@ -171,7 +174,6 @@ class ModelRpcServer:
         self.new_token_ratio_step = (0.0001, 0.05)  # (down, up)
         self.log_prefix_hit = server_args.log_prefix_hit
         self.prefix_hit_trace = []
-        self.last_batch_schedule_time = time.time()
         if not self.gpu_config:
             self.current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
         else:
@@ -179,7 +181,7 @@ class ModelRpcServer:
         self.schedule_waiting_overhead = 0
 
     def flush_cache(self):
-        if len(self.forward_queue) == 0 and (
+        if self.num_waiting_reqs() == 0 and (
             self.running_batch is None or len(self.running_batch.reqs) == 0
         ):
             self.tree_cache.reset()
@@ -195,6 +197,9 @@ class ModelRpcServer:
                 f"#queue-req: {len(self.forward_queue)}, "
                 f"#running-req: {0 if self.running_batch is None else len(self.running_batch.reqs)}"
             )
+    
+    def num_waiting_reqs(self):
+        return len(self.forward_queue) + sum(len(pg) for pg in self.multi_priority_queue)
             
     def waiting_queue_prefix_hit(self, s: SchedulingMetricsReqInput):
         max_pref_length = 0
@@ -471,7 +476,7 @@ class ModelRpcServer:
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
                 f"#new_token: {new_batch_input_tokens}. "
-                f"#remaining_req: {len(self.forward_queue) - len(can_run_list)}. "
+                f"#remaining_req: {self.num_waiting_reqs() - len(can_run_list)}. "
                 f"#running_req: {running_req}. "
                 f"hit_tokens: {hit_tokens}. "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
@@ -551,7 +556,7 @@ class ModelRpcServer:
                 f"batch.inflight_tokens: {num_batched_tokens}, "
                 f"attention tokens: {num_attention_tokens}, "
                 f"unique kv tokens: {unique_kvs}, "
-                f"#remaining_req: {len(self.forward_queue)}, "
+                f"#remaining_req: {self.num_waiting_reqs()}, "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
             )
         # self.running_batch.prepare_for_isolate_extend_decode()
@@ -651,7 +656,7 @@ class ModelRpcServer:
             budget = SchedulingBudget(self.max_prefill_num_token, 0)
             new_batch = self._schedule_waiting(budget)
         else:
-            new_batch = self.get_new_fill_batch()
+            new_batch = self.get_new_fill_batch_v2()
         forward_times = []
         if new_batch is not None:
             # Run new fill batch
@@ -759,6 +764,189 @@ class ModelRpcServer:
             self.max_total_num_token - 128 - len(req.input_ids),
         )
         self.forward_queue.append(req)
+    
+    def check_req_hit(self, queue: List[Req]):
+        for req in queue:
+            prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
+            if req.return_logprob:
+                prefix_indices = prefix_indices[: req.logprob_start_len]
+            req.extend_input_len = len(req.input_ids) - len(prefix_indices)
+            req.prefix_indices = prefix_indices
+            req.last_node = last_node
+    
+    def get_schedule_group(self):
+        start_from = None
+        while not self.multi_priority_queue[self.start_schedule_from]:
+            if start_from is None:
+                start_from = self.start_schedule_from
+            elif start_from == self.start_schedule_from:
+                return None
+            self.start_schedule_from = (self.start_schedule_from + 9) % 10
+        else:
+            start_from = self.start_schedule_from
+            self.start_schedule_from = (self.start_schedule_from + 9) % 10
+            return start_from
+    
+    def schedule_within_group(
+        self, 
+        target_waiting_queue: List[Req], 
+        max_schedule_allowed: int,
+    ):
+        # Add requests if there is available space
+        can_run_list = []
+        new_batch_total_tokens = 0
+        new_batch_input_tokens = 0
+
+        available_size = (
+            self.token_to_kv_pool.available_size() + self.tree_cache.evictable_size()
+        )
+        if self.running_batch:
+            available_size -= sum(
+                [
+                    (r.max_new_tokens() - len(r.output_ids)) * self.new_token_ratio
+                    for r in self.running_batch.reqs
+                ]
+            )
+        req: Req
+        for req in target_waiting_queue:
+            if max_schedule_allowed <= 0:
+                break
+            if req.return_logprob:
+                # Need at least two tokens to compute normalized logprob
+                if req.extend_input_len < 2:
+                    delta = 2 - req.extend_input_len
+                    req.extend_input_len += delta
+                    req.prefix_indices = req.prefix_indices[:-delta]
+                    if req.image_offset is not None:
+                        req.image_offset += delta
+            if req.extend_input_len == 0 and req.max_new_tokens() > 0:
+                # Need at least one token to compute logits
+                req.extend_input_len = 1
+                req.prefix_indices = req.prefix_indices[:-1]
+                if req.image_offset is not None:
+                    req.image_offset += 1
+
+            if (
+                req.extend_input_len + req.max_new_tokens() + new_batch_total_tokens
+                < available_size
+                and req.extend_input_len + new_batch_input_tokens
+                < self.max_prefill_num_token
+            ):
+                delta = self.tree_cache.inc_ref_counter(req.last_node)
+                available_size += delta
+
+                if not (
+                    req.extend_input_len + req.max_new_tokens() + new_batch_total_tokens
+                    < available_size
+                ):
+                    # Undo the insertion
+                    delta = self.tree_cache.dec_ref_counter(req.last_node)
+                    available_size += delta
+                else:
+                    # Add this request to the running batch
+                    self.token_to_kv_pool.add_refs(req.prefix_indices)
+                    can_run_list.append(req)
+                    new_batch_total_tokens += (
+                        req.extend_input_len + req.max_new_tokens()
+                    )
+                    new_batch_input_tokens += req.extend_input_len
+                    req.num_inflight_tokens = req.extend_input_len
+            elif self.schedule_heuristic == "fcfs-s":
+                    break
+            elif self.schedule_heuristic == 'fcfs-escape':
+                if self.current_time - req.arrival_time >= 10:
+                    break
+                    
+        if len(can_run_list) == 0:
+            return None
+
+        if self.tp_rank == 0:
+            running_req = (
+                0 if self.running_batch is None else len(self.running_batch.reqs)
+            )
+            hit_tokens = sum(len(x.prefix_indices) for x in can_run_list)
+            self.tree_cache_metrics["total"] += (
+                hit_tokens + new_batch_input_tokens
+            ) / 10**9
+            self.tree_cache_metrics["hit"] += hit_tokens / 10**9
+            tree_cache_hit_rate = (
+                self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
+            )
+            logger.info(
+                f"GPU: {self.current_gpu} "
+                f"new fill batch. #seq: {len(can_run_list)}. "
+                f"#cached_token: {hit_tokens}. "
+                f"#new_token: {new_batch_input_tokens}. "
+                f"#remaining_req: {self.num_waiting_reqs() - len(can_run_list)}. "
+                f"#running_req: {running_req}. "
+                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
+                f"hit_tokens: {hit_tokens}. "
+                f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+            )
+            # logger.debug(
+            #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
+            #     f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
+            #     f"ff_cache_hit_rate: {100.0 * self.jump_forward_cache.get_cache_hit_rate():.2f}%. "
+            #     f"ff_cache_avg_init_time: {self.jump_forward_cache.get_avg_init_time():.2f}s. "
+            #     f"hit_tokens: {hit_tokens}."
+            # )
+            self.forward_queue_len_buffer.append(len(self.forward_queue))
+            self.running_batch_len_buffer.append(running_req)
+
+        new_batch = Batch.init_new(
+            can_run_list,
+            self.req_to_token_pool,
+            self.token_to_kv_pool,
+            self.tree_cache,
+        )
+        return new_batch
+        
+    
+    def get_new_fill_batch_v2(self):
+        if (
+            self.running_batch is not None
+            and len(self.running_batch.reqs) > self.max_num_running_seq
+        ):
+            return None
+        schedule_waiting_start = time.time()
+                
+        self.check_req_hit(self.forward_queue)
+        while self.forward_queue:
+            req = self.forward_queue.pop()
+            # Assign to the corresponding priority queue based on hit ratio
+            hit_ratio = len(req.prefix_indices) / len(req.input_ids)
+            if hit_ratio == 0:
+                group = 0
+            else:
+                group = math.ceil(hit_ratio * 10) - 1
+            self.multi_priority_queue[group].append(req)
+        
+        schedule_group_idx = self.get_schedule_group()
+        if schedule_group_idx is None:
+            self.schedule_waiting_overhead += time.time() - schedule_waiting_start
+            return None
+        # tune k to trade off between cache hit and fairness
+        k = 5
+        max_schedule_allowed = (schedule_group_idx + 1) * k
+
+        # Get priority queue
+        target_waiting_queue = self.scheduler.get_priority_queue(self.multi_priority_queue[schedule_group_idx])
+        # TODO: this might be omiited if:
+        # 1. overhead is too high
+        # 2. not likely to have new hit after assigning to the group
+        # correcness is maintained without this check
+        self.check_req_hit(target_waiting_queue)
+        new_batch = self.schedule_within_group(target_waiting_queue, max_schedule_allowed)
+        if new_batch is None:
+            self.schedule_waiting_overhead += time.time() - schedule_waiting_start
+            return None
+        
+        self.multi_priority_queue[schedule_group_idx] = [x for x in target_waiting_queue if x not in new_batch.reqs]
+        if self.log_prefix_hit:
+            self.prefix_hit_trace.append({x.rid: [x.input_text[:20], len(x.prefix_indices)] for x in new_batch.reqs})
+        self.schedule_waiting_overhead += time.time() - schedule_waiting_start
+        return new_batch
+        
 
     def get_new_fill_batch(self):
         if (
@@ -767,9 +955,6 @@ class ModelRpcServer:
         ):
             return None
         schedule_waiting_start = time.time()
-        # if len(self.forward_queue) <= 100 and time.time() - self.last_batch_schedule_time < 5:
-        #     return None
-        # self.last_batch_schedule_time = time.time()
 
         for req in self.forward_queue:
             prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
@@ -866,7 +1051,7 @@ class ModelRpcServer:
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "
                 f"#new_token: {new_batch_input_tokens}. "
-                f"#remaining_req: {len(self.forward_queue) - len(can_run_list)}. "
+                f"#remaining_req: {self.num_waiting_reqs() - len(can_run_list)}. "
                 f"#running_req: {running_req}. "
                 f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
                 f"hit_tokens: {hit_tokens}. "

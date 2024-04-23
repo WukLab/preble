@@ -48,9 +48,9 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
-# log_file_path = 'logs/debug/exp.log'
+log_file_path = 'logs/debug/exp.log'
 # log_file_path = "workload_prefix/4r_sim_20_0.384_1950_6.5_baseline_fcfs/exp.log"
-log_file_path = "workload_prefix/4r_sim_80_0.2_2700_9_waiting_queue/exp.log"
+# log_file_path = "workload_prefix/4r_sim_80_0.2_2700_9_waiting_queue/exp.log"
 # log_file_path = "workload_prefix/3r_sim_20_1_600_2_baseline/exp.log"
 
 # model_name = "meta-llama/Llama-2-7b-hf"
