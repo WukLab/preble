@@ -176,6 +176,7 @@ class ModelRpcServer:
             self.current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
         else:
             self.current_gpu = self.gpu_config.gpu_id
+        self.schedule_waiting_overhead = 0
 
     def flush_cache(self):
         if len(self.forward_queue) == 0 and (
@@ -287,7 +288,7 @@ class ModelRpcServer:
             [i for i in range(len(batch.reqs))],
             key=lambda i: (batch.reqs[i].arrival_time, len(batch.reqs[i].output_ids))
         )
-        req_pool_indices_np = batch.req_pool_indices.cpu().numpy()
+        req_pool_indices_cpu = batch.req_pool_indices.cpu().tolist()
         preempted = []
         scheduled = []
         batch.out_cache_loc = None
@@ -317,10 +318,10 @@ class ModelRpcServer:
                 batch.tree_cache.dec_ref_counter(evict_req.last_node)
                 evict_req.reset_state()
                 token_indices = batch.req_to_token_pool.req_to_token[
-                    req_pool_indices_np[evict_idx]
+                    req_pool_indices_cpu[evict_idx]
                 ][: evict_req.num_computed_tokens]
                 batch.token_to_kv_pool.free(token_indices)
-                batch.req_to_token_pool.free(req_pool_indices_np[evict_idx])
+                batch.req_to_token_pool.free(req_pool_indices_cpu[evict_idx])
                 
                 # not enought memory to schedule
                 if evict_idx == target_idx:
@@ -331,7 +332,7 @@ class ModelRpcServer:
                 scheduled.append(target_idx)
                 out_cache_loc = batch.token_to_kv_pool.alloc(new_tokens)
                 batch.req_to_token_pool.req_to_token[
-                    req_pool_indices_np[target_idx],
+                    req_pool_indices_cpu[target_idx],
                     target_to_schedule.get_cached_len() : target_to_schedule.get_cached_len() + new_tokens
                 ] = out_cache_loc
                 target_to_schedule.num_inflight_tokens = new_tokens
@@ -347,6 +348,8 @@ class ModelRpcServer:
             batch.filter_batch(scheduled)
             
         # set out_cache_loc
+        if not out_cache_locs:
+            pass
         out_cache_locs = torch.cat(out_cache_locs, dim=0)
         batch.out_cache_loc = out_cache_locs
         batch.out_cache_cont_start = batch.out_cache_cont_end = None
@@ -371,6 +374,8 @@ class ModelRpcServer:
         self,
         budget: SchedulingBudget,
     ):
+        if budget.get_remaining_token_budget() <= 0:
+            return None
         waiting_queue = self.scheduler.get_priority_queue(self.forward_queue)
         for req in waiting_queue:
             prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
@@ -472,7 +477,7 @@ class ModelRpcServer:
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
             )
             logger.info(
-                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
+                f"GPU: {self.current_gpu} tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
             )
         
         # Prepare Batch input
@@ -520,8 +525,9 @@ class ModelRpcServer:
             
         if self.running_batch and not self.running_batch.is_empty():
             self.decode_forward_ct = (self.decode_forward_ct + 1) % (1 << 30)
-        
+        schedule_waiting_start = time.time()
         scheduled_waiting_batch = self._schedule_waiting(budget)
+        self.schedule_waiting_overhead += time.time() - schedule_waiting_start
         if scheduled_waiting_batch is not None:
             scheduled_waiting_batch.prepare_for_extend_v2(self.model_config.vocab_size, self.int_token_logit_bias)
             if self.running_batch:
@@ -636,7 +642,11 @@ class ModelRpcServer:
         
 
     @torch.inference_mode()
-    def forward_step(self, forward_simulation=None):
+    def forward_step(self, forward_simulation=None, current_time=None):
+        if not current_time:
+            self.current_time = time.time()
+        else:
+            self.current_time = current_time
         if self.chunk_prefill_budget:
             budget = SchedulingBudget(self.max_prefill_num_token, 0)
             new_batch = self._schedule_waiting(budget)
@@ -756,7 +766,7 @@ class ModelRpcServer:
             and len(self.running_batch.reqs) > self.max_num_running_seq
         ):
             return None
-        
+        schedule_waiting_start = time.time()
         # if len(self.forward_queue) <= 100 and time.time() - self.last_batch_schedule_time < 5:
         #     return None
         # self.last_batch_schedule_time = time.time()
@@ -829,8 +839,14 @@ class ModelRpcServer:
                     )
                     new_batch_input_tokens += req.extend_input_len
                     req.num_inflight_tokens = req.extend_input_len
+            elif self.schedule_heuristic == "fcfs-s":
+                    break
+            elif self.schedule_heuristic == 'fcfs-escape':
+                if self.current_time - req.arrival_time >= 10:
+                    break
                     
         if len(can_run_list) == 0:
+            self.schedule_waiting_overhead += time.time() - schedule_waiting_start
             return None
 
         if self.tp_rank == 0:
@@ -875,6 +891,7 @@ class ModelRpcServer:
         self.forward_queue = [x for x in self.forward_queue if x not in can_run_list]
         if self.log_prefix_hit:
             self.prefix_hit_trace.append({x.rid: [x.input_text[:20], len(x.prefix_indices)] for x in can_run_list})
+        self.schedule_waiting_overhead += time.time() - schedule_waiting_start
         return new_batch
     
     def dump_prefix_hit_trace(self, path: str):

@@ -414,6 +414,7 @@ class Oracle(CustomRuntimeSelector):
 class OracleHotCold(CustomRuntimeSelector):
     num_workloads: int
     trace = {}
+    cold_cnt = 0
 
     def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
         num_nodes = self.num_nodes
@@ -423,11 +424,19 @@ class OracleHotCold(CustomRuntimeSelector):
         for i in range(self.num_workloads):
             if text.startswith(f"Workload {i} "):
                 # return i % (num_nodes // 2)
-                # return i % 2
+                # return i % 3
                 # return i % (num_nodes - 1)
                 # return num_nodes - 1
                 return 0
-
+        # self.cold_cnt = (self.cold_cnt + 1) % 11
+        # if self.cold_cnt < 2:
+        #     return 0
+        # if self.cold_cnt < 4:
+        #     return 1
+        # if self.cold_cnt < 6:
+        #     return 2
+        # else:
+        #     return 3
         # return num_nodes - 1 
         return random.randint(1, 3)
         # return random.randint(num_nodes // 2, num_nodes - 1)

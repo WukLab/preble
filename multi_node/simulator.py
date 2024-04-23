@@ -146,13 +146,13 @@ class ServerRuntimeSimulator:
         self.tokenizer_clock = 0.0
         self.manager_clock = 0.0
     
-    def simulate_step(self, recv_reqs) -> int:
+    def simulate_step(self, recv_reqs, time) -> int:
         for recv_req in recv_reqs:
             self.model_rpc.handle_generate_request(recv_req)
         if self.model_rpc.chunk_prefill_budget > 1:
             forward_times = self.model_rpc.budget_forward_step(self.gpu_config.forward_simulation)
         else:
-            forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation)
+            forward_times = self.model_rpc.forward_step(self.gpu_config.forward_simulation, time)
         forward_time = sum(forward_times)
         ret = self.model_rpc.out_pyobjs
         self.model_rpc.out_pyobjs = []
@@ -267,12 +267,15 @@ class Simulation:
             if not self.unfinished_requests:
                 break
             if self.global_clock - previous_stamp >= 10.0:
-                logging.info(f"------------ Global clock: {self.global_clock} ------------")
+                logging.info(f"------------ Global clock: {self.global_clock}, "
+                             f"finished: {len([r for r in self.request_output.values() if r.success])} "
+                             f" / {len(self.request_output)} ------------")
                 previous_stamp = self.global_clock
             event: SimulationEvent = heapq.heappop(self.events)
             event.advance_to_schedule_time(self)
             event.wrapper_process_event(self)
         all_req_outputs = [{rid: asdict(rq)} for rid, rq in self.request_output.items()]
+        logging.info(f"Scheduling waiting overhead(s): {[r.model_rpc.schedule_waiting_overhead for r in self.runtimes]}")
         with open("output.json", "w") as f:
             f.write(json.dumps(all_req_outputs, indent=4))
         return [rq for rq in self.request_output.values()]
@@ -471,7 +474,7 @@ class ModelStepEvent(SimulationEvent):
         runtime = simulator.runtimes[self.runtime_id]
         next_step_input = list(runtime.manager_recv_reqs)
         runtime.manager_recv_reqs = []
-        forward_time, out_pyobjs = runtime.simulate_step(next_step_input)
+        forward_time, out_pyobjs = runtime.simulate_step(next_step_input, self.time)
         sleep_time = 0.0006
         # sleep_time = 0.01
         if len(out_pyobjs) != 0:

@@ -1,3 +1,8 @@
+import sys, os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from transformers import AutoTokenizer
 import random
 from benchmark_utils import WorkloadConfig
@@ -6,6 +11,7 @@ from typing import Iterator
 from benchmark_workload_gen import LoadDistribution
 import numpy as np
 import uuid
+
 
 def calc_send_out_times(requests, request_rate, exp_time):
     send_out_times = [0]
