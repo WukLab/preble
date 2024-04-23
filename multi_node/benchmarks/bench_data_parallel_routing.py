@@ -14,7 +14,7 @@ from transformers import AutoTokenizer
 from metrics_based_scheduler import LongestPrefixMatchSelector, GlobalLongestPrefixMatch
 from benchmark_workload_gen import (
     ToolBenchDataLoader,
-    RandomDataLoader,
+    # RandomDataLoader,
     LoadDistribution,
     Oracle,
     TBOracle,
@@ -91,24 +91,24 @@ def test_oracle_random_basic(
     #     tokenizer,
     #     load_dist=load_distribution,
     # )
-    dataloader = RandomDataLoader(
-        num_workloads,
-        num_requests,
-        tokenizer,
-        num_in_context_examples=4,
-        output_len=64,
-        random_workload_path="datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
-    )
-    requests = dataloader.generate_workload(k=k)
-    # dataloader_short = LooGLEDataset(
-    #     loogle_dataset_type=LooGLEDatasetType.SHORT_QA,
-    #     num_patterns=num_workloads,
-    #     total_num_requests=num_requests,
-    #     tokenizer=tokenizer,
-    #     load_dist=LoadDistribution.ALL,
-    #     crop_max_decode=True,
+    # dataloader = RandomDataLoader(
+    #     num_workloads,
+    #     num_requests,
+    #     tokenizer,
+    #     num_in_context_examples=4,
+    #     output_len=64,
+    #     random_workload_path="datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
     # )
-    # requests = dataloader_short.generate_workload(max_length=32768)
+    # requests = dataloader.generate_workload(k=k)
+    dataloader_short = LooGLEDataset(
+        loogle_dataset_type=LooGLEDatasetType.SHORT_QA,
+        num_patterns=num_workloads,
+        total_num_requests=num_requests,
+        tokenizer=tokenizer,
+        # load_dist=LoadDistribution.ALL,
+        crop_max_decode=True,
+    )
+    requests = dataloader_short.generate_workload(max_length=32768)
     random.shuffle(requests)
     print("Data loading time", time.time() - start_time)
 
@@ -123,8 +123,9 @@ def test_oracle_random_basic(
             log_prefix_hit=True,
             # mem_fraction_static=0.42,
             mem_fraction_static=0.8,
-            context_length=4096,
-            enable_flashinfer=True
+            context_length=65536,
+            enable_flashinfer=False,
+            enable_prefix_caching=True,  # this is needed for vllm
         )
 
         if policy == DataParallelRuntimeSelectionPolicy.CUSTOM:
@@ -179,7 +180,7 @@ def test_oracle_random_basic(
                 )
                 
         else:
-            model_details.update_runtime_selection_policy(policy)
+            model_details.update_runtime_selection_policy(policy, "")
 
         tic_benchmark = time.time()
         results: List[RequestFuncOutput] = model_details.get_experiment_results(
@@ -203,11 +204,11 @@ def test_oracle_random_basic(
         gc.collect()
         time.sleep(5)
 
-    load_and_run_benchmark(
-        DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
-    )
+    # load_and_run_benchmark(
+    #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LP_SCHEDULER
+    # )
     load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.RANDOM, "")
-    load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
+    # load_and_run_benchmark(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE)
     # load_and_run_benchmark(
     #     DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B
     # )
@@ -238,43 +239,45 @@ if __name__ == "__main__":
     configurations_to_test = [
         # [200, 0.2, 1024, 50],
         # [ 100, 0.2, 1024, 16],
-        # [4, 0.2, 200, 0.5],
+        [4, 0.2, 200, 0.5],
         # [8, 0.2, 200, .5],
         # [200, 0.2, 450, 2.5],
-        [200, 0.2, 4096, 16],
+        # [200, 0.2, 4096, 16],
         # [ 100, 0.2, 4096, 16],
         # [200, 0.2, 4096, 100],
     ]
     gpu_configs = [
         GPUConfig(gpu_id=0, url=None, use_ssh=False),
-        GPUConfig(gpu_id=1, url=None, use_ssh=False),
+        # GPUConfig(gpu_id=1, url=None, use_ssh=False),
         # GPUConfig(
         #     gpu_id=0,
         #     url=None,
         #     use_ssh=True,
         #     ssh_config={
-        #         "hostname": "192.168.1.18",
-        #         "username": "vikranth",
+        #         "hostname": "192.168.1.16",
+        #         "username": "dongming",
         #         "port": 456,
-        #         "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-        #         "node_name": "08",
+        #         "python_process": "/mnt/data/ssd/dongming/vllm_env/bin/python",
+        #         "password": os.environ.get('SSH_PASSWORD')
         #     },
+        #     vllm_config={'vllm_port': 8080}
         # ),
-        # GPUConfig(
-        #     gpu_id=1,
-        #     url=None,
-        #     use_ssh=True,
-        #     ssh_config={
-        #         "hostname": "192.168.1.18",
-        #         "username": "vikranth",
-        #         "port": 456,
-        #         "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-        #         "node_name": "08",
-        #     },
-        # ),
+        GPUConfig(
+            gpu_id=1,
+            url=None,
+            use_ssh=True,
+            ssh_config={
+                "hostname": "192.168.1.16",
+                "username": "dongming",
+                "port": 456,
+                "python_process": "/mnt/data/ssd/dongming/vllm_env/bin/python",
+                "password": os.environ.get('SSH_PASSWORD')
+            },
+            vllm_config={'vllm_port': 8081}
+        ),
     ]
-    for config in gpu_configs:
-        config.regist_simulator_config(None, 25 << 30) # Llama 2-7b, 0.8 A6000
+    # for config in gpu_configs:
+    #     config.regist_simulator_config(None, 25 << 30) # Llama 2-7b, 0.8 A6000
 
     for config in configurations_to_test:
         test_oracle_random_basic(
@@ -285,6 +288,6 @@ if __name__ == "__main__":
             gpu_configs=gpu_configs,
             load_distribution=LoadDistribution.EVEN,
             k=1.1,
-            simulate=True,
+            simulate=False,
         )
     logging.debug(f"Total Experiment Time: {time.time() - start_time}")

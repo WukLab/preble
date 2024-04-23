@@ -6,11 +6,12 @@ import signal
 import sys
 
 class GPUConfig:
-    def __init__(self, gpu_id, url=None, use_ssh=False, ssh_config={}) -> None:
+    def __init__(self, gpu_id, url=None, use_ssh=False, ssh_config={}, vllm_config=None) -> None:
         self.gpu_id = gpu_id
         self.url = url
         self.use_ssh = use_ssh
         self.ssh_config = ssh_config
+        self.vllm_config = vllm_config
 
     def __repr__(self) -> str:
         return f"GPUConfig(gpu_id={self.gpu_id}, url={self.url}, use_ssh={self.use_ssh}, ssh_config={self.ssh_config})"
