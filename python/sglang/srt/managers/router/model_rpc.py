@@ -543,7 +543,6 @@ class ModelRpcServer:
         if not self.running_batch or self.running_batch.is_empty():
             return []
         
-        
         # Logging
         batch = self.running_batch
         num_batched_tokens = batch.input_ids.shape[0]
@@ -656,7 +655,10 @@ class ModelRpcServer:
             budget = SchedulingBudget(self.max_prefill_num_token, 0)
             new_batch = self._schedule_waiting(budget)
         else:
-            new_batch = self.get_new_fill_batch_v2()
+            if self.schedule_heuristic == 'fcfs-mpq':
+                new_batch = self.get_new_fill_batch_v2()
+            else:
+                new_batch = self.get_new_fill_batch()
         forward_times = []
         if new_batch is not None:
             # Run new fill batch

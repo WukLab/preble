@@ -73,7 +73,8 @@ class HistogramBasedMemoryLoadScheduler:
         self.metrics_dict = []
         self.lock = threading.Lock()
         self.cache = LPRadixCache()
-        self.hisotgram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), num_buckets=10, num_gpus=self.num_gpus)
+        # self.hisotgram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), num_buckets=10, num_gpus=self.num_gpus)
+        self.hisotgram = SlidingWindowHistogram(window_duration=400, num_buckets=10, num_gpus=self.num_gpus)
 
     def update_gpu_selections_of_parent(self,node: LPTreeNode, gpu_id):
         if not node:
@@ -105,7 +106,8 @@ class HistogramBasedMemoryLoadScheduler:
         text: str = None,
         request_id: str = None,
         input_ids=None,
-        sampling_params=None
+        sampling_params=None,
+        current_time_stamp=None, # for simulation clock
     ):
         # Tokenize the text
         start_time = time.time()
@@ -118,11 +120,13 @@ class HistogramBasedMemoryLoadScheduler:
                 if not self.is_large_node(v): # the parent key is larger and more important. This should be in the histogram
                     self.hisotgram.rename_node(v, k)
             important_node = self.get_important_node(leaf_node)
-            self.hisotgram.update(datetime.now(), important_node, leaf_node)
+            if current_time_stamp is None:
+                current_time_stamp = datetime.now()
+            self.hisotgram.update(current_time_stamp, important_node, leaf_node)
             if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens:
                 gpu_selected = self.get_parent_gpu_selections(leaf_node)
-                for gpu in gpu_selected:
-                    self.mem_cost[gpu] += leaf_node.context_length
+                # for gpu in gpu_selected:
+                #     self.mem_cost[gpu] += leaf_node.context_length
             else:
                 # Current node is the important node
                 recom_costs = []
@@ -145,6 +149,7 @@ class HistogramBasedMemoryLoadScheduler:
         )
         if len(gpu_selected) > 1:
             random_gpu = np.random.choice(list(gpu_selected))
+            self.mem_cost[random_gpu] += leaf_node.context_length
             return int(random_gpu)
         runtime_idx = list(gpu_selected)[0]
         return int(runtime_idx)
@@ -179,7 +184,8 @@ class HistogramBasedRecomp(HistogramBasedMemoryLoadScheduler):
         text: str = None,
         request_id: str = None,
         input_ids=None,
-        sampling_params=None
+        sampling_params=None,
+        current_time_stamp=None,
     ):
         # Tokenize the text
         start_time = time.time()
@@ -208,7 +214,9 @@ class HistogramBasedRecomp(HistogramBasedMemoryLoadScheduler):
                 self.mem_cost[gpu_selected] += leaf_node.context_length
                 gpu_selected = set([gpu_selected])
             self.update_gpu_selections_of_parent(leaf_node, gpu_selected)
-            self.hisotgram.update(datetime.now(), important_node, leaf_node)
+            if current_time_stamp is None:
+                current_time_stamp = datetime.now()
+            self.hisotgram.update(current_time_stamp, important_node, leaf_node)
         self.metrics_dict.append(
             {
                 "text": text,

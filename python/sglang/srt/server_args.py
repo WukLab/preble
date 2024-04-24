@@ -144,7 +144,7 @@ class ServerArgs:
             "--schedule-heuristic",
             type=str,
             default=ServerArgs.schedule_heuristic,
-            help="Schudule mode: [lpm, weight, random, fcfs]",
+            help="Schudule mode: [lpm, weight, random, fcfs, fcfs-mpq]",
         )
         parser.add_argument(
             "--schedule-conservativeness",

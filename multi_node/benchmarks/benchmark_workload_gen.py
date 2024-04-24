@@ -203,7 +203,8 @@ class WorkloadPrefixDataLoader(DataLoader):
         distribution_of_non_shared: float = 0.0,
         output_len: int = 1,
         num_in_context_examples: int = 4,
-        random_workload_path=None
+        random_workload_path=None,
+        workload_start_from: int = 0,
     ):
         super().__init__(
             "random", num_patterns, total_num_requests, tokenizer, load_dist
@@ -212,6 +213,7 @@ class WorkloadPrefixDataLoader(DataLoader):
         self.output_len = output_len
         self.num_in_context_examples = num_in_context_examples
         self.random_workload_path=random_workload_path
+        self.workload_start_from = workload_start_from
 
     def generate_workload(self, k):
         num_prefixed_shared = int(
@@ -226,7 +228,7 @@ class WorkloadPrefixDataLoader(DataLoader):
             "ignore_eos": True, # For better micro-benchmark
         }
         for i in range(num_prefixed_shared):
-            workload_num = i % self.num_patterns
+            workload_num = self.workload_start_from + i % self.num_patterns
             prompt = get_react_workload(
                 f"Workload {workload_num} ", num_examples=self.num_in_context_examples
             )
@@ -261,6 +263,14 @@ class WorkloadPrefixDataLoader(DataLoader):
     @staticmethod
     def is_hot(output):
         return output.prompt_text.startswith("Workload ")
+    
+    @staticmethod
+    def get_prefix_index(output):
+        match = re.search(r'\bWorkload\s+(\d+)', output.prompt_text)
+        if match:
+            return int(match.group(1))
+        else:
+            return None
 
 class ToolBenchDataLoader(DataLoader):
     def __init__(
@@ -400,15 +410,16 @@ class ToolBenchDataLoader(DataLoader):
 class Oracle(CustomRuntimeSelector):
     num_workloads: int
     trace = {}
+    rr = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
         num_nodes = self.num_nodes
         self.trace[request_id] = text[:50]
         for i in range(self.num_workloads):
             if text.startswith(f"Workload {i} "):
                 return i % num_nodes
-
-        return random.randint(0, num_nodes - 1)
+        self.rr = (self.rr + 1) % num_nodes
+        return self.rr
 
 @dataclass
 class OracleHotCold(CustomRuntimeSelector):
@@ -416,7 +427,7 @@ class OracleHotCold(CustomRuntimeSelector):
     trace = {}
     cold_cnt = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
         num_nodes = self.num_nodes
         if num_nodes == 1:
             return 0

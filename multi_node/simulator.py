@@ -333,7 +333,7 @@ class SendRequestEvent(SimulationEvent):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         if rid is None:
             rid = random_uuid_string()
-        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params)
+        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params, current_time_stamp=self.time)
         generate_input = GenerateReqInput(
             text=text,
             sampling_params=sampling_params,
