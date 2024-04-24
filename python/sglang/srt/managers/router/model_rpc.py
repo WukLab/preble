@@ -461,7 +461,7 @@ class ModelRpcServer:
             tree_cache_hit_rate = (
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
-            detail_batch_logger(
+            logger.info(
                 f"GPU: {self.current_gpu} "
                 f"new fill batch. #seq: {len(can_run_list)}. "
                 f"#cached_token: {hit_tokens}. "

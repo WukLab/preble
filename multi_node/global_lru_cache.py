@@ -44,13 +44,16 @@ class LPTreeNode:
         self.parent: Optional[LPTreeNode] = None
         self.value = None
         self.ref_counter = 0
-        self.is_evicted = False
         self.load = 0
         self.last_access_time = time.time()
-        self.gpu_selections = set()
+        self.evicted_gpus = set()
+        self.cached_gpus = set()
         self.is_leaf = False
         self.decode_length = 0
         self.context_length = 0
+
+    def has_cached_gpu(self, gpu):
+        return gpu in self.cached_gpus and gpu not in self.evicted_gpus
 
     @property
     def num_tokens(self):
@@ -68,7 +71,7 @@ class LPTreeNode:
         return hash(self.id)  # Use the unique ID for hashing
 
     def __repr__(self) -> str:
-        return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter}, gpu_selections={self.gpu_selections})"
+        return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter}, cached_gpus={self.cached_gpus})"
 
 class SlidingWindowHistogram:
     def __init__(self, window_duration, num_gpus=2):
@@ -89,7 +92,7 @@ class SlidingWindowHistogram:
             timestamp, node = self.timestamps.pop(0)
             self.histogram[node] -= 1
             if self.histogram[node] == 0: # Remove the gpu selections from it if there's no load
-                node.gpu_selections = set() # Reset the gpu selections for older entries
+                node.cached_gpus = set() # Reset the gpu selections for older entries
             if self.histogram[node] <= 0:
                 del self.histogram[node]
             
@@ -121,8 +124,8 @@ class SlidingWindowHistogram:
         allocation = [0 for _ in range(self.num_gpus)]
         node: LPTreeNode
         for node, cost in self.histogram.items():
-            for gpu in node.gpu_selections:
-                allocation[gpu] += cost # potentionally divide by length of node.gpu_selections here
+            for gpu in node.cached_gpus:
+                allocation[gpu] += cost # potentionally divide by length of node.cached_gpus here
         return allocation
 
 
@@ -161,7 +164,7 @@ class LPRadixCache:
             return [], self.root_node
 
         value = []
-        current_gpu_selection = self.root_node.gpu_selections
+        current_gpu_selection = self.root_node.cached_gpus
         current_gpu_selection, node = self._match_prefix_helper_gpu_selection(
             self.root_node, key, value, current_gpu_selection
         )
@@ -174,8 +177,8 @@ class LPRadixCache:
         for c_key, child in node.children.items():
             prefix_len = match(c_key, key)
             if prefix_len != 0:
-                if child.gpu_selections:
-                    current_gpu_selection = child.gpu_selections
+                if child.cached_gpus:
+                    current_gpu_selection = child.cached_gpus
                 if prefix_len < len(c_key):
                     print(prefix_len, len(c_key))
                     # assert False
@@ -334,7 +337,7 @@ class LPRadixCache:
     ):
         # new_node -> child
         new_node = LPTreeNode()
-        new_node.gpu_selections = copy.deepcopy(child.gpu_selections)
+        new_node.cached_gpus = copy.deepcopy(child.cached_gpus)
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
         new_node.ref_counter = child.ref_counter
@@ -364,7 +367,6 @@ class LPRadixCache:
     ):
         node.last_access_time = time.time()
         node.ref_counter += 1
-        # node.is_evicted = False
         node.load += 1
 
         for c_key, child in node.children.items():
@@ -373,7 +375,6 @@ class LPRadixCache:
                 if prefix_len == len(key):
                     child.ref_counter += 1
                     child.load += 1
-                    # child.is_evicted = False
                     modified_nodes.add(child)
                     return child
                 else:
@@ -419,7 +420,8 @@ class LPRadixCache:
 
         if len(key):
             new_node = LPTreeNode()
-            new_node.gpu_selections = set()
+            new_node.cached_gpus = set()
+            new_node.evicted_gpus = set()
             new_node.parent = node
             new_node.value = value
             new_node.ref_counter = 1
@@ -434,14 +436,14 @@ class LPRadixCache:
             return new_node
         return node
 
-    # allocated memory
     def update_allocated_size(self, node: LPTreeNode, runtime_id):
         while node:
-            if node.is_evicted:
+            if runtime_id in node.evicted_gpus:
                 self.allocated_size_[runtime_id] += len(node.value)
-                node.is_evicted = False
-            elif runtime_id not in node.gpu_selections:
+                node.evicted_gpus.remove(runtime_id)
+            elif runtime_id not in node.cached_gpus:
                 self.allocated_size_[runtime_id] += len(node.value)
+            node.cached_gpus.add(runtime_id)
             node = node.parent
 
     def migrate_allocated_size(self, node, runtime_id, old_runtime_id):
@@ -455,7 +457,7 @@ class LPRadixCache:
         if depth == 5:
             return
         for key, child in node.children.items():
-            print(" " * indent, len(key), key[:10], f"r={child.ref_counter} {child.gpu_selections}")
+            print(" " * indent, len(key), key[:10], f"r={child.ref_counter} {child.cached_gpus}")
             self._print_helper(child, indent=indent + 2, depth=depth + 1)
 
     def recursive_delete(self, cur_node, parent, runtime_id):
@@ -467,7 +469,7 @@ class LPRadixCache:
             for key, value in children:
                 value: LPTreeNode
                 if value == cur_node:
-                    value.is_evicted = True
+                    value.evicted_gpus = True
                     self.allocated_size_[runtime_id] -= len(key)  # Adjust evictable size based on the node's size
 
     def _delete_node(self, cur_node, runtime_id):
@@ -510,8 +512,8 @@ class LPRadixCache:
         priority_queue = []
         for node in nodes:
             node: LPTreeNode
-            if node.ref_counter == 0 and not node.is_evicted and runtime_id in node.gpu_selections:
-                # load = self.histogram.get(node) / len(node.gpu_selections)
+            if node.ref_counter == 0 and not node.evicted_gpus and runtime_id in node.cached_gpus:
+                # load = self.histogram.get(node) / len(node.cached_gpus)
                 # assert load >= node.ref_counter
                 # priority = load * node.num_tokens # Min heap python
                 heapq.heappush(priority_queue, (node.last_access_time, node))
@@ -522,10 +524,10 @@ class LPRadixCache:
         priority_queue = []
         current_allocated_size = 0
         for node in nodes:
-            if runtime_id in node.gpu_selections and not node.is_evicted:
+            if node.has_cached_gpu(runtime_id):
                 current_allocated_size += len(node.value)
             node: LPTreeNode
-            if node.ref_counter == 0 and not node.is_evicted and runtime_id in node.gpu_selections:
+            if node.ref_counter == 0 and node.has_cached_gpu(runtime_id):
                 load = 1
                 assert load >= node.ref_counter
                 priority = load * node.num_tokens # Min heap python
@@ -534,192 +536,3 @@ class LPRadixCache:
         self.allocated_size_[runtime_id] = current_allocated_size
         # assert current_allocated_size == self.allocated_size_[runtime_id]
         return priority_queue
-
-# TODO rename evictable_size to allocated_memory
-class MemSchedulerWithGlobalEviction:
-    def __init__(self, num_nodes=2) -> None:
-        self.mem_cost = [0 for _ in range(num_nodes)]
-        self.gpu_allocations = defaultdict(set)
-        self.num_gpus = num_nodes
-        self.lock = threading.Lock()
-        self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=1), num_gpus=num_nodes)
-        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=num_nodes)
-        self.metrics_dict = []
-        self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
-        self.counter = 0
-        self.rid_to_node = {}
-        self.enable_work_stealing = True
-        self.requests_to_each_gpu = {i: 0 for i in range(num_nodes)}
-
-    def get_recomp_cost(self, node: LPTreeNode, gpu_id):
-        if not node or gpu_id in node.gpu_selections:
-            return 0
-        else:
-            return node.num_tokens + self.get_recomp_cost(node.parent, gpu_id)
-
-    def update_gpu_selections_of_parent(self,node: LPTreeNode, gpu_id):
-        if not node:
-            return
-        node.gpu_selections = node.gpu_selections.union(gpu_id)
-        self.update_gpu_selections_of_parent(node.parent, gpu_id)
-
-    def get_parent_gpu_selections(self, node: LPTreeNode):
-        if not node:
-            return set()
-        if node.gpu_selections:
-            return node.gpu_selections
-        return self.get_parent_gpu_selections(node.parent)
-
-    def handle_eviction(self, runtime_selected):
-        current_max_tokens = self.max_tokens_gpu[runtime_selected]
-        if self.cache.evictable_size(runtime_selected) > current_max_tokens:
-            num_tokens = self.cache.evictable_size(runtime_selected) - current_max_tokens
-            self.cache.smart_evict(num_tokens, lambda node: self.evict_callback(node, runtime_selected), runtime_selected)
-            print(f"GPU {runtime_selected} Evictable size: ", self.cache.evictable_size(runtime_selected), current_max_tokens)
-
-    def evict_callback(self, node: LPTreeNode, runtime_selected: int):
-        """Method to handle eviction logic."""
-        # TODO: Maybe update the parent if child has no parent
-        num_tokens = len(node.value)
-        is_small_node = node.num_tokens < node.context_length - node.num_tokens
-        self.mem_cost[runtime_selected] -= num_tokens
-        return len(node.value)
-
-    def runtime_selector(
-        self,
-        text: str = None,
-        request_id: str = None,
-        input_ids=None,
-        sampling_params=None
-    ):
-        # Tokenize the text
-        start_time = time.time()
-        with self.lock:
-            split_nodes = {}
-            leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
-            # recomputation cost
-
-            recom_costs = []
-            for gpu_id in range(self.num_gpus):
-                recomputation_cost = self.get_recomp_cost(leaf_node, gpu_id)
-                recom_costs.append(recomputation_cost)
-            is_small_node = leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens
-            cost_f = lambda gpu_id: recom_costs[gpu_id] + self.mem_cost[gpu_id]
-
-            if is_small_node:
-                gpu_selected = self.get_parent_gpu_selections(leaf_node.parent)
-                if len(gpu_selected) != 1:
-                    runtime_idx = min(list(gpu_selected), key=cost_f)
-                else:
-                    runtime_idx = list(gpu_selected)[0]
-                self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-                self.cache.update_allocated_size(leaf_node, runtime_idx)
-                self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
-            else:
-                normalized_load_factor = self.requests_to_each_gpu[gpu_id] / max(max(self.requests_to_each_gpu.values()), 1)
-                gpu_selected = min(range(self.num_gpus), key=cost_f)
-                gpu_selected = set([gpu_selected])
-                runtime_idx = list(gpu_selected)[0]
-                self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-                self.cache.update_allocated_size(leaf_node, runtime_idx)
-                self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
-
-            # self.mem_cost[runtime_idx] += recom_costs[runtime_idx]
-            # Maybe memory cost should only be updated for the one that gets selected not scheduled
-            self.counter += 1
-            # self.handle_eviction(runtime_idx)
-            # self.handle_work_stealing(runtime_idx)
-            # self.handle_replication()
-            self.requests_to_each_gpu[runtime_idx] += 1
-
-            self.metrics_dict.append(
-                {
-                    "text": text[:100],
-                    "rid": request_id,
-                    "selected_runtime": runtime_idx,
-                    "overhead": time.time() - start_time,
-                    "mem_costs": self.mem_cost,
-                    "parent_memory_cost": self.get_recomp_cost(leaf_node.parent, runtime_idx),
-                    "current_leaf_node_cost": leaf_node.num_tokens,
-                }
-            )
-            if self.enable_work_stealing:
-                if stolen_idx := self.work_steal():
-                    return stolen_idx
-            return int(runtime_idx)
-
-    def finish_request(
-        self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
-    ):
-        with self.lock:
-            self.cache.remove_completed_input_ids(input_ids)
-    
-    def work_steal(self):
-        low_load_nodes = []
-        max_req = max(max(self.mem_cost), 1)
-        normalized_mem_cost = [x / max_req for x in self.mem_cost]
-        if self.counter < 20:
-            return None
-        for runtime_id, node in enumerate(normalized_mem_cost):
-            if node < 0.1:
-                low_load_nodes.append(runtime_id)
-        if not low_load_nodes:
-            return None
-        y = len(low_load_nodes)
-        x = self.num_gpus - y
-        for runtime_id in low_load_nodes:
-            if np.random.rand() < y/(x + y): # Steal the node
-
-                return runtime_id
-        return None
-
-    def handle_replication(self):
-        allocation = [0 for _ in range(self.num_gpus)]
-        node: LPTreeNode
-        per_gpu_nodes = defaultdict(list)
-        for node, cost in self.histogram.histogram.items():
-            is_small_node = node.num_tokens < node.context_length - node.num_tokens
-            for gpu in node.gpu_selections:
-                if not is_small_node:
-                    heapq.heappush(per_gpu_nodes[gpu], (-cost * node.num_tokens / len(node.gpu_selections), node))
-                allocation[gpu] += cost * node.num_tokens/ len(node.gpu_selections)
-        normalized_allocation = [x / sum(allocation) for x in allocation]
-        gpu_with_max_load = max(range(self.num_gpus), key=lambda x: normalized_allocation[x])
-        gpu_with_min_load = min(range(self.num_gpus), key=lambda x: normalized_allocation[x])
-        
-        load_too_large = normalized_allocation[gpu_with_max_load] > 0.8
-        if normalized_allocation[gpu_with_min_load] == 0:
-            load_too_node_too_small = True
-        else:
-            load_too_node_too_small = normalized_allocation[gpu_with_max_load] / normalized_allocation[gpu_with_min_load] > 2
-
-        if not load_too_large and not load_too_node_too_small:
-            return
-
-        # get the largest node on gpu
-        while per_gpu_nodes[gpu_with_max_load]:
-            largest_node: LPTreeNode
-            neg_cost, largest_node = heapq.heappop(per_gpu_nodes[gpu_with_max_load])
-            if self.histogram.get(largest_node) < 10: # Avoid replicating the small nodes
-                return
-            # min recomputation cost
-            recom_costs = {}
-            current_min_recomp_cost = float("inf")
-            gpu_with_min_recomp = None
-            for gpu_id in range(self.num_gpus):
-                if gpu_id in largest_node.gpu_selections:
-                    continue
-                recomputation_cost = self.get_recomp_cost(largest_node, gpu_id)
-                recom_costs[gpu_id] = recomputation_cost
-                cost_f = lambda gpu_id: recomputation_cost + self.mem_cost[gpu_id]
-                if cost_f(gpu_id) < current_min_recomp_cost:
-                    current_min_recomp_cost = cost_f(gpu_id)
-                    gpu_with_min_recomp = gpu_id
-            if gpu_with_min_recomp is None:
-                continue
-            print(f"Replicating node {largest_node.num_tokens} from {gpu_with_max_load} to {gpu_with_min_recomp}")
-            self.mem_cost[gpu_with_min_recomp] += recom_costs[gpu_with_min_recomp]
-            self.update_gpu_selections_of_parent(largest_node, {gpu_with_min_recomp})
-            breakpoint()
-            break
-
