@@ -496,7 +496,6 @@ class MemSchedulerEvictBasedOnLoadHistogram:
             for gpu_id in range(self.num_gpus):
                 recomputation_cost = self.get_recomp_cost(leaf_node, gpu_id)
                 recom_costs.append(recomputation_cost)
-            
             is_small_node = leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens
             cost_f = lambda gpu_id: recom_costs[gpu_id] + self.mem_cost[gpu_id]
             if is_small_node:

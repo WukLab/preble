@@ -16,10 +16,10 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "toolbench/random_vs_round_robin_vs_mem_basic_v2.log"
+log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 200
+exp_time = 300
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -34,12 +34,6 @@ gpu_configs = [
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
     GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08),
-
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08),
-
-    # GPUConfig(gpu_id=4, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    # GPUConfig(gpu_id=5, url=None, use_ssh=False, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False),
@@ -52,39 +46,50 @@ server_args = {
     'gpu_configs': gpu_configs,
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 4096,
+    'context_length': 32768,
     "enable_flashinfer": True,
-    "chunk_prefill_budget": 512,
+    "chunk_prefill_budget": 2048,
 }
 
 # Workload Configuration
 # configurations_to_test = [
 #     [200, 400, 4],
-# ]
+# ]s
 configurations_to_test = [
-    [200, 400, 12],
-    # [200, 400, 12],
+    [ 24, 393, 0.4],
+    # [ 24, 393, 0.5]
 ]
-workload_configs = create_toolbench_data_loader(
+workload_configs = create_loogle_dataset(
     configurations_to_test, 
     model_name, 
     exp_time, 
-    data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
-    load_dist=LoadDistribution.ALL,
-    # k = 1.1
+    # data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
+    # load_dist=LoadDistribution.ZIPF,
+    # k=1.05
+    # k=None
 )
 
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_load'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'basic_mem_scheduler'),
+# (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_load'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
-    (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEviction, 'recomp_scheduler_with_eviction'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_scheduler_without_eviction'),
+
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_scheduler'),
+
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEviction, 'recomp_scheduler_with_eviction'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_scheduler'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'greedy_v3'),
@@ -101,7 +106,7 @@ selectors_configs = [
     # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
     # # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
 
-    (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
@@ -116,7 +121,7 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP_OLD, 'greedy_old'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'oracle'),
-    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
 ]
 
 
@@ -125,7 +130,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

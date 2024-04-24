@@ -16,7 +16,7 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "multi_domain_toolbench/multi_domain_test_16_gpus_v2.log"
+log_file_path = "multi_domain_toolbench/multi_domain_test_16_gpus_v3_vs_histogram.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = 200
@@ -76,9 +76,9 @@ server_args = {
     'gpu_configs': gpu_configs,
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 4096,
+    'context_length': 8182,
     "enable_flashinfer": True,
-    # "chunk_prefill_budget": 512
+    "chunk_prefill_budget": 1024
 }
 
 # Workload Configuration
@@ -99,7 +99,7 @@ configurations_to_test = [
     # [200, 1, 400, 400, 6],
     # [100, 2, 400, 400, 6],
     # [50, 4, 600, 400, 6],
-    [200, 16, 600, 400, 6],
+    [400, 16, 600, 400, 6],
     # [200, 8, 600, 400, 6],
 
     # [200, 400, 12],
@@ -112,12 +112,15 @@ workload_configs = create_multi_domain_toolbench_data_loader(
     load_dist=LoadDistribution.EVEN,
     # k = 1.1
 )
+
 # Selector Configuration
 # Format {policy - custom policy - message}
+
 selectors_configs = [
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerWithGlobalEviction, 'global_evict'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TB_DOMAIN_ORACLE, 'domain_oracle'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TB_DOMAIN_ORACLE, 'domain_oracle'),
     (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 ]
 
