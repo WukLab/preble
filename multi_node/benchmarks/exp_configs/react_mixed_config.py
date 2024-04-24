@@ -50,12 +50,14 @@ def add_simulation_to_gpu_config(gpu_configs):
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
 # log_file_path = 'logs/debug/exp.log'
 
+# log_file_path = 'cp_debug/cp_512_baseline_with_fcfs/exp.log'
+log_file_path = 'cp_debug/4r_react_20_0.384_1950_6.5_fcfs_cp_1024/exp.log'
 
 # log_file_path = "workload_prefix/4r_sim_20_0.384_1950_6.5_baseline_fcfs/exp.log"
 # log_file_path = "workload_prefix/4r_sim_80_0.2_2700_9_waiting_queue/exp.log"
 # log_file_path = "workload_prefix/3r_sim_20_1_600_2_baseline/exp.log"
 
-log_file_path = 'hc_batch/1r_sim_20_0.2_1200_4_fcfs/exp.log'
+# log_file_path = 'hc_batch/1r_sim_20_0.2_1200_4_fcfs/exp.log'
 # log_file_path = 'hc_batch/1r_sim_20_0.2_1200_4_baseline/exp.log'
 # log_file_path = 'hc_batch/1r_sim_20_0.1_1200_4_baseline/exp.log'
 
@@ -65,9 +67,9 @@ model_name = "mistralai/Mistral-7B-v0.1"
 # GPU Configuration
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -112,7 +114,7 @@ server_args = {
     'context_length': 33000,
     'enable_flashinfer': True,
     'schedule_heuristic': 'fcfs',
-    # 'chunk_prefill_budget': 512,
+    'chunk_prefill_budget': 1024,
 }
 
 # Workload Configuration
@@ -126,9 +128,9 @@ configurations_to_test = [
     # [300, 0.2, 4096, 8],
     # [300, 0.2, 4096, 12],
     # [100, 0.2, 4096, 18],
-    # [20, 0.384, 1950, 6.5],
+    [20, 0.384, 1950, 6.5],
     # [80, 0.2, 2700, 9],
-    [20, 0.2, 1200, 4],
+    # [20, 0.2, 1200, 4],
 ]
 workload_configs = create_mixture_react(configurations_to_test, model_name, exp_time, [16])
 
@@ -136,7 +138,7 @@ workload_configs = create_mixture_react(configurations_to_test, model_name, exp_
 # Format {policy - custom policy - message}
 selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, 'add_recomp_info'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, ''),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'very_long_window')
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1c_load_dist_1_1_10"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_3h_1c_load_dist_4_4_4_10"),

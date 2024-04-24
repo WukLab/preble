@@ -183,6 +183,7 @@ class ModelRpcServer:
         self.schedule_waiting_overhead = 0
         self.recomputed_tokens = 0
         self.total_forwarded_tokens = 0
+        self.iter_cnt = -1
 
     def flush_cache(self):
         if self.num_waiting_reqs() == 0 and (
@@ -367,6 +368,8 @@ class ModelRpcServer:
             batch.filter_batch(scheduled)
             
         # set out_cache_loc
+        if not out_cache_locs:
+            pass
         out_cache_locs = torch.cat(out_cache_locs, dim=0)
         batch.out_cache_loc = out_cache_locs
         batch.out_cache_cont_start = batch.out_cache_cont_end = None
@@ -384,7 +387,6 @@ class ModelRpcServer:
             f"unique kv tokens: {unique_kvs}"
         )
         return preempted, delayed_batch
-    
     
     # NOTE: Sort the waiting_queue before calling this
     def _schedule_waiting(
@@ -572,12 +574,40 @@ class ModelRpcServer:
             scheduled_waiting_batch = None
         else:
             schedule_waiting_start = time.time()
-            # scheduled_waiting_batch = self._schedule_waiting(budget)
-            self.check_req_hit(self.forward_queue)
-            self.forward_queue = self.scheduler.get_priority_queue(self.forward_queue)
-            scheduled_waiting_batch = self.schedule_within_group(self.forward_queue, self.max_num_running_seq, budget)
-            if scheduled_waiting_batch is not None:
-                self.forward_queue = [x for x in self.forward_queue if x not in scheduled_waiting_batch.reqs]
+            # NOTE: this add too much overhead, only recheck prefix hit every 10 iterations
+            # self.iter_cnt = (self.iter_cnt + 1) % 5
+            # self.check_req_hit(self.forward_queue, self.iter_cnt != 0)
+            self.check_req_hit(self.forward_queue, False)
+            if self.schedule_heuristic == 'fcfs-mpq':
+                while self.forward_queue:
+                    req = self.forward_queue.pop()
+                    # Assign to the corresponding priority queue based on hit ratio
+                    hit_ratio = len(req.prefix_indices) / len(req.input_ids)
+                    if hit_ratio == 0:
+                        group = 0
+                    else:
+                        group = math.ceil(hit_ratio * 10) - 1
+                    self.multi_priority_queue[group].append(req)
+                schedule_group_idx = self.get_schedule_group()
+                if schedule_group_idx is None:
+                    scheduled_waiting_batch = None
+                else:
+                    # tune k to trade off between cache hit and fairness
+                    k = 10
+                    max_schedule_allowed = (schedule_group_idx + 1) * k
+
+                    # Get priority queue
+                    target_waiting_queue = self.scheduler.get_priority_queue(self.multi_priority_queue[schedule_group_idx])
+                    self.check_req_hit(target_waiting_queue)
+                    scheduled_waiting_batch = self.schedule_within_group(target_waiting_queue, max_schedule_allowed, budget)
+                if scheduled_waiting_batch is not None:
+                    self.multi_priority_queue[schedule_group_idx] = [x for x in target_waiting_queue if x not in scheduled_waiting_batch.reqs]
+            else:
+                self.forward_queue = self.scheduler.get_priority_queue(self.forward_queue)
+                # scheduled_waiting_batch = self._schedule_waiting(budget)
+                scheduled_waiting_batch = self.schedule_within_group(self.forward_queue, self.max_num_running_seq, budget)
+                if scheduled_waiting_batch is not None:
+                    self.forward_queue = [x for x in self.forward_queue if x not in scheduled_waiting_batch.reqs]
             self.schedule_waiting_overhead += time.time() - schedule_waiting_start
         
         if scheduled_waiting_batch is not None:
@@ -595,7 +625,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logger.info(
+            logger.debug(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"batch.inflight_tokens: {num_batched_tokens}, "
@@ -807,14 +837,20 @@ class ModelRpcServer:
         )
         self.forward_queue.append(req)
     
-    def check_req_hit(self, queue: List[Req]):
-        for req in queue:
-            prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
-            if req.return_logprob:
-                prefix_indices = prefix_indices[: req.logprob_start_len]
-            req.extend_input_len = len(req.input_ids) - len(prefix_indices)
-            req.prefix_indices = prefix_indices
-            req.last_node = last_node
+    def check_req_hit(self, queue: List[Req], skip: bool=False):
+        if not skip:
+            for req in queue:
+                prefix_indices, last_node = self.tree_cache.match_prefix(req.input_ids)
+                if req.return_logprob:
+                    prefix_indices = prefix_indices[: req.logprob_start_len]
+                req.extend_input_len = len(req.input_ids) - len(prefix_indices)
+                req.prefix_indices = prefix_indices
+                req.last_node = last_node
+        else:
+            for req in queue:
+                req.extend_input_len = len(req.input_ids)
+                req.prefix_indices = []
+                req.last_node = self.tree_cache.root_node
     
     def get_schedule_group(self):
         start_from = None
@@ -987,10 +1023,9 @@ class ModelRpcServer:
 
         # Get priority queue
         target_waiting_queue = self.scheduler.get_priority_queue(self.multi_priority_queue[schedule_group_idx])
-        # TODO: this might be omiited if:
-        # 1. overhead is too high
-        # 2. not likely to have new hit after assigning to the group
-        # correcness is maintained without this check
+        # NOTE: this is necessary
+        # 1. hit ratio will shift over time
+        # 2. if you set longer prefix indices the result is incorrect
         self.check_req_hit(target_waiting_queue)
         new_batch = self.schedule_within_group(target_waiting_queue, max_schedule_allowed)
         if new_batch is None:
