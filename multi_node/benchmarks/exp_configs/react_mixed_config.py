@@ -55,7 +55,8 @@ def add_simulation_to_gpu_config(gpu_configs):
 # log_file_path = "workload_prefix/4r_sim_80_0.2_2700_9_waiting_queue/exp.log"
 # log_file_path = "workload_prefix/3r_sim_20_1_600_2_baseline/exp.log"
 
-log_file_path = 'hc_batch/1r_sim_20_0.1_1200_4_baseline/exp.log'
+log_file_path = 'hc_batch/1r_sim_20_0.2_1200_4_fcfs/exp.log'
+# log_file_path = 'hc_batch/1r_sim_20_0.2_1200_4_baseline/exp.log'
 # log_file_path = 'hc_batch/1r_sim_20_0.1_1200_4_baseline/exp.log'
 
 # model_name = "meta-llama/Llama-2-7b-hf"
@@ -127,7 +128,7 @@ configurations_to_test = [
     # [100, 0.2, 4096, 18],
     # [20, 0.384, 1950, 6.5],
     # [80, 0.2, 2700, 9],
-    [20, 0.1, 1200, 4],
+    [20, 0.2, 1200, 4],
 ]
 workload_configs = create_mixture_react(configurations_to_test, model_name, exp_time, [16])
 
@@ -135,7 +136,7 @@ workload_configs = create_mixture_react(configurations_to_test, model_name, exp_
 # Format {policy - custom policy - message}
 selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, 'rr'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, 'add_recomp_info'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'very_long_window')
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1c_load_dist_1_1_10"),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "4r_3h_1c_load_dist_4_4_4_10"),

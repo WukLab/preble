@@ -670,6 +670,7 @@ class Runtime:
         log_prefix_hit: bool = False,
         gpu_config: Optional[GPUConfig] = None,
         chunk_prefill_budget: int = 0,
+        hit_trace_window_size: int = 30,
         **kwargs,   # additional args not specific to sglang
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
@@ -703,6 +704,7 @@ class Runtime:
             disable_disk_cache=disable_disk_cache,
             api_key=api_key,
             chunk_prefill_budget=chunk_prefill_budget,
+            hit_trace_window_size=hit_trace_window_size,
         )
 
         self.url = self.server_args.url()
