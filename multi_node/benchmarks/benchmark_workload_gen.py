@@ -5,6 +5,7 @@ import uuid
 
 import numpy as np
 import random
+from tqdm import tqdm
 from enum import Enum, auto
 from transformers import (
     PreTrainedTokenizer,
@@ -239,6 +240,7 @@ class WorkloadPrefixDataLoader(DataLoader):
                     "rid": uuid.uuid4().hex,
                 }
             )
+
         # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
             # prompt = random.choice(random_workload)
@@ -302,6 +304,25 @@ class ToolBenchDataLoader(DataLoader):
                 selected_instances = np.random.choice(
                     self.data[p], load_threshold, replace=True
                 )
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
+                    workload.append(
+                        {
+                            "text": e['prompt'], 
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len,
+                            },
+                        }
+                    )
+        elif self.load_dist == LoadDistribution.ALL:
+            load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
+            prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
+            selected_prefixs = np.random.choice(
+                prefix_stats, self.num_patterns, replace=True
+            )
+            for p in selected_prefixs:
+                selected_instances = self.data[p]
                 for e in selected_instances:
                     output_len = len(self.tokenizer(e["output"]).input_ids)
                     workload.append(
@@ -504,6 +525,7 @@ class LooGLEDataset(DataLoader):
         total_num_requests: int,
         tokenizer,
         crop_max_decode=True,
+        max_tokens_override=None,
     ):
         super().__init__(
             "loogle",
@@ -516,6 +538,7 @@ class LooGLEDataset(DataLoader):
             LooGLEDatasetType.LONG_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
         }
         self.loogle_dataset_type = loogle_dataset_type
+        print(f"Data loading")
         self.data = self.read_data(loogle_dataset_type)
         self.max_decode_loogle = {  # based on filtring 1.5x IQR on dataset
             LooGLEDatasetType.SHORT_QA: 35,
@@ -526,6 +549,7 @@ class LooGLEDataset(DataLoader):
                 LooGLEDatasetType.SHORT_QA: float("inf"),
                 LooGLEDatasetType.LONG_QA: float("inf"),
             }
+        self.max_tokens_override = max_tokens_override
         # Short QA has about
 
     def read_data(
@@ -548,9 +572,10 @@ class LooGLEDataset(DataLoader):
                 f"num_patterns {self.num_patterns} is larger than the number of patterns in the dataset {max_num_patterns}."
             )
             self.num_patterns = max_num_patterns
-
-        for item in self.data.shuffle().select(range(self.num_patterns)):
+        print(f"Generating workload for {self.num_patterns} patterns")
+        for item in tqdm(self.data.shuffle().select(range(self.num_patterns))):
             raw_inputs = item["input"]
+            print(len(eval(item["qa_pairs"])))
             for j in eval(item["qa_pairs"]):
                 json_obj = {"Q": j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
@@ -576,6 +601,8 @@ class LooGLEDataset(DataLoader):
             if max_new_tokens > self.max_decode_loogle[self.loogle_dataset_type]:
                 max_new_tokens = self.max_decode_loogle[self.loogle_dataset_type]
             request["sampling_params"]["max_new_tokens"] = max_new_tokens
+            if self.max_tokens_override:
+                request["sampling_params"]["max_new_tokens"] = self.max_tokens_override
             request["input_ids"] = input_ids
             if len(input_ids) > max_length:
                 half = int(max_length / 2)
@@ -648,6 +675,25 @@ class MultiDomainToolBenchDataLoader(DataLoader):
                 selected_instances = np.random.choice(
                     self.data[p], load_threshold, replace=True
                 )
+                for e in selected_instances:
+                    output_len = len(self.tokenizer(e["output"]).input_ids)
+                    workload.append(
+                        {
+                            "text": e['prompt'], 
+                            "sampling_params": {
+                                "temperature": 0,
+                                "max_new_tokens": output_len,
+                            },
+                        }
+                    )
+        elif self.load_dist == LoadDistribution.ALL:
+            load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
+            prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
+            selected_prefixs = np.random.choice(
+                prefix_stats, self.num_patterns, replace=True
+            )
+            for p in selected_prefixs:
+                selected_instances = self.data[p]
                 for e in selected_instances:
                     output_len = len(self.tokenizer(e["output"]).input_ids)
                     workload.append(

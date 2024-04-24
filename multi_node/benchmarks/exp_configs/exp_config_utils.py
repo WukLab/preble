@@ -152,18 +152,20 @@ def create_multi_domain_toolbench_data_loader(configurations_to_test, model_name
             )        
         yield workload_config
 
-def create_loogle_dataset(configurations_to_test, model_name, exp_time) -> Iterator[WorkloadConfig]:
+def create_loogle_dataset(configurations_to_test, model_name, exp_time, max_tokens_override=45) -> Iterator[WorkloadConfig]:
     workload_configs = []
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     for config in configurations_to_test:
         num_workloads, num_requests, request_rate = config
         if exp_time != float("inf"):
             num_requests = int(request_rate * exp_time)
+        print(f"Initialize loogle dataset with {num_workloads} workloads and {num_requests} requests")
         dataloader = LooGLEDataset(
             num_patterns=num_workloads,
             total_num_requests=num_requests,
             tokenizer=tokenizer,
-            loogle_dataset_type=LooGLEDatasetType.SHORT_QA
+            loogle_dataset_type=LooGLEDatasetType.SHORT_QA,
+            max_tokens_override=max_tokens_override
         )
         requests = dataloader.generate_workload(max_length=32768)
         random.shuffle(requests)

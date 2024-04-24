@@ -141,6 +141,13 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
+        elif custom_policy == CustomPolicyType.BasicMemSchedulerV3:
+            from basic_mem_scheduler import BasicMemSchedulerV3 
+            mem_waste = BasicMemSchedulerV3(num_nodes=len(model_details.runtimes))
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
         elif custom_policy == CustomPolicyType.HistogramBasedMemoryLoadScheduler:
             from histogram_based_scheduling import HistogramBasedMemoryLoadScheduler
             mem_waste = HistogramBasedMemoryLoadScheduler(num_nodes=len(model_details.runtimes))
@@ -150,7 +157,14 @@ def regist_selector(
             )
         elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoad:
             from histogram_based_scheduling import HistogramBasedRecomp
-            mem_waste = HistogramBasedRecomp(num_nodes=len(model_details.runtimes))
+            mem_waste = HistogramBasedRecomp(num_nodes=len(model_details.runtimes), enable_eviction=False)
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoadWithEviction:
+            from histogram_based_scheduling import HistogramBasedRecomp
+            mem_waste = HistogramBasedRecomp(num_nodes=len(model_details.runtimes), enable_eviction=True)
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
@@ -169,14 +183,21 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
+        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2:
+            from histogram_based_scheduling_v2 import HistogramBasedRecompV2
+            mem_waste = HistogramBasedRecompV2(num_nodes=len(model_details.runtimes), enable_eviction=True)
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
         elif custom_policy == CustomPolicyType.TB_DOMAIN_ORACLE:
             oracle = TBMultiDomainOracle(num_nodes=len(model_details.runtimes))
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=oracle,
             )
-        else:
-            model_details.update_runtime_selection_policy(policy)
+    else:
+        model_details.update_runtime_selection_policy(policy, None)
 
 
 def load_and_run_benchmark(

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 random.seed(10)
 import pandas as pd
 from sglang.srt.managers.router.model_runner import GPUConfig
+import threading
 
 @dataclass
 class CustomRuntimeSelector:
@@ -24,6 +25,8 @@ class CustomRuntimeSelector:
 
 class DataParallelRuntimeSelectionPolicy(Enum):
     RANDOM = auto()
+    ROUND_ROBIN = auto()
+
     CUSTOM = auto()
 
 class CustomPolicyType(Enum):
@@ -45,9 +48,12 @@ class CustomPolicyType(Enum):
     BASIC_MEM_SCHEDULER = auto()
     BASIC_MEM_SCHEDULERV2 = auto()
     BASIC_MEM_SCHEDULERV2_5 = auto()
+    BasicMemSchedulerV3 = auto()
 
     HistogramBasedMemoryLoadScheduler = auto()
     HiostgramBasedRecompLoad = auto()
+    HiostgramBasedRecompLoadWithEviction = auto()
+    HiostgramBasedRecompLoadWithEvictionV2 = auto()
 
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()
@@ -63,10 +69,16 @@ class DataParallelRequestRouter:
         self.custom_selector: Optional[CustomRuntimeSelector] = custom_runtime_selector
         self.total_nodes = total_nodes
         self.model_selection_stats = []
+        self.lock = threading.Lock()
+        self.counter = 0
 
     def select_runtime(self, text, experiment_id, request_id, input_ids=None, sampling_params=None, current_time_stamp=None) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)
+        elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.ROUND_ROBIN:
+            with self.lock:
+                selected_runtime = self.counter % self.total_nodes
+                self.counter += 1
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
             selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids, sampling_params, current_time_stamp)
         else:
@@ -83,7 +95,7 @@ class DataParallelRequestRouter:
         return selected_runtime
 
     def finish_request(self, text, experiment_id, request_id, input_ids=None, func_output=None) -> int:
-        if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
+        if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM or self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.ROUND_ROBIN:
             pass
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
             self.custom_selector.finish_request(text, request_id, input_ids, func_output)
