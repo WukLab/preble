@@ -16,7 +16,7 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log"
+log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v4.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = 300
@@ -33,7 +33,7 @@ gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
     GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    # GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False),
@@ -48,6 +48,7 @@ server_args = {
     'mem_fraction_static': 0.8,
     'context_length': 32768,
     "enable_flashinfer": True,
+    # "schedule_heuristic": "fcfs"
     # "chunk_prefill_budget": 2048,
 }
 
@@ -79,8 +80,10 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithOutEvictionV2, 'without_load_eviction_v2'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
         # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEviction, 'recomp_scheduler_with_eviction'),

@@ -9,8 +9,9 @@ import heapq
 from collections import defaultdict, deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+import logging
 
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 class SlidingWindowHistogram:
     def __init__(self, window_duration: timedelta, gpu_allocations, num_gpus=2):
         self.window_duration = window_duration
@@ -117,7 +118,7 @@ class TTFTWindowedOverloadedDetector:
 
 
 class HistogramBasedRecompV2:
-    def __init__(self, num_nodes=2, enable_eviction=True) -> None:
+    def __init__(self, num_nodes=2, enable_eviction=False) -> None:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
@@ -160,6 +161,7 @@ class HistogramBasedRecompV2:
         if not node:
             return
         node.cached_gpus = node.cached_gpus.union(gpu_id)
+        node.evicted_gpus = node.evicted_gpus.difference(gpu_id)
         self.update_cached_gpus_of_parent(node.parent, gpu_id)
 
     def update_gpu_allocation_for_parent(self, node: LPTreeNode, gpu_id):
@@ -198,13 +200,20 @@ class HistogramBasedRecompV2:
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
         """Method to handle eviction logic."""
         # TODO: Maybe update the parent if child has no parent
-        self.cache.allocated_size_[runtime_selected] -= len(node.value)
         node.evicted_gpus.add(runtime_selected)
         node.cached_gpus.remove(runtime_selected)
-        if node.decoding_tree_node:
-            node.decoding_tree_node = None
-        # self.gpu_allocations[node].remove(runtime_selected)
+
+        if self.is_large_node(node):
+            self.remove_allocations_recursive_for_children(node, runtime_selected)
+            # Remove all of it's children as well?
         return len(node.value)
+
+    def remove_allocations_recursive_for_children(self, node: LPTreeNode, runtime_selected):
+        if node not in self.gpu_allocations or runtime_selected not in self.gpu_allocations[node]:
+            return
+        self.gpu_allocations[node].remove(runtime_selected)
+        for child in node.children.values():
+            self.remove_allocations_recursive_for_children(child, runtime_selected)
 
     def handle_eviction(self, runtime_selected):
         current_max_tokens = self.max_tokens_gpu[runtime_selected]
@@ -212,7 +221,7 @@ class HistogramBasedRecompV2:
         if self.cache.allocated_size(runtime_selected) > current_max_tokens:
             num_tokens = self.cache.allocated_size(runtime_selected) - current_max_tokens
             self.cache.evict_with_runtime_id_without_removing(num_tokens, lambda node: self.evict_callback(node, runtime_selected), runtime_selected)
-            print(f"GPU {runtime_selected} Evictable size: ", self.cache.allocated_size(runtime_selected), current_max_tokens)
+            logging.info(f"GPU {runtime_selected}  {num_tokens} tokens Evictable size: {self.cache.allocated_size(runtime_selected)} current_max_tokens")
 
     def runtime_selector(
         self,
@@ -247,28 +256,14 @@ class HistogramBasedRecompV2:
             runtime_idx = list(gpu_selected)[0]
             if len(gpu_selected) > 1:
                 runtime_idx = int(np.random.choice(list(gpu_selected)))
+            self.cache.update_allocated_size(leaf_node, runtime_idx)
 
             self.per_gpu_load[runtime_idx] += 1
-            
-            decoding_tree_node = LPTreeNode()
-            decoding_tree_node.ref_counter = [1 if runtime_idx == i  else 0 for i in range(self.num_gpus)]
-            decoding_tree_node.last_access_time = time.time()
-            decoding_tree_node.cached_gpus = {runtime_idx}
-            decoding_tree_node.value = [0 for _ in range(decoding_length)]
-            leaf_node.decoding_tree_node = decoding_tree_node
 
-            self.cache.update_allocated_size(leaf_node, runtime_idx)
-    
-            current_allocated_size = 0
-            for node in self.cache._collect_nodes():
-                node: LPTreeNode
-                if node.has_cached_gpu(runtime_idx):
-                    current_allocated_size += len(node.value)
-            # if current_allocated_size != self.cache.allocated_size(runtime_idx):
-            #     breakpoint() TODO FIXME
-            # assert current_allocated_size == self.cache.allocated_size(runtime_idx)
-            # if self.enable_eviction:
-            #     self.handle_eviction(runtime_idx)
+            if self.enable_eviction:
+                self.handle_eviction(runtime_idx)
+            logging.info(f"Available size: {self.cache.allocated_size_} {self.cache.allocated_size(runtime_idx)}")
+
             # breakpoint()
             self.counter += 1    
             if self.counter % 500:
@@ -285,7 +280,9 @@ class HistogramBasedRecompV2:
             }
         )
         return runtime_idx
-    
+
+# In terms of available size
+
     def update_overload_detector(self, input_ids, runtime_idx, func_output: RequestFuncOutput):
         # Overload detector based on the current ttft
         leaf_node = self.cache.find_node(input_ids)
@@ -372,7 +369,7 @@ class HistogramBasedRecompV2:
     def _print_helper(self, node: LPTreeNode, indent=0, depth=0):
         for key, child in node.children.items():
             allocated_gpus = self.gpu_allocations.get(child, set())
-            print(f"{' ' * indent}{tokenizer.decode(child.value)[:20].strip()} Cached: {child.cached_gpus} Allocated: {allocated_gpus} {len(child.value)}")
+            print(f"{' ' * indent}{tokenizer.decode(child.value)[:20].strip()} Cached: {child.cached_gpus} Allocated: {allocated_gpus} Evicted: {child.evicted_gpus} {len(child.value)}")
             self._print_helper(child, indent=indent + 2, depth=depth + 1)
         if node.decoding_tree_node:
             print(f"{' ' * indent}Decoding Node: {len(node.decoding_tree_node.value)}")

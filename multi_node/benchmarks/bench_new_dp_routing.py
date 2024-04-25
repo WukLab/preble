@@ -163,13 +163,6 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
-        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoadWithEviction:
-            from histogram_based_scheduling import HistogramBasedRecomp
-            mem_waste = HistogramBasedRecomp(num_nodes=len(model_details.runtimes), enable_eviction=True)
-            model_details.update_runtime_selection_policy(
-                DataParallelRuntimeSelectionPolicy.CUSTOM,
-                custom_runtime_selector=mem_waste,
-            )
         elif custom_policy == CustomPolicyType.MemSchedulerEvictBasedOnLoad:
             from mem_scheduler_evict_based_on_load import MemSchedulerEvictBasedOnLoad
             mem_waste = MemSchedulerEvictBasedOnLoad(num_nodes=len(model_details.runtimes))
@@ -187,6 +180,13 @@ def regist_selector(
         elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2:
             from histogram_based_scheduling_v2 import HistogramBasedRecompV2
             mem_waste = HistogramBasedRecompV2(num_nodes=len(model_details.runtimes), enable_eviction=True)
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
+        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoadWithOutEvictionV2:
+            from histogram_based_scheduling_v2 import HistogramBasedRecompV2
+            mem_waste = HistogramBasedRecompV2(num_nodes=len(model_details.runtimes), enable_eviction=False)
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,

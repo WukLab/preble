@@ -72,7 +72,7 @@ class LPTreeNode:
         return hash(self.id)  # Use the unique ID for hashing
 
     def __repr__(self) -> str:
-        return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter}, cached_gpus={self.cached_gpus})"
+        return f"LPTreeNode(id={self.id}, ref_counter={self.ref_counter}, cached_gpus={self.cached_gpus}, evicted_gpus:{self.evicted_gpus})"
 
 class SlidingWindowHistogram:
     def __init__(self, window_duration, num_gpus=2):
@@ -282,42 +282,19 @@ class LPRadixCache:
 
         num_evicted = 0
         while num_evicted < num_tokens and len(leaves):
-            _, x = heapq.heappop(leaves)
-
+            x = heapq.heappop(leaves)
+            x: LPTreeNode
             if x == self.root_node:
                 break
-            if x.ref_counter > 0:
+            if x.ref_counter[runtime_id] > 0:
                 continue
-
+            if x.has_cached_gpu(runtime_id):
+                self.allocated_size_[runtime_id] -= len(x.value)
             num_evicted += evict_callback(x)
             # self._delete_leaf(x)
             # self._delete_node(x, runtime_id)
-
-            if len(x.parent.children) == 0:
-                heapq.heappush(leaves, x.parent)
-
-
-    def smart_evict(self, num_tokens, evict_callback, runtime_id):
-        if self.disable:
-            raise RuntimeError()
-
-        nodes = self.create_priority_queue(runtime_id)
-
-        num_evicted = 0
-        while num_evicted < num_tokens and len(nodes):
-            x: LPTreeNode
-            (cost, x) = heapq.heappop(nodes)
-
-            if x == self.root_node:
-                break
-
-            if x.ref_counter > 0:
-                continue
-
-            num_evicted += evict_callback(x)
-            self._delete_node(x, runtime_id)
-            if len(x.parent.children) == 0:
-                heapq.heappush(nodes, (x.parent.load * x.parent.num_tokens, x.parent))
+            # if len(x.parent.children) == 0:
+            #     heapq.heappush(leaves, x.parent)
 
     def dec_ref_counter(self, node, runtime_id):
         delta = 0
@@ -330,8 +307,6 @@ class LPRadixCache:
 
     def remove_completed_input_ids(self, input_ids, runtime_id):
         node = self.find_node(input_ids)
-        assert node.decoding_tree_node.ref_counter[runtime_id] == 1 
-        node.decoding_tree_node.ref_counter[runtime_id] -= 1
         self.dec_ref_counter(node, runtime_id)  # remove reference counter up to parent
     
     def allocated_size(self, runtime_id):
@@ -343,6 +318,7 @@ class LPRadixCache:
         # new_node -> child
         new_node = LPTreeNode(num_nodes=self.num_gpus)
         new_node.cached_gpus = copy.deepcopy(child.cached_gpus)
+        new_node.evicted_gpus = copy.deepcopy(child.evicted_gpus)
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
         new_node.ref_counter = copy.deepcopy(child.ref_counter)
@@ -440,23 +416,14 @@ class LPRadixCache:
 
     def update_allocated_size(self, node: LPTreeNode, runtime_id):
         # handle decoding tokens
-        self.allocated_size_[runtime_id] += len(node.decoding_tree_node.value)
         while node:
             node.ref_counter[runtime_id] += 1
-            if runtime_id in node.evicted_gpus:
+            if not node.has_cached_gpu(runtime_id):
                 self.allocated_size_[runtime_id] += len(node.value)
-                node.evicted_gpus.remove(runtime_id)
-            elif runtime_id not in node.cached_gpus:
-                self.allocated_size_[runtime_id] += len(node.value)
-            node.cached_gpus.add(runtime_id)
+                if runtime_id in node.evicted_gpus:
+                    node.evicted_gpus.remove(runtime_id)
+                node.cached_gpus.add(runtime_id)
             node = node.parent
-
-    def migrate_allocated_size(self, node, runtime_id, old_runtime_id):
-        def remove_old_size(node, runtime_id):
-            self.allocated_size_[runtime_id] -= len(node.value)
-            for child in node.children.values():
-                remove_old_size(child, runtime_id)
-        remove_old_size(node, old_runtime_id)
 
     def _print_helper(self, node, indent, depth=0):
         if depth == 5:
@@ -464,21 +431,6 @@ class LPRadixCache:
         for key, child in node.children.items():
             print(" " * indent, len(key), key[:10], f"r={child.ref_counter} {child.cached_gpus}")
             self._print_helper(child, indent=indent + 2, depth=depth + 1)
-
-    def recursive_delete(self, cur_node, parent, runtime_id):
-        if cur_node.children:
-            for child_size, child_node in list(cur_node.children.items()):
-                self.recursive_delete(child_node, cur_node, runtime_id)
-        if parent is not None:
-            children = list(parent.children.items())
-            for key, value in children:
-                value: LPTreeNode
-                if value == cur_node:
-                    value.evicted_gpus = True
-                    self.allocated_size_[runtime_id] -= len(key)  # Adjust evictable size based on the node's size
-
-    def _delete_node(self, cur_node, runtime_id):
-        self.recursive_delete(cur_node, cur_node.parent, runtime_id)
 
     def _total_size_helper(self, node):
         x = len(node.value)
@@ -518,7 +470,7 @@ class LPRadixCache:
         priority_queue = []
         for node in nodes:
             node: LPTreeNode
-            if node.ref_counter[runtime_id] == 0 and not node.evicted_gpus and runtime_id in node.cached_gpus:
+            if node.ref_counter[runtime_id] == 0 and runtime_id in node.cached_gpus:
                 # load = self.histogram.get(node) / len(node.cached_gpus)
                 # assert load >= node.ref_counter
                 # priority = load * node.num_tokens # Min heap python
@@ -534,13 +486,9 @@ class LPRadixCache:
                 current_allocated_size += len(node.value)
             node: LPTreeNode
             if node.ref_counter[runtime_id] == 0 and node.has_cached_gpu(runtime_id):
-                load = 1
-                assert load >= node.ref_counter
-                priority = load * node.num_tokens # Min heap python
-                heapq.heappush(priority_queue, (node.last_access_time, node))
-        # breakpoint()
+                heapq.heappush(priority_queue, node)
+
         self.allocated_size_[runtime_id] = current_allocated_size
-        # assert current_allocated_size == self.allocated_size_[runtime_id]
         return priority_queue
 
     def get_evictable_size(self, runtime_id):
