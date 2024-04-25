@@ -1,4 +1,5 @@
 import requests
+import zmq.asyncio
 from data_parallel_request_cache import (
     DataParallelRuntimeSelectionPolicy
 )
@@ -11,6 +12,7 @@ from typing import List, Iterable
 from concurrent.futures import ThreadPoolExecutor
 import json
 import asyncio
+import zmq
 import numpy as np
 import time
 import paramiko
@@ -148,6 +150,10 @@ class ModelDetails:
         self.request_sent_time = []
         self.current_experiment_state_time = None
         self.simulate = simulate
+
+        ##
+        # self.request_router.custom_selector.cache => LPRadixCache
+        ##
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
@@ -290,6 +296,8 @@ class ModelDetails:
         send_out_times = None,
     ):
         self.current_experiment_state_time = time.time()
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.request_router.custom_selector.cache.update_loop())
         async def get_request(
             input_requests,
             request_rate: float,
@@ -351,6 +359,8 @@ class ModelDetails:
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
         output.runtime_selected = runtime_idx
+
+
 
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)

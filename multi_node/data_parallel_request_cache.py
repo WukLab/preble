@@ -72,6 +72,7 @@ class DataParallelRequestRouter:
         self.lock = threading.Lock()
         self.counter = 0
 
+
     def select_runtime(self, text, experiment_id, request_id, input_ids=None, sampling_params=None) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)

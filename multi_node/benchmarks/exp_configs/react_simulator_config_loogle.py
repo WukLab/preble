@@ -16,10 +16,10 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log"
+log_file_path = "eviction_logs_for_load_based_histogram/comm_1.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 300
+exp_time = float('inf')
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -47,7 +47,7 @@ server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
     'context_length': 32768,
-    "enable_flashinfer": True,
+    "enable_flashinfer": False,
     "chunk_prefill_budget": 2048,
 }
 
@@ -130,7 +130,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=True,
+    simulate=False,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

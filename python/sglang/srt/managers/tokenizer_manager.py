@@ -348,6 +348,7 @@ class TokenizerManager:
                     state.out_list.append(out_dict)
                     state.finished = recv_obj.finished[i]
                     state.event.set()
+                # self.send_to_sched.send_pyobj(True)
             elif isinstance(recv_obj, SchedulingMetricsOut):
                 out_dict = {
                     "waiting_queue_len": recv_obj.waiting_queue_len,

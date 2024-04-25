@@ -21,7 +21,7 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 class RouterManager:
     def __init__(self, model_client: ModelRpcClient, port_args: PortArgs):
         # Init communication
-        context = zmq.asyncio.Context(5)
+        context = zmq.asyncio.Context(6)
         self.recv_from_tokenizer = context.socket(zmq.PULL)
         self.recv_from_tokenizer.bind(f"tcp://127.0.0.1:{port_args.router_port}")
 
@@ -36,6 +36,9 @@ class RouterManager:
         self.send_to_migration_target = context.socket(zmq.PUSH)
         self.recv_from_migration_source = context.socket(zmq.PULL)
         self.recv_from_migration_source.bind(f'tcp://0.0.0.0:{port_args.migrate_port}')
+
+        self.recv_from_sched = context.socket(zmq.PULL)
+        self.recv_from_sched.connect(f"tcp://127.0.0.1:{port_args.router_port+10}")
         
         # Init status
         self.model_client = model_client
@@ -67,6 +70,8 @@ class RouterManager:
 
             if not slept:
                 await asyncio.sleep(0.0006)
+            
+            # await self.recv_from_sched.recv_pyobj()
 
     async def loop_for_push_request(self):
         while True:

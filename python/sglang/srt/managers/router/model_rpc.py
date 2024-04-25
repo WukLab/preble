@@ -303,6 +303,7 @@ class ModelRpcServer:
             new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
             if (batch.token_to_kv_pool.available_size() < new_tokens 
                 and not batch.tree_cache.disable):
+                print("evicted")
                 batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.free)
             # 2. if not enough, evict running requests
             while batch.token_to_kv_pool.available_size() < new_tokens:

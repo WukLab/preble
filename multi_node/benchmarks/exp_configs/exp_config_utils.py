@@ -128,7 +128,7 @@ def create_loogle_dataset(configurations_to_test, model_name, exp_time, max_toke
         )
         requests = dataloader.generate_workload(max_length=32768)
         random.shuffle(requests)
-        requests = requests[:num_requests]
+        requests = requests[:200]
         send_out_times = calc_send_out_times(requests, request_rate, exp_time)
         workload_config = WorkloadConfig(
                 num_prefix_patterns=num_workloads,

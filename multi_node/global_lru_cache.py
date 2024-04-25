@@ -11,6 +11,8 @@ import logging
 from benchmarks.benchmark_utils import RequestFuncOutput
 from datetime import datetime, timedelta
 from typing import List, Tuple
+import zmq
+import zmq.asyncio
 
 logging = logging.getLogger(__name__)
 DEBUG_COUNTER = 0
@@ -144,6 +146,10 @@ class LPRadixCache:
         self.reset()
         self.disable = disable
         self.histogram: SlidingWindowHistogram = histogram
+        
+        context = zmq.asyncio.Context(1)
+        self.recv_from_detokenizer = context.socket(zmq.PULL)
+        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10100")
 
     ##### Public API #####
 
@@ -536,3 +542,7 @@ class LPRadixCache:
         self.allocated_size_[runtime_id] = current_allocated_size
         # assert current_allocated_size == self.allocated_size_[runtime_id]
         return priority_queue
+
+    async def update_loop(self):
+        while True:
+            recv_obj = await self.recv_from_detokenizer.recv_pyobj()

@@ -61,7 +61,7 @@ class HistogramBasedRecompV2:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
-        self.enable_eviction = enable_eviction
+        self.enable_eviction = True # enable_eviction
         self.per_gpu_load = {i: 0 for i in range(num_nodes)}
         self.all_gpus = set(range(num_nodes))
 
@@ -191,13 +191,17 @@ class HistogramBasedRecompV2:
             # if current_allocated_size != self.cache.allocated_size(runtime_idx):
             #     breakpoint() TODO FIXME
             # assert current_allocated_size == self.cache.allocated_size(runtime_idx)
-            # if self.enable_eviction:
-            #     self.handle_eviction(runtime_idx)
+            if self.enable_eviction:
+                start = time.perf_counter()
+                self.handle_eviction(runtime_idx)
+                duration = time.perf_counter() - start
+                print(f"duration: {duration}")
+
 
             self.counter += 1    
             if self.counter % 500:
                 print(self.per_gpu_load)
-            self.handle_work_stealing(runtime_idx)
+            #self.work_steal_low_loaded_prefixes(runtime_idx)
 
         self.metrics_dict.append(
             {
