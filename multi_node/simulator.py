@@ -336,7 +336,12 @@ class SendRequestEvent(SimulationEvent):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         if rid is None:
             rid = random_uuid_string()
-        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params, current_time_stamp=self.time)
+        hit_rates = [r.model_rpc.get_hit_ratio() for r in simulator.runtimes]
+        highest_idx = int(np.argmax(hit_rates))
+        if hit_rates[highest_idx] < 0.7:
+            highest_idx = None
+        # highest_idx = None
+        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params, current_time_stamp=self.time, runtime_id_with_highest_hit_rate=highest_idx)
         generate_input = GenerateReqInput(
             text=text,
             sampling_params=sampling_params,

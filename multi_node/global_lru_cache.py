@@ -340,7 +340,7 @@ class LPRadixCache:
         new_node.cached_gpus = copy.deepcopy(child.cached_gpus)
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
-        new_node.ref_counter = child.ref_counter
+        new_node.ref_counter = copy.deepcopy(child.ref_counter)
         new_node.load = child.load
 
         new_node.context_length = child.parent.context_length + split_len

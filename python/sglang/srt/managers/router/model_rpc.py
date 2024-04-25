@@ -633,6 +633,7 @@ class ModelRpcServer:
                 f"unique kv tokens: {unique_kvs}, "
                 f"#remaining_req: {self.num_waiting_reqs()}, "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+                f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
             )
         self.total_forwarded_tokens += num_batched_tokens
         # self.running_batch.prepare_for_isolate_extend_decode()
@@ -991,7 +992,6 @@ class ModelRpcServer:
             self.tree_cache,
         )
         return new_batch
-        
     
     def get_new_fill_batch_v2(self):
         if (
