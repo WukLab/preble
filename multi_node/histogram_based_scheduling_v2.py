@@ -6,7 +6,7 @@ import time
 import numpy as np
 import threading
 import heapq
-
+from collections import deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
@@ -55,9 +55,70 @@ class SlidingWindowHistogram:
         return allocation
 
 
+class TTFTWindowedOverloadedDetector:
+    # TTFT is a good indicator of overloaded
+
+    def __init__(self, window_duration=timedelta(minutes=3)):
+        self.data = {}
+        self.window_duration = window_duration
+        self.half_window_duration = window_duration / 2
+
+    def add_data_point(self, timestamp, node, gpu, value):
+        """ Add a new data point and remove outdated entries. """
+        key = (node, gpu)
+        if key not in self.data:
+            self.data[key] = deque()
+        self.data[key].append((timestamp, value))
+        self.purge_old_data(key, timestamp)
+
+    def purge_old_data(self, key, current_time):
+        """ Remove data points that are older than the time window. """
+        while self.data[key] and self.data[key][0][0] < current_time - self.window_duration:
+            self.data[key].popleft()
+
+    def rename_node(self, old_node, new_node, runtime_idx):
+        old_key = (old_node, runtime_idx)
+        new_key = (new_node, runtime_idx)
+        if old_key in self.data:
+            self.data[new_key] = self.data.pop(old_key)
+
+    def calculate_half_window_averages(self, key):
+        """ Calculate averages for the first and second halves of the window. """
+        first_half = []
+        second_half = []
+        half_window_cutoff = datetime.now() - self.half_window_duration
+        if key not in self.data:
+            return None, None
+        for timestamp, value in self.data[key]:
+            if timestamp < half_window_cutoff:
+                first_half.append(value)
+            else:
+                second_half.append(value)
+        if len(first_half) == 0:
+            return None, None
+        if len(second_half) == 0:
+            return  None, None
+        avg_first_half = sum(first_half) / len(first_half) if first_half else 0
+        avg_second_half = sum(second_half) / len(second_half) if second_half else 0
+
+        return avg_first_half, avg_second_half
+    
+    def delete_after_allocation(self, node, gpu):
+        key = (node, gpu)
+        if key in self.data:
+            del self.data[key]
+
+    def is_node_overloaded(self, node, gpu):
+        """ Check if node is overloaded """
+        key = (node, gpu)
+        avg_first_half, avg_second_half = self.calculate_half_window_averages(key)
+        if avg_first_half is None and avg_second_half is None:
+            return False
+        return avg_second_half >= 2 * avg_first_half
+
 
 class HistogramBasedRecompV2:
-    def __init__(self, num_nodes=2, enable_eviction=True) -> None:
+    def __init__(self, num_nodes=2, enable_eviction=False) -> None:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
@@ -73,6 +134,7 @@ class HistogramBasedRecompV2:
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.HIGH_LOAD_THRESHOLD = 1.5
+        self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
 
     # Consider Split nodes
     def handle_split_nodes_gpu_allocations(self, split_nodes, gpu_allocations):
@@ -83,6 +145,8 @@ class HistogramBasedRecompV2:
         for child, parent_node in split_nodes.items():
             if self.is_large_node(parent_node) and not self.is_large_node(child): # new node is parent is now larger
                 self.histogram.rename_node(child, parent_node)
+                for gpu in self.gpu_allocations.get(child, {}):
+                    self.overload_detector.rename_node(child, parent_node, gpu)
 
     # Recursively update get/update parent gpu allocation
     def get_parent_gpu_allocation(self, node: LPTreeNode):
@@ -129,15 +193,24 @@ class HistogramBasedRecompV2:
         if node.has_cached_gpu(gpu_id):
             return 0
         else:
-            return node.num_tokens * node.ref_counter + self.get_recomp_cost_basic(node.parent, gpu_id)
+            return node.num_tokens * node.ref_counter[gpu_id] + self.get_recomp_cost_basic(node.parent, gpu_id)
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
         """Method to handle eviction logic."""
         # TODO: Maybe update the parent if child has no parent
-        self.cache.allocated_size_[runtime_selected] -= len(node.value)
         node.evicted_gpus.add(runtime_selected)
         node.cached_gpus.remove(runtime_selected)
+        def remove_allocations_recursive_for_children(node: LPTreeNode, runtime_selected):
+            if node not in self.gpu_allocations or runtime_selected not in self.gpu_allocations[node]:
+                return
+            self.gpu_allocations[node].remove(runtime_selected)
+            for child in node.children.values():
+                self.remove_allocations_recursive_for_children(child, runtime_selected)
+        if self.is_large_node(node):
+            remove_allocations_recursive_for_children(node, runtime_selected)
+            # Remove all of it's children as well?
         return len(node.value)
+
 
     def handle_eviction(self, runtime_selected):
         current_max_tokens = self.max_tokens_gpu[runtime_selected]
@@ -187,17 +260,6 @@ class HistogramBasedRecompV2:
 
             self.per_gpu_load[runtime_idx] += 1
             self.cache.update_allocated_size(leaf_node, runtime_idx)
-    
-            current_allocated_size = 0
-            for node in self.cache._collect_nodes():
-                node: LPTreeNode
-                if node.has_cached_gpu(runtime_idx):
-                    current_allocated_size += len(node.value)
-            # if current_allocated_size != self.cache.allocated_size(runtime_idx):
-            #     breakpoint() TODO FIXME
-            # assert current_allocated_size == self.cache.allocated_size(runtime_idx)
-            # if self.enable_eviction:
-            #     self.handle_eviction(runtime_idx)
 
             self.counter += 1    
             if self.counter % 500:
@@ -219,7 +281,9 @@ class HistogramBasedRecompV2:
         self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
     ):
         with self.lock:
-            self.cache.remove_completed_input_ids(input_ids)
+            runtime_id = func_output.runtime_selected
+            self.update_overload_detector(input_ids, runtime_id, func_output)
+            self.cache.remove_completed_input_ids(input_ids, runtime_id)
 
     def handle_important_node_stealing(self, scheduled_idx):
         if sum(self.per_gpu_load.values()) < 50:
@@ -235,7 +299,7 @@ class HistogramBasedRecompV2:
         larger_device, larger_allocation_cost = allocation_cost_with_devices[0]
         smaller_device, smaller_device_allocation_cost = allocation_cost_with_devices[-1] # Last element is the smallest
 
-        if larger_allocation_cost < smaller_device_allocation_cost:
+        if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
             return
 
         if self.per_gpu_load[larger_device] < self.HIGH_LOAD_THRESHOLD * self.per_gpu_load[smaller_device]:
@@ -252,12 +316,12 @@ class HistogramBasedRecompV2:
             # Handle load splitting a single node in two
             cost, node = node_cost_for_gpu[0] 
             cost /= 2 # load is now split into two
-
-            if not node.has_cached_gpu(smaller_device) and larger_allocation_cost - cost > smaller_device_allocation_cost + cost: 
+            if not node.has_cached_gpu(smaller_device) and self.overload_detector.is_node_overloaded(node, larger_device): 
                 # Copying the node to the smallest device will not change the larger allocation
                 larger_allocation_cost -= cost
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node].add(smaller_device)
+                self.overload_detector.delete_after_allocation(node, larger_device)
         else:
             while node_cost_for_gpu:
                 node: LPTreeNode
@@ -289,7 +353,7 @@ class HistogramBasedRecompV2:
     def _print_helper(self, node: LPTreeNode, indent=0, depth=0):
         for key, child in node.children.items():
             allocated_gpus = self.gpu_allocations.get(child, set())
-            print(f"{' ' * indent}{tokenizer.decode(child.value)[:20].strip()} Cached: {child.cached_gpus} Allocated: {allocated_gpus} {len(child.value)}")
+            print(f"{' ' * indent}{tokenizer.decode(child.value)[:20].strip()} Cached: {child.cached_gpus} Allocated: {allocated_gpus} Evicted: {child.evicted_gpus} {len(child.value)}")
             self._print_helper(child, indent=indent + 2, depth=depth + 1)
 
     def work_steal_low_loaded_prefixes(self):
@@ -310,3 +374,10 @@ class HistogramBasedRecompV2:
 
                 return runtime_id
         return None
+
+    def update_overload_detector(self, input_ids, runtime_idx, func_output: RequestFuncOutput):
+        # Overload detector based on the current ttft
+        leaf_node = self.cache.find_node(input_ids)
+        important_node = self.get_important_node(leaf_node)
+        self.overload_detector.add_data_point(datetime.now(), important_node, runtime_idx, func_output.ttft)
+    

@@ -1,4 +1,4 @@
-from histogram_based_scheduling_v2 import SlidingWindowHistogram, LPTreeNode, HistogramBasedRecompV2
+from histogram_based_scheduling_v2 import SlidingWindowHistogram, LPTreeNode, HistogramBasedRecompV2, TTFTWindowedOverloadedDetector
 import unittest
 from datetime import datetime, timedelta
 
@@ -68,15 +68,34 @@ class TestGPULoadBalancing(unittest.TestCase):
         scheduler = HistogramBasedRecompV2(num_nodes=2, enable_eviction=False)
         node0_gpu0 = self._create_node(load=62, num_tokens=50, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         node1_gpu1 = self._create_node(load=10, num_tokens=10, gpus={1}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
-
+        
         scheduler.gpu_allocations = gpu_allocations
         scheduler.per_gpu_load = per_gpu_load
         scheduler.histogram = histogram
-        breakpoint()
         scheduler.handle_important_node_stealing(0)
         # Assuming the load was meant to be balanced by the scheduler
-        
-        self.assertEquals(scheduler.gpu_allocations[node0_gpu0], {
+        # No stealing bc not overloaded
+
+        self.assertEquals(scheduler.gpu_allocations, {
+            node0_gpu0: {0},
+            node1_gpu1: {1}
+        })
+        overloaded_detector = TTFTWindowedOverloadedDetector(timedelta(minutes=3))
+        # Shows the TTFT blowing up/doubling
+        overloaded_detector.add_data_point(datetime.now() - timedelta(minutes=2), node=node0_gpu0, gpu=0, value=0.04)
+        overloaded_detector.add_data_point(datetime.now() - timedelta(minutes=2), node=node0_gpu0, gpu=0, value=0.04)
+        overloaded_detector.add_data_point(datetime.now() - timedelta(minutes=2), node=node0_gpu0,  gpu=0, value=0.04)
+        overloaded_detector.add_data_point(datetime.now() - timedelta(minutes=2), node=node0_gpu0,  gpu=0, value=0.04)
+
+        overloaded_detector.add_data_point(datetime.now(), node=node0_gpu0, gpu=0, value=0.085)
+        overloaded_detector.add_data_point(datetime.now(), node=node0_gpu0, gpu=0, value=0.085)
+        overloaded_detector.add_data_point(datetime.now(), node=node0_gpu0, gpu=0, value=0.085)
+        overloaded_detector.add_data_point(datetime.now(), node=node0_gpu0, gpu=0, value=0.085)
+        scheduler.overload_detector = overloaded_detector
+
+        scheduler.handle_important_node_stealing(0)
+        # Monkey patch scheduler.overload_detector.
+        self.assertEquals(scheduler.gpu_allocations, {
             node0_gpu0: {0, 1},
             node1_gpu1: {1}
         })
