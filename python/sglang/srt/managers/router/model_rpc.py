@@ -640,6 +640,7 @@ class ModelRpcServer:
         else:
             new_batch = self.get_new_fill_batch()
         forward_times = []
+        num_decoding_iterations_run = 0
         if new_batch is not None:
             # Run new fill batch
             forward_times.append(self.forward_fill_batch(new_batch, forward_simulation))
@@ -658,6 +659,7 @@ class ModelRpcServer:
                         forward_time = self.test_extend_decode(self.running_batch, forward_simulation)
                     else:
                         forward_time = self.forward_decode_batch(self.running_batch, forward_simulation)
+                    num_decoding_iterations_run += 1
                     forward_times.append(forward_time)
                     if self.running_batch.is_empty():
                         self.running_batch = None
@@ -703,7 +705,8 @@ class ModelRpcServer:
                 f'GPU: {self.current_gpu} '
                 f"forward time: {total_forward_time:.2f} ms"
             )
-
+        # if num_decoding_iterations_run > 0:
+        #     logger.info(f"Num decoding iterations run: {num_decoding_iterations_run}")
         return forward_times
     
     def handle_generate_request(
@@ -853,6 +856,11 @@ class ModelRpcServer:
                 f"hit_tokens: {hit_tokens}. "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
             )
+            # logger.info(
+            #     f"GPU: {self.current_gpu} "
+            #     "" +   self.tree_cache.print() + ""
+            #     f"\n Allocated Size: {self.tree_cache.evictable_size_}"
+            # )
             # logger.debug(
             #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
             #     f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "
@@ -1278,6 +1286,7 @@ class ModelRpcServer:
                 req = batch.reqs[i]
                 req_pool_idx = req_pool_indices_cpu[i]
                 token_ids = tuple(req.input_ids + req.output_ids)
+                # logger.info(f"GPU: {self.current_gpu}: Finished request with input id length {len(req.input_ids)} and output id length {len(req.output_ids)} {self.tree_cache.evictable_size_}")
                 seq_len = len(token_ids) - 1
                 indices = self.req_to_token_pool.req_to_token[req_pool_idx, :seq_len]
                 prefix_len = self.tree_cache.insert(

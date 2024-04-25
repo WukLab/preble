@@ -288,6 +288,7 @@ class HistogramBasedRecomp:
         input_ids=None,
         sampling_params=None
     ):
+        
         # Tokenize the text
         start_time = time.time()
         with self.lock:
@@ -318,6 +319,11 @@ class HistogramBasedRecomp:
                 runtime_idx = int(np.random.choice(list(gpu_selected)))
             self.per_gpu_load[runtime_idx] += 1
 
+            decoding_tree_node = LPTreeNode()
+            decoding_tree_node.ref_counter = 1
+            decoding_tree_node.last_access_time = time.time()
+            decoding_tree_node.gpu_selections = {runtime_idx}
+            
             self.cache.update_allocated_size(leaf_node, runtime_idx)
             self.update_gpu_selections_of_parent(leaf_node, {runtime_idx})
     

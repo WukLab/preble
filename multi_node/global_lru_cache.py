@@ -38,12 +38,12 @@ class LpNode:
 
 
 class LPTreeNode:
-    def __init__(self):
+    def __init__(self, num_nodes=2):
         self.id = uuid4()
         self.children = defaultdict(LPTreeNode)
         self.parent: Optional[LPTreeNode] = None
         self.value = None
-        self.ref_counter = 0
+        self.ref_counter = [0 for _ in range(num_nodes)]
         self.load = 0
         self.last_access_time = time.time()
         self.evicted_gpus = set()
@@ -51,6 +51,7 @@ class LPTreeNode:
         self.is_leaf = False
         self.decode_length = 0
         self.context_length = 0
+        self.decoding_tree_node: LPTreeNode = None
 
     def has_cached_gpu(self, gpu):
         return gpu in self.cached_gpus and gpu not in self.evicted_gpus
@@ -148,9 +149,9 @@ class LPRadixCache:
     ##### Public API #####
 
     def reset(self):
-        self.root_node = LPTreeNode()
+        self.root_node = LPTreeNode(num_nodes=self.num_gpus)
         self.root_node.value = []
-        self.root_node.ref_counter = 1
+        self.root_node.ref_counter = [1 for _ in range(self.num_gpus)]
         self.allocated_size_ = [0 for _ in range(self.num_gpus)]
 
     def find_node(self, key):
@@ -318,16 +319,20 @@ class LPRadixCache:
             if len(x.parent.children) == 0:
                 heapq.heappush(nodes, (x.parent.load * x.parent.num_tokens, x.parent))
 
-    def dec_ref_counter(self, node):
+    def dec_ref_counter(self, node, runtime_id):
         delta = 0
+        node:LPTreeNode
         while node != self.root_node:
-            node.ref_counter -= 1
+            node.ref_counter[runtime_id] -= 1
+            assert node.ref_counter[runtime_id] >= 0
             node = node.parent
         return delta
 
-    def remove_completed_input_ids(self, input_ids):
+    def remove_completed_input_ids(self, input_ids, runtime_id):
         node = self.find_node(input_ids)
-        self.dec_ref_counter(node)  # remove reference counter up to parent
+        assert node.decoding_tree_node.ref_counter[runtime_id] == 1 
+        node.decoding_tree_node.ref_counter[runtime_id] -= 1
+        self.dec_ref_counter(node, runtime_id)  # remove reference counter up to parent
     
     def allocated_size(self, runtime_id):
         return self.allocated_size_[runtime_id]
@@ -336,11 +341,11 @@ class LPRadixCache:
         self, key, child: LPTreeNode, split_len, node_map, depth_limit, current_depth
     ):
         # new_node -> child
-        new_node = LPTreeNode()
+        new_node = LPTreeNode(num_nodes=self.num_gpus)
         new_node.cached_gpus = copy.deepcopy(child.cached_gpus)
         new_node.children = {key[split_len:]: child}
         new_node.parent = child.parent
-        new_node.ref_counter = child.ref_counter
+        new_node.ref_counter = copy.deepcopy(child.ref_counter)
         new_node.load = child.load
 
         new_node.context_length = child.parent.context_length + split_len
@@ -366,14 +371,12 @@ class LPRadixCache:
         parent_context_length = 0
     ):
         node.last_access_time = time.time()
-        node.ref_counter += 1
         node.load += 1
 
         for c_key, child in node.children.items():
             prefix_len = match(c_key, key)
             if prefix_len == len(c_key):
                 if prefix_len == len(key):
-                    child.ref_counter += 1
                     child.load += 1
                     modified_nodes.add(child)
                     return child
@@ -424,7 +427,6 @@ class LPRadixCache:
             new_node.evicted_gpus = set()
             new_node.parent = node
             new_node.value = value
-            new_node.ref_counter = 1
             new_node.load = 1
             new_node.context_length = parent_context_length + len(key)
 
@@ -437,7 +439,10 @@ class LPRadixCache:
         return node
 
     def update_allocated_size(self, node: LPTreeNode, runtime_id):
+        # handle decoding tokens
+        self.allocated_size_[runtime_id] += len(node.decoding_tree_node.value)
         while node:
+            node.ref_counter[runtime_id] += 1
             if runtime_id in node.evicted_gpus:
                 self.allocated_size_[runtime_id] += len(node.value)
                 node.evicted_gpus.remove(runtime_id)
@@ -498,9 +503,10 @@ class LPRadixCache:
     def _collect_nodes(self):
         ret_list = []
 
-        def dfs_(cur_node):
+        def dfs_(cur_node: LPTreeNode):
             ret_list.append(cur_node)
-
+            if cur_node.decoding_tree_node:
+                ret_list.append(cur_node.decoding_tree_node)
             for x in cur_node.children.values():
                 dfs_(x)
 
@@ -512,7 +518,7 @@ class LPRadixCache:
         priority_queue = []
         for node in nodes:
             node: LPTreeNode
-            if node.ref_counter == 0 and not node.evicted_gpus and runtime_id in node.cached_gpus:
+            if node.ref_counter[runtime_id] == 0 and not node.evicted_gpus and runtime_id in node.cached_gpus:
                 # load = self.histogram.get(node) / len(node.cached_gpus)
                 # assert load >= node.ref_counter
                 # priority = load * node.num_tokens # Min heap python
@@ -527,7 +533,7 @@ class LPRadixCache:
             if node.has_cached_gpu(runtime_id):
                 current_allocated_size += len(node.value)
             node: LPTreeNode
-            if node.ref_counter == 0 and node.has_cached_gpu(runtime_id):
+            if node.ref_counter[runtime_id] == 0 and node.has_cached_gpu(runtime_id):
                 load = 1
                 assert load >= node.ref_counter
                 priority = load * node.num_tokens # Min heap python
@@ -536,3 +542,12 @@ class LPRadixCache:
         self.allocated_size_[runtime_id] = current_allocated_size
         # assert current_allocated_size == self.allocated_size_[runtime_id]
         return priority_queue
+
+    def get_evictable_size(self, runtime_id):
+        nodes = self._collect_nodes()
+        current_allocated_size = 0
+        for node in nodes:
+            node: LPTreeNode
+            if node.ref_counter[runtime_id] == 0 and node.has_cached_gpu(runtime_id):
+                current_allocated_size += len(node.value)
+        return current_allocated_size

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from typing import Tuple, List
 
 import torch
-
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 class TreeNode:
     def __init__(self):
@@ -34,6 +35,8 @@ class RadixCache:
         self.disable = disable
 
     ##### Public API #####
+    def print(self) -> str:
+        return self._print_helper(self.root_node, 0)
 
     def reset(self):
         self.root_node = TreeNode()
@@ -213,9 +216,11 @@ class RadixCache:
         return 0
 
     def _print_helper(self, node, indent):
+        result = ""
         for key, child in node.children.items():
-            print(" " * indent, len(key), key[:10], f"r={child.ref_counter}")
-            self._print_helper(child, indent=indent + 2)
+            result += " " * indent + str(len(key)) + " " + tokenizer.decode(key)[:20].strip() + f" r={child.ref_counter}\n"
+            result += self._print_helper(child, indent=indent + 2)
+        return result
 
     def _delete_leaf(self, node):
         for k, v in node.parent.children.items():

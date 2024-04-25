@@ -48,7 +48,7 @@ server_args = {
     'mem_fraction_static': 0.8,
     'context_length': 32768,
     "enable_flashinfer": True,
-    "chunk_prefill_budget": 2048,
+    # "chunk_prefill_budget": 2048,
 }
 
 # Workload Configuration

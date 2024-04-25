@@ -52,6 +52,8 @@ class LPTreeNode:
         self.decode_length = 0
         self.context_length = 0
 
+        self.decoding_node = None
+
     @property
     def num_tokens(self):
         return len(self.value)
