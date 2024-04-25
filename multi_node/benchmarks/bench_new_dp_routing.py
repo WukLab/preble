@@ -40,7 +40,6 @@ from multi_node_loader import MultiNodeLoader
 
 from benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig
 from benchmark_workload_gen import *
-from benchmarks.exp_configs.react_simulator_config import exp_args
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -270,9 +269,10 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 
 
 if __name__ == "__main__":
-    from benchmarks.exp_configs.react_simulator_config_loogle import exp_args
+    # from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
     # from benchmarks.exp_configs.react_simulator_config import exp_args
-    # from benchmarks.exp_configs.loogle_debug import exp_args
+    # from benchmarks.exp_configs.react_mixed_config import exp_args
+    from benchmarks.exp_configs.react_simulator_config_loogle import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
     if not os.path.exists(directory):

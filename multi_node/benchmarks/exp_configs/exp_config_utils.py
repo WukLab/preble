@@ -1,3 +1,8 @@
+import sys, os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from transformers import AutoTokenizer
 import random
 from benchmark_utils import WorkloadConfig
@@ -6,6 +11,7 @@ from typing import Iterator
 from benchmark_workload_gen import LoadDistribution
 import numpy as np
 import uuid
+
 
 def calc_send_out_times(requests, request_rate, exp_time):
     send_out_times = [0]
@@ -46,6 +52,41 @@ def create_workload_prefix_configs(configurations_to_test, model_name, exp_time,
             exp_time=exp_time,
         )
         yield workload_config
+        
+def create_mixture_react(configurations_to_test, model_name, exp_time, list_num_exampls=[4]):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    for config in configurations_to_test:
+        num_workloads, random_ratio, num_requests, request_rate = config
+        if exp_time != float("inf"):
+            num_requests = int(request_rate * exp_time)
+        requests = []
+        workload_start_index = 0
+        for num_examples in list_num_exampls:
+            dataloader = WorkloadPrefixDataLoader(
+                num_workloads,
+                num_requests,
+                tokenizer,
+                num_in_context_examples=num_examples,
+                output_len=64,
+                distribution_of_non_shared=random_ratio,
+                workload_start_from=workload_start_index,
+            )
+            requests += dataloader.generate_workload(None)
+            workload_start_index += num_workloads
+        random.shuffle(requests)
+        send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+        workload_config = WorkloadConfig(
+            num_workloads * len(list_num_exampls),
+            random_ratio,
+            num_requests * len(list_num_exampls),
+            request_rate,
+            requests,
+            dataloader,
+            send_out_times=send_out_times,
+            exp_time=exp_time,
+        )
+        yield workload_config
+    
 
 def create_toolbench_data_loader(configurations_to_test, model_name, exp_time, data_path, load_dist, k=None) -> Iterator[WorkloadConfig]:
     workload_configs = []
@@ -139,8 +180,9 @@ def create_loogle_dataset(configurations_to_test, model_name, exp_time, max_toke
                 exp_time=exp_time,
                 random_ratio=0.0,
                 send_out_times=send_out_times
-            )        
+            )
         yield workload_config
+
 
 def create_mixture_dataset3(configurations_to_test, model_name, exp_time, data_path, load_dist, k=None) -> Iterator[WorkloadConfig]:
     workload_configs = []

@@ -38,6 +38,7 @@ class ServerArgs:
     log_prefix_hit: bool = False
     api_key: str = ""
     chunk_prefill_budget: int = 0
+    hit_trace_window_size: int = 30 # seconds
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -144,7 +145,7 @@ class ServerArgs:
             "--schedule-heuristic",
             type=str,
             default=ServerArgs.schedule_heuristic,
-            help="Schudule mode: [lpm, weight, random, fcfs]",
+            help="Schudule mode: [lpm, weight, random, fcfs, fcfs-mpq]",
         )
         parser.add_argument(
             "--schedule-conservativeness",
@@ -239,6 +240,12 @@ class ServerArgs:
             default=ServerArgs.chunk_prefill_budget,
             help='The maximum number of tokens that can be scheduled in a single iteration '
                  'Set to 0 to disable chunking.',
+        )
+        parser.add_argument(
+            '--hit-trace-window-size',
+            type=int,
+            default=ServerArgs.hit_trace_window_size,
+            help='The size of the window for hit trace in seconds.',
         )
 
     @classmethod
