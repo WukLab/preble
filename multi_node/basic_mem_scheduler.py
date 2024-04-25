@@ -115,7 +115,8 @@ class BasicMemSchedulerV2:
         text: str = None,
         request_id: str = None,
         input_ids=None,
-        sampling_params=None
+        sampling_params=None,
+        *args, **kwargs
     ):
         # Tokenize the text
         start_time = time.time()

@@ -79,8 +79,8 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
         # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEviction, 'recomp_scheduler_with_eviction'),
