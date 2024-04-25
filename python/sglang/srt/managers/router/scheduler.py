@@ -11,7 +11,7 @@ class Scheduler:
         max_total_num_token,
         tree_cache,
     ):
-        self.schedule_heuristic = schedule_heuristic
+        self.schedule_heuristic: str = schedule_heuristic
         self.max_running_seq = max_running_seq
         self.max_prefill_num_token = max_prefill_num_token
         self.max_total_num_token = max_total_num_token
@@ -20,13 +20,14 @@ class Scheduler:
     def get_priority_queue(self, forward_queue):
         if self.schedule_heuristic == "lpm":
             # longest prefix match
-            forward_queue.sort(key=lambda x: -len(x.prefix_indices))
+            # forward_queue.sort(key=lambda x: -len(x.prefix_indices))
+            forward_queue.sort(key=lambda x: (-len(x.prefix_indices), x.arrival_time))
             return forward_queue
         elif self.schedule_heuristic == "random":
-            forward_queue.sort(key=lambda x: x.arrival_time)
             random.shuffle(forward_queue)
             return forward_queue
-        elif self.schedule_heuristic == "fcfs":
+        elif self.schedule_heuristic.startswith('fcfs'):
+            forward_queue.sort(key=lambda x: x.arrival_time)
             return forward_queue
         elif self.schedule_heuristic == "weight":
             last_node_to_reqs = defaultdict(list)

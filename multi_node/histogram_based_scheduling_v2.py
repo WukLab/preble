@@ -152,7 +152,9 @@ class HistogramBasedRecompV2:
         text: str = None,
         request_id: str = None,
         input_ids=None,
-        sampling_params=None
+        sampling_params=None,
+        runtime_id_with_highest_hit_rate=None,
+        *args, **kwargs,
     ):
         # Tokenize the text
         start_time = time.time()
@@ -166,13 +168,16 @@ class HistogramBasedRecompV2:
             if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
                 gpu_selected = self.get_parent_gpu_allocation(leaf_node)
             else:
-                recom_costs = []
-                for gpu_id in range(self.num_gpus):
-                    recomputation_cost = self.get_recomp_cost_basic(leaf_node.parent, gpu_id)
-                    recom_costs.append(recomputation_cost)
-                histogram_mem_cost = self.histogram.current_allocation_per_gpu()
-                gpu_selected = int(np.argmin([recom_costs[gpu_id] + histogram_mem_cost[gpu_id] for gpu_id in range(self.num_gpus)]))
-                gpu_selected = set([gpu_selected])
+                if runtime_id_with_highest_hit_rate is None:
+                    recom_costs = []
+                    for gpu_id in range(self.num_gpus):
+                        recomputation_cost = self.get_recomp_cost_basic(leaf_node.parent, gpu_id)
+                        recom_costs.append(recomputation_cost)
+                    histogram_mem_cost = self.histogram.current_allocation_per_gpu()
+                    gpu_selected = int(np.argmin([recom_costs[gpu_id] + histogram_mem_cost[gpu_id] for gpu_id in range(self.num_gpus)]))
+                    gpu_selected = set([gpu_selected])
+                else:
+                    gpu_selected = set([runtime_id_with_highest_hit_rate])
 
             self.histogram.update(datetime.now(), important_node, leaf_node)
             self.update_gpu_allocation_for_parent(leaf_node, gpu_selected)
@@ -196,8 +201,9 @@ class HistogramBasedRecompV2:
 
             self.counter += 1    
             if self.counter % 500:
-                print(self.per_gpu_load)
-            self.handle_work_stealing(runtime_idx)
+                # print(self.per_gpu_load)
+                pass
+            # self.handle_work_stealing(runtime_idx)
 
         self.metrics_dict.append(
             {

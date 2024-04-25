@@ -169,3 +169,4 @@ def start_router_process(
         loop.run_until_complete(router.loop_for_push_request())
     else:
         loop.run_until_complete(router.loop_for_forward())
+    logging.info(f"Scheduling waiting overhead(s): {[model_client.model_server.schedule_waiting_overhead]}")
