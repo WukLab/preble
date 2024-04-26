@@ -54,6 +54,7 @@ class CustomPolicyType(Enum):
     HiostgramBasedRecompLoad = auto()
     HiostgramBasedRecompLoadWithEviction = auto()
     GlobalScheduler = auto()
+    GlobalSchedulerWithoutRebalancing = auto()
 
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()

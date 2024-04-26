@@ -37,7 +37,7 @@ from multi_node_loader import MultiNodeLoader
 from benchmark_utils import BenchmarkMetrics
 from benchmark_workload_gen import *
 from basic_mem_scheduler import BasicMemSchedulerV2
-from histogram_based_scheduling_v2 import GlobalScheduler
+from multi_node.global_scheduler import GlobalScheduler
 from multi_experiment_benchmark_utils import DefaultWorkload, ConfigurableMajorExperimentArgs, AllExperiments, ExperimentType, Workload
 
 logging.getLogger("requests").setLevel(logging.WARNING)

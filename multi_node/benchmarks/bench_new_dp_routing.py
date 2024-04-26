@@ -190,6 +190,13 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
+        elif custom_policy == CustomPolicyType.GlobalSchedulerWithoutRebalancing:
+            from multi_node.global_scheduler import GlobalScheduler
+            mem_waste = GlobalScheduler(num_nodes=len(model_details.runtimes), enable_eviction=True, enable_rebalancing=False)
+            model_details.update_runtime_selection_policy(
+                DataParallelRuntimeSelectionPolicy.CUSTOM,
+                custom_runtime_selector=mem_waste,
+            )
         elif custom_policy == CustomPolicyType.TB_DOMAIN_ORACLE:
             oracle = TBMultiDomainOracle(num_nodes=len(model_details.runtimes))
             model_details.update_runtime_selection_policy(
@@ -271,8 +278,8 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
 if __name__ == "__main__":
     # from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
     # from benchmarks.exp_configs.react_simulator_config import exp_args
-    # from benchmarks.exp_configs.react_mixed_config import exp_args
-    from benchmarks.exp_configs.react_simulator_config_loogle import exp_args
+    from benchmarks.exp_configs.react_mixed_config import exp_args
+    # from benchmarks.exp_configs.react_simulator_config_loogle import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
     # Create the directory if it doesn't exist
     if not os.path.exists(directory):

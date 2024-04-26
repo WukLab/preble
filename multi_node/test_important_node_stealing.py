@@ -1,4 +1,4 @@
-from histogram_based_scheduling_v2 import SlidingWindowHistogram, LPTreeNode, GlobalScheduler, TTFTWindowedOverloadedDetector
+from multi_node.global_scheduler import SlidingWindowHistogram, LPTreeNode, GlobalScheduler, TTFTWindowedOverloadedDetector
 import unittest
 from datetime import datetime, timedelta
 

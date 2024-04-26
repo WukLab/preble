@@ -19,7 +19,7 @@ import random
 log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 300
+exp_time = float("inf")
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -45,7 +45,7 @@ add_simulation_to_gpu_config(gpu_configs)
 
 
 configurations_to_test = [
-    [ 24, 393, 0.4],
+    [ 24, 393, 0.7],
     # [ 24, 393, 0.5]
 ]
 workload_configs = create_loogle_dataset(
@@ -68,7 +68,7 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'load_eviction_v2'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'global_scheduler_with_rebalancing'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
