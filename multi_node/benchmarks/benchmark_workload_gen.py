@@ -193,6 +193,15 @@ class DataLoader:
                 futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
             for future in futures:
                 future.result()
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+        }
+
+    def get_tokenizer(self):
+        return self.tokenizer
 
 class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
@@ -273,6 +282,16 @@ class WorkloadPrefixDataLoader(DataLoader):
             return int(match.group(1))
         else:
             return None
+
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+            "random_ratio": self.distribution_of_non_shared,
+            "output_len": self.output_len,
+            "num_in_context_examples": self.num_in_context_examples,
+        }
 
 class ToolBenchDataLoader(DataLoader):
     def __init__(
@@ -426,6 +445,12 @@ class ToolBenchDataLoader(DataLoader):
         random.shuffle(workload)
         return workload
 
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+        }
 
 @dataclass
 class Oracle(CustomRuntimeSelector):
@@ -538,7 +563,6 @@ class LooGLEDataset(DataLoader):
             LooGLEDatasetType.LONG_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
         }
         self.loogle_dataset_type = loogle_dataset_type
-        print(f"Data loading")
         self.data = self.read_data(loogle_dataset_type)
         self.max_decode_loogle = {  # based on filtring 1.5x IQR on dataset
             LooGLEDatasetType.SHORT_QA: 35,
@@ -573,9 +597,8 @@ class LooGLEDataset(DataLoader):
             )
             self.num_patterns = max_num_patterns
         print(f"Generating workload for {self.num_patterns} patterns")
-        for item in tqdm(self.data.shuffle().select(range(self.num_patterns))):
+        for item in self.data.shuffle().select(range(self.num_patterns)):
             raw_inputs = item["input"]
-            print(len(eval(item["qa_pairs"])))
             for j in eval(item["qa_pairs"]):
                 json_obj = {"Q": j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
@@ -622,6 +645,11 @@ class LooGLEDataset(DataLoader):
         random.shuffle(workload)
         return workload
 
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+        }
 
 @dataclass
 class LoogleOracle(CustomRuntimeSelector):

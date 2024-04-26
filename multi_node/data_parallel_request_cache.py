@@ -53,7 +53,8 @@ class CustomPolicyType(Enum):
     HistogramBasedMemoryLoadScheduler = auto()
     HiostgramBasedRecompLoad = auto()
     HiostgramBasedRecompLoadWithEviction = auto()
-    HiostgramBasedRecompLoadWithEvictionV2 = auto()
+    GlobalScheduler = auto()
+    GlobalSchedulerWithoutRebalancing = auto()
 
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()

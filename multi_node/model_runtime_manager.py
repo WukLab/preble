@@ -8,7 +8,7 @@ import aiohttp
 import uuid
 from dataclasses import dataclass
 from sglang.srt.server import Runtime as SGLangServer
-from typing import List, Iterable
+from typing import List, Iterable, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor
 import json
 import asyncio
@@ -28,6 +28,8 @@ from sglang.srt.managers.router.infer_batch import Batch
 from sglang.srt.managers.io_struct import BatchStrOut
 import torch
 import logging
+from benchmarks.benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig
+from benchmarks.multi_experiment_benchmark_utils import ExperimentType
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)
@@ -154,10 +156,6 @@ class ModelDetails:
         self.scheduling_overheads = []
         self.num_iters = 0
 
-
-    # TODO Load runtimes in parallel to reduce cold start time
-        # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
-    # Send context-length like params from input
     def load_runtimes(self, model_path, gpu_configs, **kwargs):
         logging.info(kwargs)
         def load_runtime(config: GPUConfig):
@@ -167,7 +165,7 @@ class ModelDetails:
                 runtime = SimulationRuntime(
                     model_path=model_path,
                     gpu_config=config,
-                    **kwargs,
+                    **config.runtime_args,
                 )
             elif config.use_ssh and config.vllm_config is None:
                 runtime = SSHRuntime(
@@ -175,20 +173,20 @@ class ModelDetails:
                     ssh_config=config.ssh_config,
                     gpu=gpu_id,
                     cuda_devices=gpu_id,
-                    **kwargs
+                    **config.runtime_args
                 )
             elif config.url:
                 runtime = URLRuntime(
                     config.url, 
                     cuda_devices=[gpu_id],
-                    **kwargs)
+                    **config.runtime_args)
             elif config.vllm_config is not None:
                 runtime = VLLMRuntime(
                     model_path=model_path,
                     ssh_config=config.ssh_config,
                     gpu=gpu_id,
                     **config.vllm_config,
-                    **kwargs,
+                    **config.runtime_args,
                 )
             else:
                 runtime = ExtendedSGLangRuntime(
@@ -196,7 +194,7 @@ class ModelDetails:
                     cuda_devices=[gpu_id],
                     gpu=gpu_id,
                     gpu_config=config,
-                    **kwargs,
+                    **config.runtime_args,
                 )
             #  VLLM Runtime
             self.runtimes.append(runtime)
@@ -226,34 +224,6 @@ class ModelDetails:
     def async_select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> Tuple[int, str]:
         return self.select_runtime_with_identifiers(text, sampling_params, input_ids)
 
-    def generate_request(self, text, sampling_params):
-        runtime: EndpointRuntimeInterface = (
-            self.runtimes[self.select_runtime_with_identifiers(text, sampling_params)]
-        )
-        start_time = time.time()
-        output =  requests.post(
-            runtime.generate_url,
-            json={
-                "text": text,
-                "sampling_params": sampling_params,
-            },
-            timeout=60 * 10,
-        ).json()
-        output["request_latency"] = time.time() - start_time
-        return output
-    
-    def generate_batch_request(self, batch_kwargs, sampling_params, num_threads):
-        with ThreadPoolExecutor(num_threads) as executor:
-            futures = []
-            for arguments in batch_kwargs:
-                futures.append(
-                    executor.submit(
-                        self.generate_request, arguments, sampling_params
-                    )
-                )
-            rets = [f.result() for f in futures]
-            return rets
-
     def update_runtime_selection_policy(self, runtime_selection_policy, custom_runtime_selector):
         self.request_router.update_runtime_selection_policy(runtime_selection_policy)
         self.request_router.custom_selector = custom_runtime_selector
@@ -261,74 +231,74 @@ class ModelDetails:
     def clear_kv_cache(self):
         for runtime in self.runtimes:
             requests.get(runtime.flush_cache_url)
-            
+    
+    def get_experiment_results_for_experiment_type(
+        self,
+        workload_config: WorkloadConfig,
+        experiment_type: ExperimentType
+    ):
+        if experiment_type == ExperimentType.default: # Should work like the default code
+            return self.get_experiment_results(workload_config)
+        else:
+            raise NotImplementedError("Only DEFAULT experiment type is supported")
+
     def get_experiment_results(
         self,
-        requests: Iterable,
-        request_rate: float,
-        exp_time: float = 0.0,
-        send_out_times = None,
+        workload_config: WorkloadConfig,
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
             # simulator.warm_up()
+            requests = workload_config.requests
+            request_rate = workload_config.request_rate
+            exp_time = workload_config.exp_time
+            send_out_times = workload_config.send_out_times
             simulator.initialize_all_request_with_rps(requests, request_rate, exp_time, send_out_times)
             simulator.start_model_forwarding_loop()
             return simulator.run()
         else:
             results: List[RequestFuncOutput] = asyncio.run(
                 self.async_generate_batch_request_per_sec(
-                    requests,
-                    request_rate,
-                    self.async_send_request,
-                    exp_time,
-                    send_out_times,
+                    workload_config,
                 )
             )
         return results
 
+    async def get_request(input_requests, request_rate: float, send_times: Optional[List[float]] = None):
+        input_requests = iter(input_requests)
+        for i, request in enumerate(input_requests):
+            yield request
+            if request_rate == float("inf") or not send_times:
+                continue
+            if send_times:
+                interval = send_times[i + 1] - send_times[i] if i + 1 < len(send_times) else 0
+            else:
+                interval = np.random.exponential(1.0 / request_rate)
+            await asyncio.sleep(interval)
+
     async def async_generate_batch_request_per_sec(
         self,
-        requests: Iterable,
-        request_rate: float,
-        routine,
-        exp_time: float = 0.0,
-        send_out_times = None,
+        workload_config: WorkloadConfig,
     ):
         self.current_experiment_state_time = time.time()
         loop = asyncio.get_event_loop()
         loop.create_task(self.request_router.custom_selector.cache.update_loop())
-        async def get_request(
-            input_requests,
-            request_rate: float,
-        ):
-            input_requests = iter(input_requests)
-            for i, request in enumerate(input_requests):
-                yield request
-                if request_rate == float("inf"):
-                    continue
-                if not send_out_times:
-                    interval = np.random.exponential(1.0 / request_rate)
-                else:
-                    interval = send_out_times[i + 1] - send_out_times[i]
-                await asyncio.sleep(interval)
+        
         if self.start_time is None:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []
         try:
-            async for request in get_request(requests, request_rate):
-                task = asyncio.create_task(routine(**request))
+            async for request in self.get_request(workload_config.requests, workload_config.request_rate):
+                task = asyncio.create_task(self.async_send_request(**request))
                 tasks.append(task)
-
-            if exp_time != float("inf"):
-                remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
+            if workload_config.exp_time != float("inf"):
+                remaining_time = max(0.5, workload_config.exp_time - (time.time() - self.current_experiment_state_time))
                 print(f"Waiting for remaining time", remaining_time)
                 done, pending = await asyncio.wait(tasks, timeout=remaining_time)
             else:
                 done, pending = await asyncio.wait(tasks)
             for task in pending:
                 task.cancel()
-            self.num_iters = self.request_router.custom_selector.cache.num_iters // 2
             return [task.result() for task in done]
         except asyncio.CancelledError:
             # Cancel all tasks if a CancelledError occurs
@@ -338,6 +308,61 @@ class ModelDetails:
             await asyncio.gather(*tasks, return_exceptions=True)
             # Raise a single CancelledError
             raise
+    
+    async def async_grouped_batch_request(
+        self,
+        grouped_requests: Dict[float, Iterable[Dict[str, Any]]],
+        exp_time: float = 0.0,
+        send_out_times: List[List[float]] = None,
+        
+    ):
+        self.current_experiment_state_time = time.time()
+
+        if self.start_time is None:
+            self.start_time = time.time()
+
+        tasks: List[asyncio.Task] = []
+
+        try:
+            for request_rate, requests in grouped_requests.items():
+                send_times = send_out_times.get(request_rate) if send_out_times else None
+                async for request in self.get_request(requests, request_rate, send_times):
+                    task = asyncio.create_task(self.async_send_request(**request))
+                    tasks.append(task)
+
+            if exp_time != float("inf"):
+                remaining_time = max(0.5, exp_time - (time.time() - self.current_experiment_state_time))
+                print(f"Waiting for remaining time: {remaining_time}")
+                done, pending = await asyncio.wait(tasks, timeout=remaining_time)
+            else:
+                done, pending = await asyncio.wait(tasks)
+
+            for task in pending:
+                task.cancel()
+            self.num_iters = self.request_router.custom_selector.cache.num_iters // 2
+            return [task.result() for task in done]
+
+        except asyncio.CancelledError:
+            # Cancel all tasks if a CancelledError occurs
+            for task in tasks:
+                task.cancel()
+            # Wait for all tasks to be cancelled
+            await asyncio.gather(*tasks, return_exceptions=True)
+            # Raise a single CancelledError
+            raise
+
+
+    async def send_request_sequentially(self, requests, request_rate: float, routine):
+        """Send requests for a single group, sequentially according to the request rate."""
+        interval = 0 if request_rate == float('inf') else 1.0 / request_rate
+
+        for request in requests:
+            start_time = time.time()
+            await routine(**request)  # Execute the request and wait for it to complete.
+            elapsed_time = time.time() - start_time
+
+            if elapsed_time < interval:
+                await asyncio.sleep(interval - elapsed_time)
 
     async def async_send_request(
         self, text=None, sampling_params=None, input_ids=None, rid=None,
@@ -361,6 +386,7 @@ class ModelDetails:
         output.prompt_len = len(input_ids)
         output.send_out_time = start_time - self.current_experiment_state_time
         output.runtime_selected = runtime_idx
+        output.num_gpus = len(self.runtimes)
 
 
 
