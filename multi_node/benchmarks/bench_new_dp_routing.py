@@ -266,6 +266,12 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             torch.cuda.empty_cache()
             gc.collect()
             time.sleep(10)
+            import statistics
+            print(statistics.mean(model_details.scheduling_overheads))
+            print(statistics.median(model_details.scheduling_overheads))
+            print(statistics.stdev(model_details.scheduling_overheads))
+            print(model_details.num_iters)
+            exit(0)
 
 
 if __name__ == "__main__":

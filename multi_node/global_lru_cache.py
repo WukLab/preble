@@ -150,7 +150,9 @@ class LPRadixCache:
         
         context = zmq.asyncio.Context(1)
         self.recv_from_detokenizer = context.socket(zmq.PULL)
-        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10100")
+        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10200")
+
+        self.num_iters = 0
 
     ##### Public API #####
 
@@ -500,6 +502,7 @@ class LPRadixCache:
     async def update_loop(self):
         while True:
             recv_obj = await self.recv_from_detokenizer.recv_pyobj()
+            self.num_iters += 1
 
     def get_evictable_size(self, runtime_id):
         nodes = self._collect_nodes()

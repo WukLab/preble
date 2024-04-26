@@ -183,7 +183,7 @@ class ModelRpcServer:
         self.schedule_waiting_overhead = 0
         self.recomputed_tokens = 0
         self.total_forwarded_tokens = 0
-        self.iter_cnt = -1
+        self.iter_cnt = 0
 
     def flush_cache(self):
         if self.num_waiting_reqs() == 0 and (
@@ -324,7 +324,6 @@ class ModelRpcServer:
             new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
             if (batch.token_to_kv_pool.available_size() < new_tokens 
                 and not batch.tree_cache.disable):
-                print("evicted")
                 batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.free)
             # 2. if not enough, evict running requests
             while batch.token_to_kv_pool.available_size() < new_tokens:
@@ -652,6 +651,8 @@ class ModelRpcServer:
                         batch, ForwardMode.EXTEND
                     )
                     end_event.record()
+                    self.iter_cnt += 1
+                    print(f"Iter count: {self.iter_cnt}")
                     next_token_ids, _ = batch.sample(logits)
                 else:
                     vocab_size = self.model_config.vocab_size
@@ -1108,6 +1109,8 @@ class ModelRpcServer:
                         normalized_logprobs,
                         last_logprobs,
                     ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
+                    self.iter_cnt += 1
+                    print(f"Iter count: {self.iter_cnt}")
                     if prefill_logprobs is not None:
                         logprobs = prefill_logprobs.cpu().tolist()
                         normalized_logprobs = normalized_logprobs.cpu().tolist()
@@ -1215,6 +1218,8 @@ class ModelRpcServer:
                 logits, (_, _, last_logprobs) = self.model_runner.forward(
                     batch, ForwardMode.EXTEND
                 )
+                self.iter_cnt += 1
+                print(f"Iter count: {self.iter_cnt}")
                 end_event.record()
                 next_token_ids, _ = batch.sample(logits)
             else:
@@ -1348,6 +1353,8 @@ class ModelRpcServer:
                 logits, (_, _, last_logprobs) = self.model_runner.forward(
                     batch, ForwardMode.DECODE
                 )
+                self.iter_cnt += 1
+                print(f"Iter count: {self.iter_cnt}")
                 end_event.record()
                 next_token_ids, _ = batch.sample(logits)
             else:

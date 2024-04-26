@@ -51,6 +51,7 @@ class RouterManager:
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}
 
     async def loop_for_forward(self):
+        i = 1
         while True:
             next_step_input = list(self.recv_reqs)
             self.recv_reqs = []
@@ -71,6 +72,7 @@ class RouterManager:
             if not slept:
                 await asyncio.sleep(0.0006)
             
+            i += 1
             # await self.recv_from_sched.recv_pyobj()
 
     async def loop_for_push_request(self):

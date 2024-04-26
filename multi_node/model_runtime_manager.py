@@ -151,9 +151,9 @@ class ModelDetails:
         self.current_experiment_state_time = None
         self.simulate = simulate
 
-        ##
-        # self.request_router.custom_selector.cache => LPRadixCache
-        ##
+        self.scheduling_overheads = []
+        self.num_iters = 0
+
 
     # TODO Load runtimes in parallel to reduce cold start time
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
@@ -328,6 +328,7 @@ class ModelDetails:
                 done, pending = await asyncio.wait(tasks)
             for task in pending:
                 task.cancel()
+            self.num_iters = self.request_router.custom_selector.cache.num_iters // 2
             return [task.result() for task in done]
         except asyncio.CancelledError:
             # Cancel all tasks if a CancelledError occurs
@@ -347,6 +348,7 @@ class ModelDetails:
             self.select_runtime_with_identifiers, text, sampling_params, input_ids
         )
         scheduling_overhead = time.time() - start_time
+        self.scheduling_overheads.append(scheduling_overhead)
 
         api_url = self.runtimes[runtime_idx].generate_url
         # If request in sampling_params pop it

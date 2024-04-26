@@ -46,6 +46,7 @@ server_args = {
     'gpu_configs': gpu_configs,
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
+    'stream_interval': 1,
     'context_length': 32768,
     "enable_flashinfer": False,
     "chunk_prefill_budget": 2048,

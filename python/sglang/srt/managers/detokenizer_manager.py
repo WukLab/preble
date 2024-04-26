@@ -25,7 +25,7 @@ class DetokenizerManager:
         self.send_to_tokenizer.connect(f"tcp://127.0.0.1:{port_args.tokenizer_port}")
 
         self.send_to_sched = context.socket(zmq.PUSH)
-        self.send_to_sched.connect(f"tcp://127.0.0.1:10100")
+        self.send_to_sched.connect(f"tcp://127.0.0.1:10200")
 
         self.tokenizer = get_tokenizer(
             server_args.tokenizer_path,
