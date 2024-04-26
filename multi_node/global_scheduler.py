@@ -117,7 +117,7 @@ class TTFTWindowedOverloadedDetector:
         return avg_second_half >= 2 * avg_first_half
 
 
-class HistogramBasedRecompV2:
+class GlobalScheduler:
     def __init__(self, num_nodes=2, enable_eviction=False) -> None:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}

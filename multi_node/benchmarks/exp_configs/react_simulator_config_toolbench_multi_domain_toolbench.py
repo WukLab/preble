@@ -28,33 +28,40 @@ ssh_config_08 = {
     "node_name": "08",
 }
 
+server_args = {
+    'log_prefix_hit': True,
+    'mem_fraction_static': 0.8,
+    'context_length': 8182,
+    "enable_flashinfer": True,
+    "chunk_prefill_budget": 1024
+}
 # GPU Configuration
 gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=4, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=5, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=6, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=7, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=8, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=9, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=8, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=9, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=10, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=11, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=10, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=11, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=12, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=13, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=12, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=13, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
-    GPUConfig(gpu_id=14, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=15, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=14, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=15, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
 
     # GPUConfig(gpu_id=8, url=None, use_ssh=False, ssh_config=ssh_config_08),
@@ -71,15 +78,6 @@ gpu_configs = [
 ]
 add_simulation_to_gpu_config(gpu_configs)
 
-server_args = {
-    "model_path": model_name,
-    'gpu_configs': gpu_configs,
-    'log_prefix_hit': True,
-    'mem_fraction_static': 0.8,
-    'context_length': 8182,
-    "enable_flashinfer": True,
-    "chunk_prefill_budget": 1024
-}
 
 # Workload Configuration
 # configurations_to_test = [
@@ -126,12 +124,12 @@ selectors_configs = [
 
 
 exp_args = MajorExperimentArgs(
-    server_args,
-    workload_configs,
-    gpu_configs,
+    workload_configs=workload_configs,
+    gpu_configs=gpu_configs,
     simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
+    model_name=model_name
 )
 
 if __name__ == "__main__":

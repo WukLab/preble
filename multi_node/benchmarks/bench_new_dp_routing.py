@@ -183,9 +183,9 @@ def regist_selector(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
             )
-        elif custom_policy == CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2:
-            from histogram_based_scheduling_v2 import HistogramBasedRecompV2
-            mem_waste = HistogramBasedRecompV2(num_nodes=len(model_details.runtimes), enable_eviction=True)
+        elif custom_policy == CustomPolicyType.GlobalScheduler:
+            from multi_node.global_scheduler import GlobalScheduler
+            mem_waste = GlobalScheduler(num_nodes=len(model_details.runtimes), enable_eviction=True)
             model_details.update_runtime_selection_policy(
                 DataParallelRuntimeSelectionPolicy.CUSTOM,
                 custom_runtime_selector=mem_waste,
@@ -223,7 +223,7 @@ def load_and_run_benchmark(
 
     tic_benchmark = time.time()
     results: List[RequestFuncOutput] = model_details.get_experiment_results(
-        requests, rps, exp_time, workload_config.send_out_times
+        workload_config
     )
     overall_latency = time.time() - tic_benchmark
 
@@ -255,7 +255,7 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
         # dataloader = RandomDataLoader(num_workloads, num_requests, tokenizer, LoadDistribution.EVEN, distribution_of_non_shared, 1)
         for selector_config in exp_args.selector_configs:
             model_details = loader.load_model(
-                **exp_args.runtime_args
+                model_path=exp_args.model_name, gpu_configs=gpu_configs
             )  # TODO: clear cache instead of reload
             policy, custom_policy, custom_msg = selector_config
             load_and_run_benchmark(model_details, workload_config, policy, custom_policy, custom_msg, gpu_configs=gpu_configs)
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     logging.info(f"Starting Experiment at {start_date}")
     # model_name = "mistralai/Mistral-7B-v0.1"
     # model_name = "lmsys/vicuna-13b-v1.5"
-    model_name = exp_args.runtime_args["model_path"]
+    model_name = exp_args.model_name
     logging.info(f"Model Name: {model_name}")
 
     test_oracle_random_basic(exp_args)

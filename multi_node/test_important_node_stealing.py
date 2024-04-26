@@ -1,4 +1,4 @@
-from histogram_based_scheduling_v2 import SlidingWindowHistogram, LPTreeNode, HistogramBasedRecompV2, TTFTWindowedOverloadedDetector
+from histogram_based_scheduling_v2 import SlidingWindowHistogram, LPTreeNode, GlobalScheduler, TTFTWindowedOverloadedDetector
 import unittest
 from datetime import datetime, timedelta
 
@@ -24,7 +24,7 @@ class TestGPULoadBalancing(unittest.TestCase):
         gpu_allocations = {}
         histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=gpu_allocations, num_gpus=num_gpus)
 
-        scheduler = HistogramBasedRecompV2(num_nodes=2, enable_eviction=False)
+        scheduler = GlobalScheduler(num_nodes=2, enable_eviction=False)
         node0_gpu0 = self._create_node(load=50, num_tokens=50, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         node1_gpu0 = self._create_node(load=5,  num_tokens=10, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         node2_gpu1 = self._create_node(load=20,  num_tokens=10, gpus={1},histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
@@ -46,7 +46,7 @@ class TestGPULoadBalancing(unittest.TestCase):
         gpu_allocations = {}
         histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=gpu_allocations, num_gpus=num_gpus)
 
-        scheduler = HistogramBasedRecompV2(num_nodes=2, enable_eviction=False)
+        scheduler = GlobalScheduler(num_nodes=2, enable_eviction=False)
         node0_gpu0 = self._create_node(load=25, num_tokens=50, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         node1_gpu1 = self._create_node(load=20, num_tokens=10, gpus={1}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
 
@@ -65,7 +65,7 @@ class TestGPULoadBalancing(unittest.TestCase):
         gpu_allocations = {}
         histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=gpu_allocations, num_gpus=num_gpus)
 
-        scheduler = HistogramBasedRecompV2(num_nodes=2, enable_eviction=False)
+        scheduler = GlobalScheduler(num_nodes=2, enable_eviction=False)
         node0_gpu0 = self._create_node(load=62, num_tokens=50, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         node1_gpu1 = self._create_node(load=10, num_tokens=10, gpus={1}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         
@@ -106,7 +106,7 @@ class TestGPULoadBalancing(unittest.TestCase):
         gpu_allocations = {}
         histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=gpu_allocations, num_gpus=num_gpus)
 
-        scheduler = HistogramBasedRecompV2(num_nodes=3, enable_eviction=False)
+        scheduler = GlobalScheduler(num_nodes=3, enable_eviction=False)
 
         node0_gpu0 = self._create_node(load=50, num_tokens=50, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
         node1_gpu0 = self._create_node(load=10, num_tokens=20, gpus={0}, histogram=histogram, per_gpu_load=per_gpu_load, gpu_allocations=gpu_allocations)
