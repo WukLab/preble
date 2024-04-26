@@ -34,7 +34,6 @@ def stream_logger(node_name, stream):
 
 class VLLMRuntimeManager:
     def __init__(self, model_path, ssh_config, gpu, vllm_port=8080,
-                 enable_prefix_caching=False,
                  mem_fraction_static=0.9, 
                  **kwargs,   # additional args not specific to vllm
     ):
@@ -44,7 +43,7 @@ class VLLMRuntimeManager:
         assert self.ssh_config
         self.ssh_client = self.initialize_ssh_client()
         self.node_name = self.ssh_config.get("node_name")
-        self.enable_prefix_caching = enable_prefix_caching
+        self.enable_prefix_caching = True
         if self.enable_prefix_caching:
             logger.info("Enabling prefix caching ...")
         self.gpu_memory_utilization = mem_fraction_static
@@ -54,6 +53,8 @@ class VLLMRuntimeManager:
         if 'context_length' in kwargs:
             kwargs.pop('context_length')
             logger.warning("context_length is not supported in VLLMRuntimeManager")
+        
+
         self.port = vllm_port
         self.start_remote_runtime(port=vllm_port)
         # Initialize server with running these configs

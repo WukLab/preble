@@ -48,7 +48,7 @@ def add_simulation_to_gpu_config(gpu_configs):
 
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
-log_file_path = 'logs/debug/exp.log'
+log_file_path = 'logs/debug/with_and_without_rebalancing.log'
 
 # log_file_path = 'cp_debug/4r_react_cp_512_baseline_with_fcfs/exp.log'
 # log_file_path = 'hc_integration/4r_react_20_0.285_1350_9_[8,16]_cp_512/exp.log'
@@ -65,12 +65,21 @@ log_file_path = 'logs/debug/exp.log'
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 
+# SGLang Runtime Configuration
+server_args = {
+    'log_prefix_hit': True,
+    'mem_fraction_static': 0.8,
+    'context_length': 33000,
+    'enable_flashinfer': True,
+    'schedule_heuristic': 'fcfs',
+    'chunk_prefill_budget': 512,
+}
 # GPU Configuration
 gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -106,17 +115,6 @@ add_simulation_to_gpu_config(gpu_configs)
 # for config in gpu_configs[2:]:
 #     config.regist_simulator_config(mistral_7b_A6000_sglang_tp(2.0), 75 << 30)
 
-# SGLang Runtime Configuration
-server_args = {
-    "model_path": model_name,
-    'gpu_configs': gpu_configs,
-    'log_prefix_hit': True,
-    'mem_fraction_static': 0.8,
-    'context_length': 33000,
-    'enable_flashinfer': True,
-    'schedule_heuristic': 'fcfs',
-    # 'chunk_prefill_budget': 512,
-}
 
 # Workload Configuration
 exp_time = float("inf")
@@ -139,9 +137,11 @@ workload_configs = create_mixture_react(configurations_to_test, model_name, exp_
 # Selector Configuration
 # Format {policy - custom policy - message}
 selectors_configs = [
-    (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, ''),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, ''),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'with_rebalancing'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'without_rebalancing'),
+
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, ''),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'very_long_window')
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE_HOT_COLD, "3r_2h_1c_load_dist_1_1_10"),
@@ -153,10 +153,10 @@ selectors_configs = [
 ]
 
 exp_args = MajorExperimentArgs(
-    server_args,
-    workload_configs,
-    gpu_configs,
+    workload_configs=workload_configs,
+    gpu_configs=gpu_configs,
     simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
+    model_name=model_name
 )

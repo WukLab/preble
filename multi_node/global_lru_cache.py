@@ -38,7 +38,7 @@ class LpNode:
 
 
 class LPTreeNode:
-    def __init__(self, num_nodes=2):
+    def __init__(self, num_nodes):
         self.id = uuid4()
         self.children = defaultdict(LPTreeNode)
         self.parent: Optional[LPTreeNode] = None
@@ -398,7 +398,7 @@ class LPRadixCache:
                 )
 
         if len(key):
-            new_node = LPTreeNode()
+            new_node = LPTreeNode(num_nodes=self.num_gpus)
             new_node.cached_gpus = set()
             new_node.evicted_gpus = set()
             new_node.parent = node
