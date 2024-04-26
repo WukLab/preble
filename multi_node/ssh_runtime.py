@@ -107,6 +107,7 @@ class SSHRuntimeManager:
             raise Exception("Failed to detect server startup within the timeout period.")
         self.url = f"http://{self.ssh_config['hostname']}:{port}"
         self.generate_url = f"{self.url}/generate"
+        self.hit_ratio_url = f"{self.url}/windowed_prefix_hit_ratio"
 
         # Wait for the /model_info to return valid json for 5 attempts
         for _ in range(5):

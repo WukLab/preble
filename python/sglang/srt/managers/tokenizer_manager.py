@@ -24,7 +24,8 @@ from sglang.srt.managers.io_struct import (
     TokenizedGenerateReqInput,
     SchedulingMetricsReqInput,
     SchedulingMetricsOut,
-    DumpTrace
+    DumpTrace,
+    PrefixHitInspect,
 )
 from sglang.srt.mm_utils import expand2square, process_anyres_image
 from sglang.srt.sampling_params import SamplingParams
@@ -221,6 +222,18 @@ class TokenizerManager:
     
     async def dump_prefix_hit_trace(self, fpath: str):
         await self.send_to_router.send_pyobj(DumpTrace(fpath))
+    
+    async def handle_windowed_prefix_hit_ratio(self):
+        rid = str(uuid.uuid4())
+        await self.send_to_router.send_pyobj(PrefixHitInspect(random_id=rid, windowed=True))
+        event = asyncio.Event()
+        state = ReqState([], False, event)
+        self.rid_to_state[rid] = state
+        await event.wait()
+        result = state.out_list[-1]
+        del self.rid_to_state[rid]
+        event.clear()
+        return result
 
     async def generate_request(self, obj: GenerateReqInput):
         if self.to_create_loop:
@@ -367,6 +380,15 @@ class TokenizerManager:
                     "matching_overhead": recv_obj.matching_overhead,
                 }
                 state = self.rid_to_state[recv_obj.rid]
+                state.out_list.append(out_dict)
+                state.finished = True
+                state.event.set()
+            elif isinstance(recv_obj, PrefixHitInspect):
+                out_dict = {
+                    'windowed': recv_obj.windowed,
+                    'hit_ratio': recv_obj.hit_ratio,
+                }
+                state = self.rid_to_state[recv_obj.random_id]
                 state.out_list.append(out_dict)
                 state.finished = True
                 state.event.set()

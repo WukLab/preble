@@ -232,6 +232,14 @@ async def dump_prefix_hit_trace(fpath: str):
     await tokenizer_manager.dump_prefix_hit_trace(fpath)
     return Response(status_code=200)
 
+# {
+#     'windowed': recv_obj.windowed,
+#     'hit_ratio': recv_obj.hit_ratio,
+# }
+@app.get('/windowed_prefix_hit_ratio')
+async def windowed_prefix_hit_ratio():
+    return await tokenizer_manager.handle_windowed_prefix_hit_ratio()
+
 @app.post("/v1/completions")
 async def v1_completions(raw_request: Request):
     request_json = await raw_request.json()
@@ -710,6 +718,9 @@ class Runtime:
         self.url = self.server_args.url()
         self.generate_url = (
             f"http://{self.server_args.host}:{self.server_args.port}/generate"
+        )
+        self.hit_ratio_url = (
+            f"http://{self.server_args.host}:{self.server_args.port}/windowed_prefix_hit_ratio" 
         )
 
         self.pid = None

@@ -193,6 +193,7 @@ class HistogramBasedRecompV2:
         if node.has_cached_gpu(gpu_id):
             return 0
         else:
+            # breakpoint()
             return node.num_tokens * node.ref_counter[gpu_id] + self.get_recomp_cost_basic(node.parent, gpu_id)
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):

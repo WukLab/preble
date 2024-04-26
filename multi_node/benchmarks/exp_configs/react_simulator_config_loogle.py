@@ -16,10 +16,11 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log"
+# log_file_path = "loogle_whole_alg/exp.log"
+log_file_path = "debug/hc_from_real.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 300
+exp_time = float('inf')
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -48,7 +49,8 @@ server_args = {
     'mem_fraction_static': 0.8,
     'context_length': 32768,
     "enable_flashinfer": True,
-    "chunk_prefill_budget": 2048,
+    # "chunk_prefill_budget": 2048,
+    # 'schedule_heuristic': 'fcfs',
 }
 
 # Workload Configuration
@@ -56,7 +58,7 @@ server_args = {
 #     [200, 400, 4],
 # ]s
 configurations_to_test = [
-    [ 24, 393, 0.4],
+    [ 24, 393, 0.7],
     # [ 24, 393, 0.5]
 ]
 workload_configs = create_loogle_dataset(
@@ -77,10 +79,10 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
-    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2_without_waiting_queue'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
         # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEviction, 'recomp_scheduler_with_eviction'),
@@ -130,7 +132,7 @@ exp_args = MajorExperimentArgs(
     server_args,
     workload_configs,
     gpu_configs,
-    simulate=True,
+    simulate=False,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
 )

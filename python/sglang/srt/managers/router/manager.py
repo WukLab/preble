@@ -11,7 +11,7 @@ from sglang.srt.managers.router.model_rpc import ModelRpcClient
 from sglang.srt.managers.tokenizer_manager import ReqState
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
-from sglang.srt.managers.io_struct import SchedulingMetricsReqInput, MigrationReq, DumpTrace
+from sglang.srt.managers.io_struct import SchedulingMetricsReqInput, MigrationReq, DumpTrace, PrefixHitInspect
 from sglang.srt.managers.router.model_runner import GPUConfig
 import time
 
@@ -111,9 +111,13 @@ class RouterManager:
             if isinstance(recv_req, DumpTrace):
                 await self.dump_trace(recv_req)
                 continue
+            if isinstance(recv_req, PrefixHitInspect):
+                recv_req.hit_ratio = self.model_client.model_server.get_hit_ratio()
+                await self.send_to_tokenizer.send_pyobj(recv_req)
+                continue
             recv_req.append_to_queue_time = time.time()
             self.recv_reqs.append(recv_req)
-    
+
     async def dump_trace(self, recv_req: DumpTrace):
         print(f"dumping trace to: {recv_req.fpath}")
         await self.model_client.dump_prefix_hit_trace(recv_req.fpath)

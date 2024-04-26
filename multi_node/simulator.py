@@ -50,7 +50,7 @@ logging.getLogger("filelock").setLevel(logging.WARNING)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 def random_uuid_string():
     return str(uuid.uuid4().hex)
@@ -85,6 +85,7 @@ class ServerRuntimeSimulator:
         freeze: bool = False,
         log_prefix_hit: bool = False,
         chunk_prefill_budget: int = 0,
+        hit_trace_window_size: int = 30 # seconds
     ):
         host = "0.0.0.0"
         port, additional_ports = 0, [0] * 100
@@ -116,9 +117,11 @@ class ServerRuntimeSimulator:
             disable_disk_cache=disable_disk_cache,
             api_key=api_key,
             chunk_prefill_budget=chunk_prefill_budget,
+            hit_trace_window_size=hit_trace_window_size,
         )
         self.server_args = server_args
         self.url = random_uuid_string()
+        logger.info(server_args)
         
         port_args = PortArgs(
             tokenizer_port=server_args.additional_ports[0],
@@ -278,7 +281,8 @@ class Simulation:
         logging.info(f"Scheduling waiting overhead(s): {[r.model_rpc.schedule_waiting_overhead for r in self.runtimes]}"
                      f"total schedule overhead(s): {[r.model_rpc.total_scheduling_overhead for r in self.runtimes]}")
         logging.info(f'total recomputed tokens: {[r.model_rpc.recomputed_tokens for r in self.runtimes]}, '
-                     f'total forwarded tokens: {[r.model_rpc.total_forwarded_tokens for r in self.runtimes]}')
+                     f'total forwarded tokens: {[r.model_rpc.total_forwarded_tokens for r in self.runtimes]}, '
+                     f'total cache hit tokens: {[r.model_rpc.total_cache_hit_tokens for r in self.runtimes]}')
         with open("output.json", "w") as f:
             f.write(json.dumps(all_req_outputs, indent=4))
         return [rq for rq in self.request_output.values()]

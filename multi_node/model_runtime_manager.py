@@ -27,26 +27,30 @@ from sglang.srt.managers.io_struct import BatchStrOut
 import torch
 import logging
 
+logger = logging.getLogger(__name__)
+
 def random_uuid_string():
     return str(uuid.uuid4().hex)
 
 @dataclass
 class EndpointRuntimeInterface:
+    hit_ratio: float = 0.0
+    
     def __post_init__(self):
         self.runtime_id = str(uuid.uuid4())
         assert self.url is not None
         self._generate_url = f"{self.url}/generate" \
             if getattr(self, "_generate_url", None) is None \
                 else self._generate_url
-
+    
     @property
     def generate_url(self):
         return self._generate_url
-
+    
     @generate_url.setter
     def generate_url(self, url):
         self._generate_url = url
-
+    
     @property
     def flush_cache_url(self):
         return f"{self.url}/flush_cache"
@@ -153,7 +157,7 @@ class ModelDetails:
         # Potentially extract this to the parent model node loder to effeciently load multiple models in parallel
     # Send context-length like params from input
     def load_runtimes(self, model_path, gpu_configs, **kwargs):
-        logging.info(kwargs)
+        logger.info(kwargs)
         def load_runtime(config: GPUConfig):
             runtime: EndpointRuntimeInterface
             gpu_id = config.gpu_id
@@ -199,11 +203,11 @@ class ModelDetails:
         for config in gpu_configs:
             load_runtime(config)
 
-    def select_runtime_with_identifiers(self, text, sampling_params, input_ids) -> Tuple[int, str]:
+    def select_runtime_with_identifiers(self, text, sampling_params, input_ids, *args, **kwargs) -> Tuple[int, str]:
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         request_id = random_uuid_string()
         # For now ignore sampling_params request_id
-        runtime_idx = self.request_router.select_runtime(text, experiment_id, request_id, input_ids, sampling_params)
+        runtime_idx = self.request_router.select_runtime(text, experiment_id, request_id, input_ids, sampling_params, *args, **kwargs)
         return runtime_idx, request_id
 
     def finish_request(self, text, sampling_params, input_ids, func_output: RequestFuncOutput) -> EndpointRuntimeInterface:
@@ -270,7 +274,13 @@ class ModelDetails:
             simulator.start_model_forwarding_loop()
             return simulator.run()
         else:
-            results: List[RequestFuncOutput] = asyncio.run(
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            for i in range(len(self.runtimes)):
+                loop.create_task(self.loop_for_hit_ratio_update(i))
+                time.sleep(1/len(self.runtimes))
+                
+            results: List[RequestFuncOutput] = loop.run_until_complete(
                 self.async_generate_batch_request_per_sec(
                     requests,
                     request_rate,
@@ -280,6 +290,19 @@ class ModelDetails:
                 )
             )
         return results
+    
+    async def update_hit_ratio(self, runtime_id):
+        runtime: EndpointRuntimeInterface = self.runtimes[runtime_id]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(runtime.hit_ratio_url) as response:
+                obj = await response.json()
+                runtime.hit_ratio = obj["hit_ratio"]
+                # logger.info(f'GPU: {runtime_id} hit_ratio = {runtime.hit_ratio}')
+    
+    async def loop_for_hit_ratio_update(self, runtime_id):
+        while True:
+            await asyncio.sleep(0.5)
+            await self.update_hit_ratio(runtime_id)
 
     async def async_generate_batch_request_per_sec(
         self,
@@ -335,8 +358,12 @@ class ModelDetails:
     ) -> RequestFuncOutput: 
         start_time = time.time()
         st = time.perf_counter()
+        hit_rates = [r.hit_ratio for r in self.runtimes]
+        highest_idx = int(np.argmax(hit_rates))
+        if hit_rates[highest_idx] < 0.7:
+            highest_idx = None
         runtime_idx, request_id = await asyncio.to_thread(
-            self.select_runtime_with_identifiers, text, sampling_params, input_ids
+            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx
         )
         scheduling_overhead = time.time() - start_time
 
