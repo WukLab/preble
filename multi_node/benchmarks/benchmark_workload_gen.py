@@ -1124,3 +1124,33 @@ class ToolQALoader(DataLoader):
         self.add_input_token_ids_to_workload(requests)
         return requests
 
+
+class VirtualEnvLoader(DataLoader):
+    """DataLoader for VirtualEnv dataset."""
+
+    def __init__(self, data_path: str, 
+                 tokenizer: PreTrainedTokenizer):
+        super().__init__(data_path, None, None, tokenizer)
+        self.data = self.read_data(data_path)
+
+    def read_data(self, data_path: str):
+        with open(data_path, 'r') as f:
+            return json.load(f)
+
+    def generate_workload(self, k: int = None):
+        requests = []
+        random.shuffle(self.data)
+        for i, sample in enumerate(self.data):
+            if k is not None and len(requests) >= k:
+                break
+            for turn in sample:
+                requests.append({
+                    'text': turn['prompt'],
+                    'sampling_params': {
+                        'temperature': 0.0,
+                        'max_new_tokens': turn['usage']['completion_tokens'],
+                    },
+                })
+        
+        self.add_input_token_ids_to_workload(requests)
+        return requests[:k]
