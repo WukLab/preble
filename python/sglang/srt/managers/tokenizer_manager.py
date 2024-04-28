@@ -224,6 +224,8 @@ class TokenizerManager:
         await self.send_to_router.send_pyobj(DumpTrace(fpath))
     
     async def handle_windowed_prefix_hit_ratio(self):
+        if not self.server_args.report_hit_ratio:
+            return {"windowed": True, "hit_ratio": 0.0}
         rid = str(uuid.uuid4())
         await self.send_to_router.send_pyobj(PrefixHitInspect(random_id=rid, windowed=True))
         event = asyncio.Event()

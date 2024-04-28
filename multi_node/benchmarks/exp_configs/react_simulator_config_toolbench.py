@@ -16,10 +16,10 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "toolbench/random_vs_round_robin_vs_mem_basic_v2.log"
+log_file_path = "perf_logs/toolbench/4r_round_robin_vs_ours_200_7200_24.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = 200
+exp_time = float('inf')
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -27,13 +27,23 @@ ssh_config_08 = {
     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
     "node_name": "08",
 }
-
+server_args = {
+    'log_prefix_hit': True,
+    'mem_fraction_static': 0.8,
+    'context_length': 4096,
+    "enable_flashinfer": True,
+    'schedule_heuristic': 'lpm',
+    # "chunk_prefill_budget": 512,
+    'report_hit_ratio': True,
+}
 # GPU Configuration
 gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08),
@@ -47,22 +57,16 @@ gpu_configs = [
 ]
 add_simulation_to_gpu_config(gpu_configs)
 
-server_args = {
-    "model_path": model_name,
-    'gpu_configs': gpu_configs,
-    'log_prefix_hit': True,
-    'mem_fraction_static': 0.8,
-    'context_length': 4096,
-    "enable_flashinfer": True,
-    "chunk_prefill_budget": 512,
-}
+
 
 # Workload Configuration
 # configurations_to_test = [
 #     [200, 400, 4],
 # ]
 configurations_to_test = [
-    [200, 400, 12],
+    # [200, 3600, 12],
+    # [800, 7200, 24],
+    [200, 7200, 24],
     # [200, 400, 12],
 ]
 workload_configs = create_toolbench_data_loader(
@@ -70,7 +74,7 @@ workload_configs = create_toolbench_data_loader(
     model_name, 
     exp_time, 
     data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
-    load_dist=LoadDistribution.ALL,
+    load_dist=LoadDistribution.EVEN,
     # k = 1.1
 )
 
@@ -82,9 +86,11 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'basic_mem_scheduler'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
-    (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutRebalancing, ''),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'fcfs_rebalance_cp512_load_threshold_1.4'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULER, 'greedy_v3'),
@@ -101,7 +107,7 @@ selectors_configs = [
     # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
     # # # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'tb_oracle_b'),
 
-    (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
+    # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GREEDY_LP, 'greedy_v3'),
@@ -122,12 +128,12 @@ selectors_configs = [
 
 
 exp_args = MajorExperimentArgs(
-    server_args,
     workload_configs,
     gpu_configs,
-    simulate=False,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
+    model_name=model_name,
 )
 
 if __name__ == "__main__":

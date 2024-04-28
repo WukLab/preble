@@ -9,19 +9,26 @@ import heapq
 from collections import deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
+import logging
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+
+logger = logging.getLogger(__name__)
 
 class SlidingWindowHistogram:
     def __init__(self, window_duration: timedelta, gpu_allocations, num_gpus=2):
         self.window_duration = window_duration
         self.gpu_allocations = gpu_allocations
         self.histogram = defaultdict(int)
+        self.node_to_count = defaultdict(int)
+
         self.timestamps: List[Tuple[datetime, LPTreeNode, LPTreeNode]] = []
         self.num_gpus = num_gpus
 
     def update(self, timestamp, node: LPTreeNode, leaf_node: LPTreeNode):
         self.timestamps.append((timestamp, node, leaf_node))
         self.histogram[node] += 1 * leaf_node.context_length
+        self.node_to_count[node] += 1
+
         self._remove_old_entries(timestamp)
 
     def _remove_old_entries(self, current_timestamp):
@@ -29,13 +36,16 @@ class SlidingWindowHistogram:
         while self.timestamps and self.timestamps[0][0] < window_start:
             timestamp, node, leaf_node = self.timestamps.pop(0)
             self.histogram[node] -= 1 * leaf_node.context_length
+            self.node_to_count[node] -= 1
             if self.histogram[node] <= 0:
                 del self.histogram[node]
+                del self.node_to_count[node]
                 self.gpu_allocations[node] = set() # Reset the gpu allocation outside the time window
 
     def rename_node(self, old_node, new_node):
         if old_node in self.histogram:
             self.histogram[new_node] = self.histogram.pop(old_node)
+            self.node_to_count[new_node] = self.node_to_count.pop(old_node)
             timestamps = []
             for timestamp, important_node, leaf_node in self.timestamps:
                 if important_node == old_node:
@@ -50,6 +60,16 @@ class SlidingWindowHistogram:
         allocation = [0 for _ in range(self.num_gpus)]
         node: LPTreeNode
         for node, cost in self.histogram.items():
+            for gpu in self.gpu_allocations.get(node, {}):
+                allocation[gpu] += cost / len(self.gpu_allocations.get(node))# potentionally divide by length of node.cached_gpus here
+        return allocation
+
+    def current_allocation_per_gpu_with_atleast_min_load(self, min_load=2):
+        allocation = [0 for _ in range(self.num_gpus)]
+        node: LPTreeNode
+        for node, cost in self.histogram.items():
+            if self.node_to_count[node] < min_load:
+                continue
             for gpu in self.gpu_allocations.get(node, {}):
                 allocation[gpu] += cost / len(self.gpu_allocations.get(node))# potentionally divide by length of node.cached_gpus here
         return allocation
@@ -117,8 +137,8 @@ class TTFTWindowedOverloadedDetector:
         return avg_second_half >= 2 * avg_first_half
 
 
-class HistogramBasedRecompV2:
-    def __init__(self, num_nodes=2, enable_eviction=False) -> None:
+class GlobalScheduler:
+    def __init__(self, num_nodes=2, enable_eviction=False, enable_rebalancing=True) -> None:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
@@ -133,12 +153,14 @@ class HistogramBasedRecompV2:
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus)
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
-        self.HIGH_LOAD_THRESHOLD = 1.5
+        self.HIGH_LOAD_THRESHOLD = 1.4
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
+        self.enable_rebalancing = enable_rebalancing
 
     # Consider Split nodes
     def handle_split_nodes_gpu_allocations(self, split_nodes, gpu_allocations):
         for child_node, new_node in split_nodes.items():
+            # FIXME: this should be a deepcopy
             gpu_allocations[new_node] = gpu_allocations[child_node].copy()
 
     def handle_split_node_histogram(self, split_nodes):
@@ -212,7 +234,6 @@ class HistogramBasedRecompV2:
             # Remove all of it's children as well?
         return len(node.value)
 
-
     def handle_eviction(self, runtime_selected):
         current_max_tokens = self.max_tokens_gpu[runtime_selected]
         assert self.cache.allocated_size(runtime_selected) >= 0
@@ -261,6 +282,9 @@ class HistogramBasedRecompV2:
 
             self.per_gpu_load[runtime_idx] += 1
             self.cache.update_allocated_size(leaf_node, runtime_idx)
+    
+            if self.enable_rebalancing:
+                self.handle_important_node_stealing(runtime_idx)
 
             self.counter += 1    
             if self.counter % 500:
@@ -289,8 +313,9 @@ class HistogramBasedRecompV2:
     def handle_important_node_stealing(self, scheduled_idx):
         if sum(self.per_gpu_load.values()) < 50:
             return
-        allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu()
+        allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu_with_atleast_min_load(2)
         allocations_with_indices = [(gpu_id, allocation_cost_per_gpu[gpu_id]) for gpu_id in range(len(allocation_cost_per_gpu))]
+        # logger.info(allocations_with_indices)
         allocations_with_indices = list(sorted(allocations_with_indices, key=lambda x: -x[1]))
         self.handle_important_node_stealing_recursive(allocations_with_indices)
 
@@ -302,22 +327,22 @@ class HistogramBasedRecompV2:
 
         if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
             return
-
-        if self.per_gpu_load[larger_device] < self.HIGH_LOAD_THRESHOLD * self.per_gpu_load[smaller_device]:
-            return
+        # if self.per_gpu_load[larger_device] < self.HIGH_LOAD_THRESHOLD * self.per_gpu_load[smaller_device]:
+        #     return
         
         # Use a min heap to manage node costs
         node_cost_for_gpu = []
         for node, cost in self.histogram.histogram.items():
             # If after adjusting the nodes, the allocation difference is valid, allow adjustment
-            if larger_device in self.gpu_allocations.get(node):
+            if larger_device in self.gpu_allocations.get(node) and self.histogram.node_to_count[node] > 1:
                 heapq.heappush(node_cost_for_gpu, (cost, node))
-        
+
         if len(node_cost_for_gpu) == 1:
             # Handle load splitting a single node in two
             cost, node = node_cost_for_gpu[0] 
             cost /= 2 # load is now split into two
-            if not node.has_cached_gpu(smaller_device) and self.overload_detector.is_node_overloaded(node, larger_device): 
+            # if not node.has_cached_gpu(smaller_device) and self.overload_detector.is_node_overloaded(node, larger_device): 
+            if smaller_device not in self.gpu_allocations[node] and self.overload_detector.is_node_overloaded(node, larger_device): 
                 # Copying the node to the smallest device will not change the larger allocation
                 larger_allocation_cost -= cost
                 smaller_device_allocation_cost += cost
@@ -329,8 +354,9 @@ class HistogramBasedRecompV2:
                 cost, node = heapq.heappop(node_cost_for_gpu)
 
                 assert self.is_large_node(node)
-                if node.has_cached_gpu(smaller_device): # Avoid copying an existing device
-                    continue
+                # if node.has_cached_gpu(smaller_device): # Avoid copying an existing device
+                # if smaller_device in self.gpu_allocations[node]:
+                #     continue
 
                 if larger_allocation_cost - cost < smaller_device_allocation_cost + cost:
                     break
@@ -338,6 +364,9 @@ class HistogramBasedRecompV2:
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node] = {smaller_device}
                 self.update_children(node, smaller_device)
+        
+                # if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
+                #     return
             # Upstead the sorted allocation based on the new smallest allocation
         allocation_cost_with_devices[0] = (larger_device, larger_allocation_cost)
         allocation_cost_with_devices[-1] = (smaller_device, smaller_device_allocation_cost)

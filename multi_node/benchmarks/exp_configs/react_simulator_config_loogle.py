@@ -16,11 +16,11 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-# log_file_path = "loogle_whole_alg/exp.log"
-log_file_path = "debug/hc_from_real.log"
+# log_file_path = "eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log"
+log_file_path = "perf_logs/loogle_24_393_0.7/exp.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-exp_time = float('inf')
+exp_time = float("inf")
 ssh_config_08 = {
     "hostname": "192.168.1.18",
     "username": "vikranth",
@@ -29,34 +29,24 @@ ssh_config_08 = {
     "node_name": "08",
 }
 
-# GPU Configuration
-gpu_configs = [
-    # GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config=ssh_config_08),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08),
-    # GPUConfig(gpu_id=4, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=5, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=6, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=7, url=None, use_ssh=False),
-]
-add_simulation_to_gpu_config(gpu_configs)
-
 server_args = {
-    "model_path": model_name,
-    'gpu_configs': gpu_configs,
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
     'context_length': 32768,
     "enable_flashinfer": True,
-    # "chunk_prefill_budget": 2048,
-    # 'schedule_heuristic': 'fcfs',
+    'schedule_heuristic': 'fcfs-mpq',
+    "chunk_prefill_budget": 2048,
+    'report_hit_ratio': True,
 }
 
-# Workload Configuration
-# configurations_to_test = [
-#     [200, 400, 4],
-# ]s
+# GPU Configuration
+gpu_configs = [
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False,runtime_args=server_args),
+]
+add_simulation_to_gpu_config(gpu_configs)
+
+
 configurations_to_test = [
     [ 24, 393, 0.7],
     # [ 24, 393, 0.5]
@@ -79,9 +69,9 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoad, 'recomp'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HiostgramBasedRecompLoadWithEvictionV2, 'load_eviction_v2_without_waiting_queue'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'fcfs_rebalance_cp2048_hot_cold_load_threshold_1.4'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'load_scheduler'),
@@ -129,12 +119,12 @@ selectors_configs = [
 
 
 exp_args = MajorExperimentArgs(
-    server_args,
-    workload_configs,
-    gpu_configs,
-    simulate=False,
+    workload_configs=workload_configs,
+    gpu_configs=gpu_configs,
+    simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
+    model_name=model_name
 )
 
 if __name__ == "__main__":

@@ -85,7 +85,8 @@ class ServerRuntimeSimulator:
         freeze: bool = False,
         log_prefix_hit: bool = False,
         chunk_prefill_budget: int = 0,
-        hit_trace_window_size: int = 30 # seconds
+        hit_trace_window_size: int = 30, # seconds
+        report_hit_ratio: bool = True,
     ):
         host = "0.0.0.0"
         port, additional_ports = 0, [0] * 100
@@ -118,6 +119,7 @@ class ServerRuntimeSimulator:
             api_key=api_key,
             chunk_prefill_budget=chunk_prefill_budget,
             hit_trace_window_size=hit_trace_window_size,
+            report_hit_ratio=report_hit_ratio,
         )
         self.server_args = server_args
         self.url = random_uuid_string()
@@ -340,7 +342,9 @@ class SendRequestEvent(SimulationEvent):
         experiment_id = sampling_params.pop("experiment_id", random_uuid_string())
         if rid is None:
             rid = random_uuid_string()
-        hit_rates = [r.model_rpc.get_hit_ratio() for r in simulator.runtimes]
+        hit_rates = [r.model_rpc.get_hit_ratio() 
+                     if r.server_args.report_hit_ratio else 0.0
+                     for r in simulator.runtimes]
         highest_idx = int(np.argmax(hit_rates))
         if hit_rates[highest_idx] < 0.7:
             highest_idx = None

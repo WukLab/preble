@@ -67,13 +67,21 @@ log_file_path = 'estiamte_hit_rate_cp/1r_react_50_0.0_600_2_examples_8_512/exp.l
 
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
-
+server_args = {
+    "model_path": model_name,
+    'log_prefix_hit': True,
+    'mem_fraction_static': 0.8,
+    'context_length': 33000,
+    'enable_flashinfer': True,
+    'schedule_heuristic': 'fcfs',
+    # 'chunk_prefill_budget': 1024,
+}
 # GPU Configuration
 gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -110,16 +118,6 @@ add_simulation_to_gpu_config(gpu_configs)
 #     config.regist_simulator_config(mistral_7b_A6000_sglang_tp(2.0), 75 << 30)
 
 # SGLang Runtime Configuration
-server_args = {
-    "model_path": model_name,
-    'gpu_configs': gpu_configs,
-    'log_prefix_hit': True,
-    'mem_fraction_static': 0.8,
-    'context_length': 33000,
-    'enable_flashinfer': True,
-    'schedule_heuristic': 'fcfs',
-    'chunk_prefill_budget': 512,
-}
 
 # Workload Configuration
 exp_time = float("inf")
@@ -157,10 +155,10 @@ selectors_configs = [
 ]
 
 exp_args = MajorExperimentArgs(
-    server_args,
-    workload_configs,
-    gpu_configs,
+    workload_configs=workload_configs,
+    gpu_configs=gpu_configs,
     simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
+    model_name=model_name
 )

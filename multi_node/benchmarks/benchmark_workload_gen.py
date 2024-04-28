@@ -26,6 +26,8 @@ import logging
 from datasets import load_dataset
 import re
 
+logger = logging.getLogger(__name__)
+
 ReActWorkloadEx1 = """
 Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
 Thought 1: I need to search Colorado orogeny, find the area that the eastern sector of the Colorado orogeny extends into, then find the elevation range of the area.
@@ -193,6 +195,15 @@ class DataLoader:
                 futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
             for future in futures:
                 future.result()
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+        }
+
+    def get_tokenizer(self):
+        return self.tokenizer
 
 class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
@@ -274,6 +285,16 @@ class WorkloadPrefixDataLoader(DataLoader):
         else:
             return None
 
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+            "random_ratio": self.distribution_of_non_shared,
+            "output_len": self.output_len,
+            "num_in_context_examples": self.num_in_context_examples,
+        }
+
 class ToolBenchDataLoader(DataLoader):
     def __init__(
         self,
@@ -297,9 +318,15 @@ class ToolBenchDataLoader(DataLoader):
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
-            selected_prefixs = np.random.choice(
-                prefix_stats, self.num_patterns, replace=True
-            )
+            if len(prefix_stats) < self.num_patterns:
+                logger.info(f'Asking for too many prefixes with large sharing')
+                selected_prefixs = np.random.choice(
+                    prefix_stats, self.num_patterns, replace=True
+                )
+            else:
+                selected_prefixs = np.random.choice(
+                    prefix_stats, self.num_patterns, replace=False
+                )
             for p in selected_prefixs:
                 selected_instances = np.random.choice(
                     self.data[p], load_threshold, replace=True
@@ -426,6 +453,12 @@ class ToolBenchDataLoader(DataLoader):
         random.shuffle(workload)
         return workload
 
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+        }
 
 @dataclass
 class Oracle(CustomRuntimeSelector):
@@ -538,7 +571,6 @@ class LooGLEDataset(DataLoader):
             LooGLEDatasetType.LONG_QA: "Please answer the question based on the long texts below. \n{input}\nQuestion: {Q}\nAnswer: ",
         }
         self.loogle_dataset_type = loogle_dataset_type
-        print(f"Data loading")
         self.data = self.read_data(loogle_dataset_type)
         self.max_decode_loogle = {  # based on filtring 1.5x IQR on dataset
             LooGLEDatasetType.SHORT_QA: 35,
@@ -573,9 +605,8 @@ class LooGLEDataset(DataLoader):
             )
             self.num_patterns = max_num_patterns
         print(f"Generating workload for {self.num_patterns} patterns")
-        for item in tqdm(self.data.shuffle().select(range(self.num_patterns))):
+        for item in self.data.shuffle().select(range(self.num_patterns)):
             raw_inputs = item["input"]
-            print(len(eval(item["qa_pairs"])))
             for j in eval(item["qa_pairs"]):
                 json_obj = {"Q": j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
@@ -622,6 +653,11 @@ class LooGLEDataset(DataLoader):
         random.shuffle(workload)
         return workload
 
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+        }
 
 @dataclass
 class LoogleOracle(CustomRuntimeSelector):

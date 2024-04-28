@@ -9,8 +9,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Iterator
-
-
+import csv
 import numpy as np
 
 # Add the parent directory of the 'src' directory to the Python path
@@ -30,7 +29,7 @@ class WorkloadConfig:
     requests: List[Dict]
     dataloader: DataLoader
     send_out_times: List[float]
-    exp_time: Optional[float] = float("inf")
+    exp_time: Optional[float]
 
     def __repr__(self) -> str:
         return (
@@ -42,17 +41,29 @@ class WorkloadConfig:
         )
 
 @dataclass
+class GroupedWorkloadConfig:
+    workload_configs: List[WorkloadConfig]
+
+    def __repr__(self) -> str:
+        rep_str = ""
+        for i, workload_config in enumerate(self.workload_configs):
+            rep_str += f"Workload {i}: {workload_config}\n"
+        return rep_str
+
+@dataclass
 class MajorExperimentArgs:
-    runtime_args: Dict
     workload_configs: Iterator[WorkloadConfig]
     gpu_configs: List[GPUConfig]
     simulate: bool
     log_file_path: str
     selector_configs: List
+    model_name: str
+
 
 @dataclass
 class RequestFuncOutput:
     rid: str = ""
+    num_gpus: int = 0
     prompt_text: str = ""
     generated_text: str = ""
     success: bool = False
@@ -105,6 +116,11 @@ class BenchmarkMetrics:
     p50_tpot: float
     p90_tpot: float
     p99_tpot: float
+
+    p50_ttft: float
+    p90_ttft: float
+    p99_ttft: float
+
     ttfts: List[float]
     tpots: List[float]
     throughput_tok_sec: float
@@ -136,12 +152,13 @@ class BenchmarkMetrics:
         # req_func_outputs = [result for result in req_func_outputs if result.success]
         for result in req_func_outputs:
             result.update_metrics(tokenizer)  # Computes the generated output tokens
-        if detail_log_path is None:
-            detail_log_path = './detail_stats.json'
-        with open(detail_log_path, "w") as f:
-            json.dump([asdict(result) for result in 
-                       sorted(req_func_outputs, key=lambda x: x.send_out_time)], 
-                      f, indent=4)
+
+        if detail_log_path:
+            with open(detail_log_path, "w") as f:
+                json.dump([asdict(result) for result in 
+                        sorted(req_func_outputs, key=lambda x: x.send_out_time)], 
+                        f, indent=4)
+
         ttfts = [result.ttft for result in req_func_outputs if result.ttft]
         tpots = [result.tpot for result in req_func_outputs if result.tpot]
         overall_latency = overall_latency
@@ -169,7 +186,6 @@ class BenchmarkMetrics:
         p50_tpot, p90_tpot, p99_tpot = np.percentile(tpots, [50, 90, 99])
         
         prefill_decode_ratio = [result.prefill_decode_ratio for result in req_func_outputs if result.prefill_decode_ratio]
-       
 
         finished_request_latencies = [result.request_latency for result in req_func_outputs if result.success and result.global_time <= time_limit]
         average_request_latency, std_request_latency, average_p90 = (
@@ -185,12 +201,19 @@ class BenchmarkMetrics:
 
         avg_scheduling_overhead = np.mean([result.scheduling_overhead for result in req_func_outputs])
         max_scheduling_overhead = np.max([result.scheduling_overhead for result in req_func_outputs])
+        p50_ttft, pt90_ttft, p99_ttft = np.percentile(ttfts, 50), np.percentile(ttfts, 90), np.percentile(ttfts, 99)
+
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
             average_finished_topt=average_finished_tpot,
             p50_tpot=p50_tpot,
             p90_tpot=p90_tpot,
             p99_tpot=p99_tpot,
+
+            p50_ttft=p50_ttft,
+            p90_ttft=pt90_ttft,
+            p99_ttft=p99_ttft,
+
             ttfts=ttfts,
             tpots=tpots,
             throughput_tok_sec=throughput_tok_sec,
@@ -276,3 +299,43 @@ class BenchmarkMetrics:
             f"Params=({exp_params}) Max Scheduling Overhead: {self.max_scheduling_overhead}"
         )
         logging.info(f"Params=({exp_params}) Counts: {self.gpu_counts}")
+
+    def to_csv_file(self, csv_file, exp_params):
+        headers = [
+            "experiment_id", "policy", "custom_policy", "custom_policy_msg", "num_finished_requests", "average_finished_topt", "p50_tpot", "p90_tpot", "p99_tpot",
+            "p50_ttft", "p90_ttft", "p99_ttft", "average_request_latency", "std_request_latency", "average_p90",
+            "max_latency", "p50_latency", "p90_latency", "p99_latency", "average_ttft", "average_topt",
+            "throughput_tok_sec", "requests_per_sec", "avg_scheduling_overhead", "max_scheduling_overhead"
+        ]
+        parsed_params = parse_exp_params(exp_params)
+        policy = parsed_params.get("policy", "")
+        custom_policy = parsed_params.get("custom_policy", "")
+        custom_policy_msg = parsed_params.get("custom_policy_msg", "")
+
+        # Check if file exists to decide whether to write headers
+        file_exists = os.path.exists(csv_file)
+
+        with open(csv_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(headers)  # Write headers if the file did not exist
+
+            # Prepare data row
+            data = [
+                exp_params, policy, custom_policy, custom_policy_msg, self.num_finished_requests, self.average_finished_topt, self.p50_tpot, self.p90_tpot,
+                self.p99_tpot, self.p50_ttft, self.p90_ttft, self.p99_ttft, self.average_request_latency,
+                self.std_request_latency, self.average_p90, self.max_latency, self.p50_latency, self.p90_latency,
+                self.p99_latency, self.average_ttft, self.average_topt, self.throughput_tok_sec,
+                self.requests_per_sec, self.avg_scheduling_overhead, self.max_scheduling_overhead
+            ]
+
+            # Write data
+            writer.writerow(data)
+
+def parse_exp_params(exp_params):
+    """ Parses the experiment parameters to extract specific values. """
+    params = {}
+    for param in exp_params.split(','):
+        key, value = param.split('=')
+        params[key.strip()] = value.strip()
+    return params

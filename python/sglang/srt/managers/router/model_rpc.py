@@ -488,7 +488,7 @@ class ModelRpcServer:
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
         if self.tp_rank == 0:
-            logger.info(
+            logger.debug(
                 f"GPU: {self.current_gpu} "
                 f"batch.num_reqs: {len(batch.reqs)}, "
                 f"batch.inflight_tokens: {num_batched_tokens}, "
