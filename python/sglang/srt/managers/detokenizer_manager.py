@@ -17,15 +17,15 @@ class DetokenizerManager:
         server_args: ServerArgs,
         port_args: PortArgs,
     ):
-        context = zmq.asyncio.Context(3)
+        context = zmq.asyncio.Context(2)
         self.recv_from_router = context.socket(zmq.PULL)
         self.recv_from_router.bind(f"tcp://127.0.0.1:{port_args.detokenizer_port}")
 
         self.send_to_tokenizer = context.socket(zmq.PUSH)
         self.send_to_tokenizer.connect(f"tcp://127.0.0.1:{port_args.tokenizer_port}")
 
-        self.send_to_sched = context.socket(zmq.PUSH)
-        self.send_to_sched.connect(f"tcp://127.0.0.1:10200")
+        # self.send_to_sched = context.socket(zmq.PUSH)
+        # self.send_to_sched.connect(f"tcp://127.0.0.1:10200")
 
         self.tokenizer = get_tokenizer(
             server_args.tokenizer_path,
@@ -76,14 +76,14 @@ class DetokenizerManager:
                     )
                 )
 
-                self.send_to_sched.send_pyobj(
-                    BatchStrOut(
-                        recv_obj.rids,
-                        output_strs,
-                        recv_obj.meta_info,
-                        recv_obj.finished,
-                    )
-                )
+                # self.send_to_sched.send_pyobj(
+                #     BatchStrOut(
+                #         recv_obj.rids,
+                #         output_strs,
+                #         recv_obj.meta_info,
+                #         recv_obj.finished,
+                #     )
+                # )
                 
 
             elif isinstance(recv_obj, SchedulingMetricsOut):

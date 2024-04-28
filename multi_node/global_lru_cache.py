@@ -150,7 +150,7 @@ class LPRadixCache:
         
         context = zmq.asyncio.Context(1)
         self.recv_from_detokenizer = context.socket(zmq.PULL)
-        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10200")
+        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
 
         self.num_iters = 0
 
@@ -512,3 +512,6 @@ class LPRadixCache:
             if node.ref_counter[runtime_id] == 0 and node.has_cached_gpu(runtime_id):
                 current_allocated_size += len(node.value)
         return current_allocated_size
+
+    def evict_by_node(self, ):
+        

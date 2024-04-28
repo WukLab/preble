@@ -264,7 +264,7 @@ class ModelDetails:
             )
         return results
 
-    async def get_request(input_requests, request_rate: float, send_times: Optional[List[float]] = None):
+    async def get_request(self, input_requests, request_rate: float, send_times: Optional[List[float]] = None):
         input_requests = iter(input_requests)
         for i, request in enumerate(input_requests):
             yield request
@@ -283,7 +283,6 @@ class ModelDetails:
         self.current_experiment_state_time = time.time()
         loop = asyncio.get_event_loop()
         loop.create_task(self.request_router.custom_selector.cache.update_loop())
-        
         if self.start_time is None:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []
@@ -340,6 +339,7 @@ class ModelDetails:
             for task in pending:
                 task.cancel()
             self.num_iters = self.request_router.custom_selector.cache.num_iters // 2
+
             return [task.result() for task in done]
 
         except asyncio.CancelledError:

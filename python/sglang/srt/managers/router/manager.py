@@ -36,9 +36,12 @@ class RouterManager:
         self.send_to_migration_target = context.socket(zmq.PUSH)
         self.recv_from_migration_source = context.socket(zmq.PULL)
         self.recv_from_migration_source.bind(f'tcp://0.0.0.0:{port_args.migrate_port}')
+        
+        self.send_to_sched = context.socket(zmq.PUSH)
+        self.send_to_sched.connect(f"tcp://127.0.0.1:10340")
 
-        self.recv_from_sched = context.socket(zmq.PULL)
-        self.recv_from_sched.connect(f"tcp://127.0.0.1:{port_args.router_port+10}")
+        # self.recv_from_sched = context.socket(zmq.PULL)
+        # self.recv_from_sched.bind(f"tcp://127.0.0.1:10340")
         
         # Init status
         self.model_client = model_client
@@ -56,6 +59,14 @@ class RouterManager:
             next_step_input = list(self.recv_reqs)
             self.recv_reqs = []
             out_pyobjs = await self.model_client.step(next_step_input)
+            
+            # start = time.perf_counter()
+            # await self.send_to_sched.send_pyobj(self.model_client.model_server.tree_cache)
+            # duration = time.perf_counter() - start
+            # print(f"Send whole tree: {duration}")
+
+            # tree = await self.recv_from_sched.recv_pyobj()
+            # print(tree)
 
             for obj in out_pyobjs:
                 await self.send_to_detokenizer.send_pyobj(obj)

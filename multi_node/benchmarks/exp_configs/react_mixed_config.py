@@ -70,16 +70,16 @@ server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
     'context_length': 33000,
-    'enable_flashinfer': True,
+    'enable_flashinfer': False,
     'schedule_heuristic': 'fcfs',
-    'chunk_prefill_budget': 512,
+    'chunk_prefill_budget': 0,
 }
 # GPU Configuration
 gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -155,7 +155,7 @@ selectors_configs = [
 exp_args = MajorExperimentArgs(
     workload_configs=workload_configs,
     gpu_configs=gpu_configs,
-    simulate=True,
+    simulate=False,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
     model_name=model_name

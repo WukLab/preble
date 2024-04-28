@@ -77,6 +77,8 @@ class RadixCache:
         return self._total_size_helper(self.root_node)
 
     def evict(self, num_tokens, evict_callback):
+        # curr_evict = self.evictable_size()
+        # start = time.perf_counter()
         if self.disable:
             raise RuntimeError()
 
@@ -97,6 +99,8 @@ class RadixCache:
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
+        # end = time.perf_counter()
+        # print(f"Eviction: {end-start}, Amount evicted: {curr_evict - self.evictable_size()}")
                 
     def total_unique_kv_tokens(self, reqs):
         seen = set()
