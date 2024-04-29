@@ -645,7 +645,6 @@ class ModelRpcServer:
                 # logger.debug(self.running_batch)
                 s = time.time()
                 if not self.use_sleep_forwarding:
-                    print(f"Device {self.current_gpu}, Batch Size: {num_batched_tokens}")
                     start_event = torch.cuda.Event(enable_timing=True)
                     end_event = torch.cuda.Event(enable_timing=True)
                     start_event.record()
@@ -1106,7 +1105,6 @@ class ModelRpcServer:
                 start_event.record()
                 s = time.time()
                 if not self.use_sleep_forwarding:
-                    print(f"Device {self.current_gpu}, Batch Size: {num_batched_tokens}")
                     logits, (
                         prefill_logprobs,
                         normalized_logprobs,
@@ -1217,13 +1215,11 @@ class ModelRpcServer:
             if not self.use_sleep_forwarding:
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
-                start_event.record()     
-                print(f"Device {self.current_gpu}, Batch Size: {num_batched_tokens}")   
+                start_event.record()
                 logits, (_, _, last_logprobs) = self.model_runner.forward(
                     batch, ForwardMode.EXTEND
                 )
                 self.iter_cnt += 1
-                #print(f"Iter count: {self.iter_cnt}")
                 end_event.record()
                 next_token_ids, _ = batch.sample(logits)
             else:
@@ -1351,7 +1347,6 @@ class ModelRpcServer:
             s = time.time()
             # logger.debug(batch)
             if not self.use_sleep_forwarding:
-                print(f"Device {self.current_gpu}, Batch Size: {num_batched_tokens}")   
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
                 start_event.record()        

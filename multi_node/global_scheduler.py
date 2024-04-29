@@ -148,7 +148,7 @@ class GlobalScheduler:
         self.metrics_dict = []
         self.lock = threading.Lock()
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus)
-        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
+        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.HIGH_LOAD_THRESHOLD = 1.4
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))

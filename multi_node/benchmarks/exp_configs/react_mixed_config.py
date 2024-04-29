@@ -70,9 +70,10 @@ server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
     'context_length': 33000,
-    'enable_flashinfer': False,
+    'enable_flashinfer': True,
     'schedule_heuristic': 'fcfs',
-    'chunk_prefill_budget': 0,
+    'chunk_prefill_budget': 512,
+    'load_format': 'dummy'
 }
 # GPU Configuration
 gpu_configs = [
@@ -130,7 +131,7 @@ configurations_to_test = [
     # [20, 0.384, 1950, 6.5],
     # [80, 0.2, 2700, 9],
     # [20, 0.285, 420, 1.4],
-    [20, 0.285, 1350, 9]
+    [20, 0.285, 1350, 4]
 ]
 workload_configs = create_mixture_react(configurations_to_test, model_name, exp_time, [8, 16])
 
@@ -140,7 +141,7 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.RANDOM, None, ''),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.ORACLE, ''),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'with_rebalancing'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'without_rebalancing'),
+    #(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'without_rebalancing'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, ''),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.HistogramBasedMemoryLoadScheduler, 'very_long_window')
