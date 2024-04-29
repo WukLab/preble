@@ -49,7 +49,8 @@ def add_simulation_to_gpu_config(gpu_configs):
 # log_file_path = "hc_logs_run_to_complete/sim_react_8k_100_0.3_2400_4/exp.log"
 # log_file_path = "hc_logs_run_to_complete/fifoE_fcfsS_oracle_sim_react_8k_100_0.3_4800_8/exp.log"
 # log_file_path = 'logs/debug/with_and_without_rebalancing.log'
-log_file_path = 'perf_logs/rebalancer_hc/4r_react_40_0.285_2400_6_example_16_only_fcfsmpq_minload_2_highload_1.15_steal_even_exist/exp.log'
+# log_file_path = 'perf_logs/rebalancer_hc/4r_react_40_0.285_2400_6_example_16_only_fcfsmpq_minload_2_highload_1.15_steal_even_exist/exp.log'
+log_file_path = 'logs/debug/exp.log'
 
 # log_file_path = 'cp_debug/4r_react_cp_512_baseline_with_fcfs/exp.log'
 # log_file_path = 'hc_integration/4r_react_20_0.285_1350_9_[8,16]_cp_512/exp.log'
@@ -74,14 +75,15 @@ server_args = {
     'enable_flashinfer': True,
     'schedule_heuristic': 'fcfs-mpq',
     # 'chunk_prefill_budget': 512,
+    'load_format': 'dummy',
     'report_hit_ratio': True,
 }
 # GPU Configuration
 gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),
     # GPUConfig(
     #     gpu_id=0,
@@ -132,7 +134,7 @@ configurations_to_test = [
     # [20, 0.384, 1950, 6.5],
     # [80, 0.2, 2700, 9],
     # [20, 0.285, 420, 1.4],
-    [40, 0.285, 2400, 6]
+    [40, 0.285, 2400, 1]
 ]
 workload_configs = create_mixture_react(configurations_to_test, model_name, exp_time, [16])
 
@@ -157,7 +159,7 @@ selectors_configs = [
 exp_args = MajorExperimentArgs(
     workload_configs=workload_configs,
     gpu_configs=gpu_configs,
-    simulate=True,
+    simulate=False,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
     model_name=model_name

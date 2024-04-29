@@ -282,8 +282,7 @@ class ModelDetails:
             await asyncio.sleep(0.5)
             await self.update_hit_ratio(runtime_id)
 
-    async def get_request(input_requests, request_rate: float, send_times: Optional[List[float]] = None):
-        input_requests = iter(input_requests)
+    async def get_request(self, input_requests, request_rate: float, send_times: Optional[List[float]] = None):
         for i, request in enumerate(input_requests):
             yield request
             if request_rate == float("inf") or not send_times:
@@ -303,7 +302,8 @@ class ModelDetails:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []
         try:
-            async for request in self.get_request(workload_config.requests, workload_config.request_rate):
+            async for request in self.get_request(workload_config.requests, workload_config.request_rate, workload_config.send_out_times):
+                logger.info('send req')
                 task = asyncio.create_task(self.async_send_request(**request))
                 tasks.append(task)
             if workload_config.exp_time != float("inf"):

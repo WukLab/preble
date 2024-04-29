@@ -1098,7 +1098,7 @@ class ModelRpcServer:
                     num_batched_tokens,
                     num_attention_tokens,
                     unique_kvs
-                ))   
+                ))
                 _ = batch.sample(logits)
                 last_logprobs = None
             forward_time = time.time() - s

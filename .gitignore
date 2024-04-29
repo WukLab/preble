@@ -181,6 +181,7 @@ tmp*.txt
 *.ncu-rep
 logs/
 e2e/
+datasets/
 
 
 # datasets

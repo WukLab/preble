@@ -21,7 +21,7 @@ model_name = "mistralai/Mistral-7B-v0.1"
 sglang_server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 4096,
+    'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
 }
@@ -29,8 +29,8 @@ sglang_server_args = {
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -43,18 +43,18 @@ add_simulation_to_gpu_config(baseline_gpu_configs)
 ours_server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 4096,
+    'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True
+    'report_hit_ratio': True 
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -64,28 +64,26 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    # scale_to_gpu([200, 900, 3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
-    # [200, 7200, 24],
+    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'all_stuff'),
 ]
 
-def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
+def gen_workloads_for_videoQA(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_toolbench_dataset(
+        dataloader, requests, send_out_times = create_videoQA_dataset(
             configuration,
             model_name, 
             exp_time, 
-            data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
-            load_dist=LoadDistribution.EVEN,
+            data_path="datasets/VideoQA.json",
+            max_prompt_length=16384,
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
             # print(server_configs)
@@ -104,19 +102,19 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
                     server_configs=server_configs,
                 )
 
-workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
-toolbench_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
-    csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
-    # log_file_path="logs/debug/exp.log",
-    # csv_log_path="logs/debug/exp.csv",
+workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
+loogle_experiment = ConfigurableMajorExperimentArgs(
+    log_file_path="e2e/2r_videoQA/exp.log",
+    csv_log_path="e2e/2r_videoQA/exp.csv",
+    # log_file_path="logs/debug_loogle_cp_2048/exp.log",
+    # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,
-    experiment_name="toolbench_test"
+    experiment_name="videoQA_e2e"
 )
 
 exp_args = AllExperiments(
-    [toolbench_experiment]
+    [loogle_experiment]
 )
