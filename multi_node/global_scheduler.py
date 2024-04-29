@@ -150,9 +150,10 @@ class GlobalScheduler:
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus)
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
-        self.HIGH_LOAD_THRESHOLD = 1.4
+        self.HIGH_LOAD_THRESHOLD = 1.15
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
+        self.prev_mis_rates = [1 for _ in range(num_nodes)]
 
     # Consider Split nodes
     def handle_split_nodes_gpu_allocations(self, split_nodes, gpu_allocations):
@@ -211,7 +212,8 @@ class GlobalScheduler:
         if node.has_cached_gpu(gpu_id):
             return 0
         else:
-            return node.num_tokens * node.ref_counter[gpu_id] + self.get_recomp_cost_basic(node.parent, gpu_id)
+            ref_cnt_cached = sum([node.ref_counter[gpu] for gpu in node.cached_gpus])
+            return node.num_tokens * ref_cnt_cached + self.get_recomp_cost_basic(node.parent, gpu_id)
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
         """Method to handle eviction logic."""
@@ -281,12 +283,7 @@ class GlobalScheduler:
     
             if self.enable_rebalancing:
                 self.handle_important_node_stealing(runtime_idx)
-
-            self.counter += 1    
-            if self.counter % 500:
-                # print(self.per_gpu_load)
-                pass
-            # self.handle_work_stealing(runtime_idx)
+                self.work_steal_low_loaded_prefixes()
 
         self.metrics_dict.append(
             {
@@ -343,6 +340,8 @@ class GlobalScheduler:
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node].add(smaller_device)
                 self.overload_detector.delete_after_allocation(node, larger_device)
+
+                
         else:
             while node_cost_for_gpu:
                 node: LPTreeNode

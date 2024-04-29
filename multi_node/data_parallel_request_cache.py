@@ -73,7 +73,7 @@ class DataParallelRequestRouter:
         self.lock = threading.Lock()
         self.counter = 0
 
-    def select_runtime(self, text, experiment_id, request_id, input_ids=None, sampling_params=None, *args, **kwargs) -> int:
+    def select_runtime(self, text, experiment_id, request_id, input_ids=None, sampling_params=None, current_time_stamp=None, runtime_id_with_highest_hit_rate=None, **kwargs) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM:
             selected_runtime = random.randint(0, self.total_nodes - 1)
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.ROUND_ROBIN:
@@ -81,7 +81,7 @@ class DataParallelRequestRouter:
                 selected_runtime = self.counter % self.total_nodes
                 self.counter += 1
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.CUSTOM and self.custom_selector:
-            selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids, sampling_params, *args, **kwargs)
+            selected_runtime = self.custom_selector.runtime_selector(text, request_id, input_ids, sampling_params, current_time_stamp=current_time_stamp, runtime_id_with_highest_hit_rate=runtime_id_with_highest_hit_rate)
         else:
             raise NotImplementedError(f"Runtime selection policy {self.runtime_selection_policy} not implemented with {self.custom_selector}")
         self.model_selection_stats.append(

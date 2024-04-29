@@ -89,7 +89,7 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
     def __init__(self, gpu, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.gpu = gpu
-    
+
 class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -259,7 +259,7 @@ class ModelDetails:
             )
         return results
 
-    async def get_request(input_requests, request_rate: float, send_times: Optional[List[float]] = None):
+    async def get_request(self, input_requests, request_rate: float, send_times: Optional[List[float]] = None):
         input_requests = iter(input_requests)
         for i, request in enumerate(input_requests):
             yield request

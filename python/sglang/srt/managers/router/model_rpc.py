@@ -481,6 +481,8 @@ class ModelRpcServer:
                     total_batched_seq_len += len(req.input_ids)
             elif self.schedule_heuristic == "fcfs-s":
                     break
+            elif self.schedule_heuristic == "fcfs":
+                    break
             elif self.schedule_heuristic == 'fcfs-escape':
                 if self.current_time - req.arrival_time >= 10:
                     break

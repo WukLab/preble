@@ -69,11 +69,7 @@ class RadixCache:
         for c_key, child in node.children.items():
             prefix_len = match(c_key, key)
             if prefix_len != 0:
-                if child.gpu_selections:
-                    current_gpu_selection = child.gpu_selections
                 if prefix_len < len(c_key):
-                    logging.warning(f"New node found when trying to match prefix using parent current gpu selection")
-                    return current_gpu_selection
                     assert False
                     new_node = self._split_node(c_key, child, prefix_len, new_nodes_created=new_nodes_created)
                     value.append(new_node.value)
@@ -331,11 +327,9 @@ class LPTreeTraversal:
     def _traverse_tree(self, current_prefix_node: TreeNode, parent_lp_node=None, depth=0, modified_nodes=None):
         if modified_nodes is not None and current_prefix_node not in modified_nodes:
             return # Skip nodes that have not been modified
-
-        if depth == self.depth_limit:
-            assert parent_lp_node is not None
-            parent_lp_node.children_token_cost_at_max_depth = self._calculate_children_token_cost(current_prefix_node)
+        if current_prefix_node.ref_counter < 3:
             return
+
         self.counter += 1
         current_lp_node = LpNode(current_prefix_node.id, self.num_gpus)
         self.node_map[current_prefix_node] = current_lp_node
@@ -402,7 +396,7 @@ class LPTreeTraversal:
         total_cost_saved = 0
         for prefix_node, lp_node in self.node_map.items():
             # children token cost is to account for depth cutoff
-            num_tokens_total = prefix_node.num_tokens + lp_node.children_token_cost_at_max_depth
+            num_tokens_total = prefix_node.num_token
             for gpu_index, var in enumerate(lp_node.variables):
                 previous_gpu_selected = existing_cost.get(prefix_node, {}).get(gpu_index, 0) 
                 if previous_gpu_selected:
