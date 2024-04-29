@@ -171,13 +171,14 @@ def run_experiment(configurable_exp_args: ConfigurableMajorExperimentArgs):
     logging.info(f"Starting Experiment at {start_date} with {configurable_exp_args.experiment_name}")
     for workload_config in configurable_exp_args.workload_configs:
         model_details = loader.load_model(
-            model_path=configurable_exp_args.model_path, gpu_configs=configurable_exp_args.gpu_configs
+            model_path=configurable_exp_args.model_path, gpu_configs=workload_config.server_configs
         )
+        trace_json_file = directory + '/' + workload_config.workload_params_str().replace(", ", "_").replace("/", "-") + '.json'
         run_single_workload(
             model_details,
             workload_config,
             csv_file=configurable_exp_args.csv_log_path,
-            trace_json_file=configurable_exp_args.trace_json_file,
+            trace_json_file=trace_json_file,
             experiment_type=configurable_exp_args.experiment_type,
         )
         loader.unload_model(model_details)
@@ -192,6 +193,8 @@ def run_all_experiments(all_experiments: AllExperiments):
         run_experiment(experiment)
 
 if __name__ == "__main__":
-    from benchmarks.multi_exp_configs.loogle_config import exp_args
+    # from benchmarks.multi_exp_configs.loogle_config import exp_args
+    # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
+    from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
 
     run_all_experiments(exp_args)

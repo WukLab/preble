@@ -68,6 +68,7 @@ class RequestFuncOutput:
     generated_text: str = ""
     success: bool = False
     request_latency: float = 0
+    normalized_latency: float = 0
     ttft: float = 0  # Time to first token
     itl: List[float] = field(default_factory=list)  # List of inter-token latencies
     prompt_len: int = 0
@@ -96,6 +97,7 @@ class RequestFuncOutput:
             self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
         if self.request_latency:
             self.prefill_decode_ratio = self.ttft / self.request_latency
+            self.normalized_latency = self.request_latency / self.output_len
 
     @property
     def total_tokens(self):
@@ -120,6 +122,10 @@ class BenchmarkMetrics:
     p50_ttft: float
     p90_ttft: float
     p99_ttft: float
+    
+    p50_norm_latency: float
+    p90_norm_latency: float
+    p99_norm_latency: float
 
     ttfts: List[float]
     tpots: List[float]
@@ -163,6 +169,7 @@ class BenchmarkMetrics:
         tpots = [result.tpot for result in req_func_outputs if result.tpot]
         overall_latency = overall_latency
         request_latencies = [result.request_latency for result in req_func_outputs if result.request_latency]
+        norm_request_latencies = [result.normalized_latency for result in req_func_outputs if result.normalized_latency]
         throughput_tok_sec = (
             sum([result.total_tokens for result in req_func_outputs]) / overall_latency
         )
@@ -202,6 +209,7 @@ class BenchmarkMetrics:
         avg_scheduling_overhead = np.mean([result.scheduling_overhead for result in req_func_outputs])
         max_scheduling_overhead = np.max([result.scheduling_overhead for result in req_func_outputs])
         p50_ttft, pt90_ttft, p99_ttft = np.percentile(ttfts, 50), np.percentile(ttfts, 90), np.percentile(ttfts, 99)
+        p50_norm_latency, p90_norm_latency, p99_norm_latency = np.percentile(norm_request_latencies, [50, 90, 99])
 
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
@@ -213,6 +221,10 @@ class BenchmarkMetrics:
             p50_ttft=p50_ttft,
             p90_ttft=pt90_ttft,
             p99_ttft=p99_ttft,
+            
+            p50_norm_latency=p50_norm_latency,
+            p90_norm_latency=p90_norm_latency,
+            p99_norm_latency=p99_norm_latency,
 
             ttfts=ttfts,
             tpots=tpots,
@@ -284,6 +296,9 @@ class BenchmarkMetrics:
             f"Params=({exp_params}) TTFT p50, p90, p99: {np.percentile(self.ttfts, 50):.4f}, {np.percentile(self.ttfts, 90):.4f}, {np.percentile(self.ttfts, 99):.4f}"
         )
         logging.info(
+            f"Params=({exp_params}) Normalized Latency p50, p90, p99: {self.p50_norm_latency:.4f}, {self.p90_norm_latency:.4f}, {self.p99_norm_latency:.4f}"
+        )
+        logging.info(
             f"Params=({exp_params}) Latency p50, p90, p99: {self.p50_latency:.4f}, {self.p90_latency:.4f}, {self.p99_latency:.4f}"
         )
         logging.info(
@@ -303,7 +318,7 @@ class BenchmarkMetrics:
     def to_csv_file(self, csv_file, exp_params):
         headers = [
             "experiment_id", "policy", "custom_policy", "custom_policy_msg", "num_finished_requests", "average_finished_topt", "p50_tpot", "p90_tpot", "p99_tpot",
-            "p50_ttft", "p90_ttft", "p99_ttft", "average_request_latency", "std_request_latency", "average_p90",
+            "p50_ttft", "p90_ttft", "p99_ttft", "p50_norm_latency", "p90_norm_latency", "p99_norm_latency", "average_request_latency", "std_request_latency", "average_p90",
             "max_latency", "p50_latency", "p90_latency", "p99_latency", "average_ttft", "average_topt",
             "throughput_tok_sec", "requests_per_sec", "avg_scheduling_overhead", "max_scheduling_overhead"
         ]
@@ -323,7 +338,7 @@ class BenchmarkMetrics:
             # Prepare data row
             data = [
                 exp_params, policy, custom_policy, custom_policy_msg, self.num_finished_requests, self.average_finished_topt, self.p50_tpot, self.p90_tpot,
-                self.p99_tpot, self.p50_ttft, self.p90_ttft, self.p99_ttft, self.average_request_latency,
+                self.p99_tpot, self.p50_ttft, self.p90_ttft, self.p99_ttft, self.p50_norm_latency, self.p90_norm_latency, self.p99_norm_latency, self.average_request_latency,
                 self.std_request_latency, self.average_p90, self.max_latency, self.p50_latency, self.p90_latency,
                 self.p99_latency, self.average_ttft, self.average_topt, self.throughput_tok_sec,
                 self.requests_per_sec, self.avg_scheduling_overhead, self.max_scheduling_overhead

@@ -180,6 +180,7 @@ tmp*.txt
 *.nsys-rep
 *.ncu-rep
 logs/
+e2e/
 
 
 # datasets

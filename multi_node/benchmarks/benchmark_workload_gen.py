@@ -25,9 +25,11 @@ from dataclasses import dataclass
 import logging
 from datasets import load_dataset
 import re
-from . import chameleon
-from . import toolqa
+from benchmarks import chameleon
+from benchmarks import toolqa
 import os
+
+logger = logging.getLogger(__name__)
 
 ReActWorkloadEx1 = """
 Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
@@ -319,9 +321,15 @@ class ToolBenchDataLoader(DataLoader):
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
-            selected_prefixs = np.random.choice(
-                prefix_stats, self.num_patterns, replace=True
-            )
+            if len(prefix_stats) < self.num_patterns:
+                logger.info(f'Asking for too many prefixes with large sharing')
+                selected_prefixs = np.random.choice(
+                    prefix_stats, self.num_patterns, replace=True
+                )
+            else:
+                selected_prefixs = np.random.choice(
+                    prefix_stats, self.num_patterns, replace=False
+                )
             for p in selected_prefixs:
                 selected_instances = np.random.choice(
                     self.data[p], load_threshold, replace=True
@@ -600,10 +608,20 @@ class LooGLEDataset(DataLoader):
             )
             self.num_patterns = max_num_patterns
         print(f"Generating workload for {self.num_patterns} patterns")
-        for item in self.data.shuffle().select(range(self.num_patterns)):
+        
+        sampled_dataset = self.data.shuffle().select(range(self.num_patterns))
+        qa_pairs = [eval(item['qa_pairs']) for item in sampled_dataset]
+        num_raw_requests = sum(len(qas) for qas in qa_pairs)
+        #NOTE: loogle dataset has not enought QAs for each document
+        #      We replicate QAs w.r.t existing prefix sharing distributions
+        scale_factor = self.total_num_requests / num_raw_requests
+        
+        for i, item in enumerate(sampled_dataset):
             raw_inputs = item["input"]
-            for j in eval(item["qa_pairs"]):
-                json_obj = {"Q": j["Q"], "input": raw_inputs}
+            num_qa_pairs = len(qa_pairs[i])
+            for k in range(math.ceil(num_qa_pairs * scale_factor)):
+                j = qa_pairs[i][k % num_qa_pairs]
+                json_obj = {"Q": uuid.uuid4().hex + j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
                 # tokenized_prompt = self.tokenizer.encode(prompt)
                 # if len(tokenized_prompt) > max_length:
