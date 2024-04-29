@@ -180,3 +180,12 @@ tmp*.txt
 *.nsys-rep
 *.ncu-rep
 logs/
+e2e/
+
+
+# datasets
+chameleon-llm
+ToolQA
+CREATOR
+apibench_data
+ToolAlpaca

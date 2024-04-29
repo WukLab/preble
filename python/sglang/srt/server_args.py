@@ -39,6 +39,7 @@ class ServerArgs:
     api_key: str = ""
     chunk_prefill_budget: int = 0
     hit_trace_window_size: int = 30 # seconds
+    report_hit_ratio: bool = True
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -246,6 +247,11 @@ class ServerArgs:
             type=int,
             default=ServerArgs.hit_trace_window_size,
             help='The size of the window for hit trace in seconds.',
+        )
+        parser.add_argument(
+            '--report-hit-ratio',
+            action='store_true',
+            help='Whether to return hit ratio. If disabled will always return 0, which disables hot/cold mixed scheduling.',
         )
 
     @classmethod

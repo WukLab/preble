@@ -69,7 +69,7 @@ class Req:
         self.output_and_jump_forward_str = ""
         
         # For chunk-prefill
-        self.num_computed_tokens = 0
+        self.num_cached_tokens = 0
         self.num_inflight_tokens = 0
 
     def max_new_tokens(self):
@@ -148,31 +148,31 @@ class Req:
                     return
                 
     def get_num_unfinished_tokens(self):
-        return len(self.input_ids) + len(self.output_ids) - self.get_cached_len()
+        return len(self.input_ids) + len(self.output_ids) - self.num_cached_tokens
     
     # NOTE: Currently sglang clears output tokens when recompute (??)
     #       so a prefill chunk will never involve output tokens
     #       Change this function if this is nolonger true
     def get_inflight_token_ids(self) -> List[int]:
         # logger.debug(f"num_computed_tokens={self.num_computed_tokens}, num_inflight_tokens={self.num_inflight_tokens}, prompt_len={len(self.input_ids)}, output_len={len(self.output_ids)}")
-        start_idx = len(self.prefix_indices) + self.num_computed_tokens
+        start_idx = self.num_cached_tokens
         prompt_len = len(self.input_ids)
         if start_idx >= prompt_len:
-            assert self.num_computed_tokens + len(self.prefix_indices) == prompt_len + len(self.output_ids) - 1, \
-            f'prompt: {prompt_len}, computed: {self.num_computed_tokens}, prefix: {len(self.prefix_indices)}, output: {len(self.output_ids)}'
+            assert self.num_cached_tokens == prompt_len + len(self.output_ids) - 1, \
+            f'prompt: {prompt_len}, cached: {self.num_cached_tokens}, output: {len(self.output_ids)}'
             assert self.num_inflight_tokens == 1
             return [self.output_ids[-1]]
         return self.input_ids[start_idx : start_idx + self.num_inflight_tokens]
     
-    def get_cached_len(self):
-        return len(self.prefix_indices) + self.num_computed_tokens
-    
     def get_context_len(self):
-        return len(self.prefix_indices) + self.num_computed_tokens + self.num_inflight_tokens
+        return self.num_cached_tokens + self.num_inflight_tokens
     
     def update_after_step(self):
-        self.num_computed_tokens += self.num_inflight_tokens
+        self.num_cached_tokens += self.num_inflight_tokens
         self.num_inflight_tokens = 0
+        # after one prefill step this is no longer needed
+        # set to None for logging purpose
+        self.prefix_indices = None
     
     def reset_state(self):
         self.prefix_indices = None
@@ -180,11 +180,11 @@ class Req:
         self.extend_input_len = 0
         self.output_ids = []
         self.regex_fsm_state = 0
-        self.num_computed_tokens = 0
+        self.num_cached_tokens = 0
 
     def __repr__(self):
         return (f"rid(n={self.rid}, " f"input_ids={self.input_ids}, "
-                f"prefix_len={len(self.prefix_indices)}, computed={self.num_computed_tokens}, inflight={self.num_inflight_tokens}\n"
+                f"prefix_len={len(self.prefix_indices)}, computed={self.num_cached_tokens}, inflight={self.num_inflight_tokens}\n"
                 )
 
 
@@ -649,7 +649,7 @@ class Batch:
         input_ids = sum(input_ids, [])
         self.input_ids = torch.tensor(input_ids, dtype=torch.int32, device=device)
         self.seq_lens = torch.tensor([r.get_context_len() for r in self.reqs], dtype=torch.int32, device=device)
-        self.prefix_lens = torch.tensor([r.get_cached_len() for r in self.reqs], dtype=torch.int32, device=device)
+        self.prefix_lens = torch.tensor([r.num_cached_tokens for r in self.reqs], dtype=torch.int32, device=device)
         
     
     def prepare_for_extend_v2(self, vocab_size: int, int_token_logit_bias: torch.Tensor):

@@ -148,3 +148,9 @@ class DetokenizeReqInput:
 @dataclass
 class DumpTrace:
     fpath: str
+
+@dataclass
+class PrefixHitInspect:
+    random_id: str
+    windowed: bool = True
+    hit_ratio: float = 0.0

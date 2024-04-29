@@ -25,6 +25,11 @@ from dataclasses import dataclass
 import logging
 from datasets import load_dataset
 import re
+from benchmarks import chameleon
+from benchmarks import toolqa
+import os
+
+logger = logging.getLogger(__name__)
 
 ReActWorkloadEx1 = """
 Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
@@ -316,9 +321,15 @@ class ToolBenchDataLoader(DataLoader):
         if self.load_dist == LoadDistribution.EVEN:
             load_threshold = math.ceil(self.total_num_requests // self.num_patterns)
             prefix_stats = [p for p, l in self.data.items() if len(l) >= load_threshold]
-            selected_prefixs = np.random.choice(
-                prefix_stats, self.num_patterns, replace=True
-            )
+            if len(prefix_stats) < self.num_patterns:
+                logger.info(f'Asking for too many prefixes with large sharing')
+                selected_prefixs = np.random.choice(
+                    prefix_stats, self.num_patterns, replace=True
+                )
+            else:
+                selected_prefixs = np.random.choice(
+                    prefix_stats, self.num_patterns, replace=False
+                )
             for p in selected_prefixs:
                 selected_instances = np.random.choice(
                     self.data[p], load_threshold, replace=True
@@ -597,10 +608,20 @@ class LooGLEDataset(DataLoader):
             )
             self.num_patterns = max_num_patterns
         print(f"Generating workload for {self.num_patterns} patterns")
-        for item in self.data.shuffle().select(range(self.num_patterns)):
+        
+        sampled_dataset = self.data.shuffle().select(range(self.num_patterns))
+        qa_pairs = [eval(item['qa_pairs']) for item in sampled_dataset]
+        num_raw_requests = sum(len(qas) for qas in qa_pairs)
+        #NOTE: loogle dataset has not enought QAs for each document
+        #      We replicate QAs w.r.t existing prefix sharing distributions
+        scale_factor = self.total_num_requests / num_raw_requests
+        
+        for i, item in enumerate(sampled_dataset):
             raw_inputs = item["input"]
-            for j in eval(item["qa_pairs"]):
-                json_obj = {"Q": j["Q"], "input": raw_inputs}
+            num_qa_pairs = len(qa_pairs[i])
+            for k in range(math.ceil(num_qa_pairs * scale_factor)):
+                j = qa_pairs[i][k % num_qa_pairs]
+                json_obj = {"Q": uuid.uuid4().hex + j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
                 # tokenized_prompt = self.tokenizer.encode(prompt)
                 # if len(tokenized_prompt) > max_length:
@@ -668,6 +689,7 @@ class LoogleOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+
 
 class MultiDomainToolBenchDataLoader(DataLoader):
     def __init__(
@@ -855,3 +877,298 @@ class TBMultiDomainOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+
+
+class ChameleonTabMWPLoader(DataLoader):
+    """DataLoader for Chameleon + TabMWP dataset"""
+
+    def __init__(self, data_path: str, 
+                 tokenizer: PreTrainedTokenizer):
+        super().__init__(data_path, None, None, tokenizer)
+        self.data = self.read_data(data_path)
+
+    def read_data(self, data_path: str):
+        data = []
+        with open(data_path, "r") as f:
+            for line in f.readlines():
+                data.append(json.loads(line))
+        return data
+
+    def generate_module_prediction_request(self, sample):
+        return {
+            'text': chameleon.prompt_policy.prompt.strip() + '\n\n' + sample['modules:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(str(sample['modules:output'])).input_ids),
+            },
+        }
+
+    def generate_row_lookup_request(self, sample):
+        return {
+            'text': chameleon.prompt_rl.prompt.strip() + '\n\n' + sample['row_lookup:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(sample['row_lookup:output']).input_ids),
+            },
+        }
+
+    def generate_column_lookup_request(self, sample):
+        return {
+            'text': chameleon.prompt_cl.prompt.strip() + '\n\n' + sample['column_lookup:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(sample['column_lookup:output']).input_ids),
+            },
+        }
+    
+    def generate_table_verbalizer_request(self, sample):
+        return {
+            'text': chameleon.prompt_tv.prompt.strip() + '\n\n' + sample['table_verbalizer:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(sample['table_verbalizer:output']).input_ids),
+            },
+        }
+    
+    def generate_knowledge_retrieval_request(self, sample):
+        return {
+            'text': chameleon.prompt_kr.prompt.strip() + '\n\n' + sample['knowledge_retrieval:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(sample['knowledge_retrieval:output']).input_ids),
+            },
+        }
+
+    def generate_program_generator_request(self, sample):
+        if sample['example']['choices']:
+            demo_prompt = chameleon.prompt_pg.prompt_choice.strip()
+        else:
+            demo_prompt = chameleon.prompt_pg.prompt_free.strip()
+        return {
+            'text': demo_prompt + '\n\n' + sample['program_generator:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(sample['program_generator:output']).input_ids),
+            },
+        }
+
+    def generate_program_generator_verifier_request(self, sample):
+        if sample['example']['choices']:
+            demo_prompt = chameleon.prompt_pg.prompt_choice.strip()
+        else:
+            demo_prompt = chameleon.prompt_pg.prompt_free.strip()
+        return {
+            'text': demo_prompt + '\n\n' + sample['program_generator_and_verifier:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(sample['program_generator_and_verifier:output']).input_ids),
+            },
+        }
+    
+    def generate_solution_generator_request(self, sample):
+        if sample['example']['choices']:
+            demo_prompt = chameleon.prompt_sg.prompt_choice.strip()
+        else:
+            demo_prompt = chameleon.prompt_sg.prompt_free.strip()
+        return {
+            'text': demo_prompt + '\n\n' + sample['solution_generator:input'],
+            'sampling_params': {
+                'temperature': 0.0,
+                'max_new_tokens': len(self.tokenizer(f"The answer is {sample['solution_generator:output']}.").input_ids),
+            },
+        }
+
+    def generate_workload(self, k: int = None):
+        requests = []
+        random.shuffle(self.data)
+        for i, sample in enumerate(self.data):
+            if k is not None and len(requests) >= k:
+                break
+            # handle predict module requests
+            requests.append(self.generate_module_prediction_request(sample))
+            
+            modules = sample['modules:output']
+            if "row_lookup" in modules and sample['row_lookup:input']:
+                requests.append(self.generate_row_lookup_request(sample))
+            if "column_lookup" in modules and sample['column_lookup:input']:
+                requests.append(self.generate_column_lookup_request(sample))
+            if "table_verbalizer" in modules:
+                requests.append(self.generate_table_verbalizer_request(sample))
+            if "knowledge_retrieval" in modules:
+                requests.append(self.generate_knowledge_retrieval_request(sample))
+            if "program_generator" in modules:
+                requests.append(self.generate_program_generator_request(sample))
+            if "program_generator_and_verifier" in modules:
+                requests.append(self.generate_program_generator_verifier_request(sample))
+            if "solution_generator" in modules:
+                requests.append(self.generate_solution_generator_request(sample))
+
+        self.add_input_token_ids_to_workload(requests)
+        return requests[:k]
+    
+
+class CreatorMATHLoader(DataLoader):
+    """DataLoader for Creator + MATH dataset.
+    Since the agents depend on the previous steps, 
+    we use the same tool and error message for all samples."""
+
+    tool = """```python
+from sympy import symbols, solve
+
+def solve_equations():
+    \"\"\"
+    Solves the system of equations 3p + 4q = 8 and 4p + 3q = 13 using sympy.
+    Returns: The value of q that satisfies both equations.
+    \"\"\"
+    p, q = symbols('p q')
+    eq1 = 3*p + 4*q - 8
+    eq2 = 4*p + 3*q - 13
+    solution = solve((eq1, eq2), (p, q))
+    return solution[q]
+
+# Call the function to solve the equations
+q = solve_equations()
+
+# Print the answer
+print("Final Answer:", q)"""
+
+    error = """Traceback (most recent call last):
+  File "code_exec/tmp0.py", line 15, in <module>
+    z_over_y = solve_equations()
+  File "code_exec/tmp0.py", line 12, in solve_equations
+    return solution[z] / solution[y]
+KeyError: z"""
+
+    def __init__(self, data_path: str, 
+                 tokenizer: PreTrainedTokenizer):
+        super().__init__(data_path, None, None, tokenizer)
+        self.data = self.read_data(os.path.join(data_path, 'dataset'))
+        with open(os.path.join(data_path, 'prompt_lib/prompt_CREATOR_creation.md'), 'r') as f:
+            self.create_prompt = f.read()
+        with open(os.path.join(data_path, 'prompt_lib/prompt_CREATOR_decision.md'), 'r') as f:
+            self.decide_prompt = f.read()
+        with open(os.path.join(data_path, 'prompt_lib/prompt_rectification.md'), 'r') as f:
+            self.correct_prompt = f.read()
+
+    def read_data(self, data_path: str):
+        data = []
+        for file in os.listdir(data_path):
+            with open(os.path.join(data_path, file), "r") as f:
+                for line in f:
+                    if line.strip():
+                        data.append(json.loads(line))
+        return data
+
+    def generate_workload(self, k: int = None):
+        requests = []
+        random.shuffle(self.data)
+        for i, sample in enumerate(self.data):
+            if k is not None and len(requests) >= k:
+                break
+            requests.append({
+                'text': self.create_prompt.replace('==qst==', sample['question']),
+                'sampling_params': {
+                    'temperature': 0.0,
+                    'max_new_tokens': 30,
+                },
+            })
+            requests.append({
+                'text': self.decide_prompt.replace('==qst==', sample['question']).replace(
+                    '==tool==', self.tool
+                ),
+                'sampling_params': {
+                    'temperature': 0.0,
+                    'max_new_tokens': 30,
+                },
+            })
+            requests.append({
+                'text': self.correct_prompt.replace('==qst==', sample['question']).replace(
+                    '==ori==', self.tool
+                ).replace('==err==', self.error),
+                'sampling_params': {
+                    'temperature': 0.0,
+                    'max_new_tokens': 30,
+                },
+            })
+        
+        self.add_input_token_ids_to_workload(requests)
+        return requests[:k]
+    
+
+class ToolQALoader(DataLoader):
+    """DataLoader for ToolQA dataset.
+    
+    The ToolQA dataset consists of two level of difficulty: easy and hard.
+    In this class, workload is generated randomly from both levels.
+    
+    The original ToolQA paper uses multi-step reasoning (with langchain).
+    Since we are not using actual LLMs, we generate the request of first step."""
+
+    scratchpad = """\nThought 1:\n"""
+
+    def __init__(self, data_path: str, 
+                 tokenizer: PreTrainedTokenizer, ):
+        super().__init__(data_path, None, None, tokenizer)
+        self.data = self.read_data(data_path)
+
+    def read_data(self, data_path: str):
+        data = []
+        for hardness in ['easy', 'hard']:
+            for file in os.listdir(os.path.join(data_path, hardness)):
+                with open(os.path.join(data_path, hardness, file), "r") as f:
+                    for line in f:
+                        if line.strip():
+                            example = json.loads(line)
+                            example['hardness'] = hardness
+                            data.append(example)
+        return data
+
+    def generate_workload(self, k: int = None):
+        requests = []
+        for i, sample in enumerate(self.data):
+            if k is not None and i >= k:
+                break
+            examples = toolqa.TOOLQA_EASY8 if sample['hardness'] == 'easy' else toolqa.TOOLQA_HARD3
+            requests.append({
+                'text': toolqa.REACT_INSTRUCTION.format(examples=examples, 
+                                                 question=sample['question'], 
+                                                 scratchpad=self.scratchpad),
+                'sampling_params': {
+                    'temperature': 0.0,
+                    'max_new_tokens': 30,
+                },
+            })
+        
+        self.add_input_token_ids_to_workload(requests)
+        return requests
+
+
+class VirtualEnvLoader(DataLoader):
+    """DataLoader for VirtualEnv dataset."""
+
+    def __init__(self, data_path: str, 
+                 tokenizer: PreTrainedTokenizer):
+        super().__init__(data_path, None, None, tokenizer)
+        self.data = self.read_data(data_path)
+
+    def read_data(self, data_path: str):
+        with open(data_path, 'r') as f:
+            return json.load(f)
+
+    def generate_workload(self, k: int = None):
+        requests = []
+        random.shuffle(self.data)
+        for i, sample in enumerate(self.data):
+            if k is not None and len(requests) >= k:
+                break
+            for turn in sample:
+                requests.append({
+                    'text': turn['prompt'],
+                    'sampling_params': {
+                        'temperature': 0.0,
+                        'max_new_tokens': turn['usage']['completion_tokens'],
+                    },
+                })
+        
+        self.add_input_token_ids_to_workload(requests)
+        return requests[:k]
