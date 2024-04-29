@@ -16,7 +16,7 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "perf_logs/toolbench/4r_round_robin_vs_ours_200_7200_24.log"
+log_file_path = "e2e/2r_toolbench_sglang_baseline/exp.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = float('inf')
@@ -34,7 +34,7 @@ server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
     # "chunk_prefill_budget": 512,
-    'report_hit_ratio': True,
+    # 'report_hit_ratio': True,
 }
 # GPU Configuration
 gpu_configs = [
@@ -42,8 +42,8 @@ gpu_configs = [
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
     GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08),
@@ -66,8 +66,12 @@ add_simulation_to_gpu_config(gpu_configs)
 configurations_to_test = [
     # [200, 3600, 12],
     # [800, 7200, 24],
+    [200, 900, 3],
+    [200, 1800, 6],
+    [200, 2700, 9],
+    [200, 3600, 12],
+    [200, 5400, 18],
     [200, 7200, 24],
-    # [200, 400, 12],
 ]
 workload_configs = create_toolbench_data_loader(
     configurations_to_test, 
@@ -124,7 +128,6 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, 'oracle'),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 ]
-
 
 
 exp_args = MajorExperimentArgs(

@@ -25,6 +25,9 @@ ssh_config_08 = {
 # Helper Functions
 # -----------------------------------------------------------------------------
 
+def scale_to_gpu(workload, gpus):
+    return [w * gpus for w in workload]
+
 def pipeline_parallelism(pp: int, forward_equation):
     def pp_forward_time(*args):
         return forward_equation(*args) / pp
@@ -67,5 +70,24 @@ def create_loogle_dataset(config, model_name, exp_time, max_tokens_override=45) 
     requests = dataloader.generate_workload(max_length=32768)
     random.shuffle(requests)
     requests = requests[:num_requests]
+    print(f"Generated {len(requests)} requests")
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, requests, send_out_times
+
+def create_toolbench_dataset(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize toolbench dataset with {num_workloads} workloads and {num_requests} requests')
+    dataloader = ToolBenchDataLoader(
+        num_patterns=num_workloads,
+        total_num_requests=num_requests,
+        tokenizer=tokenizer,
+        data_path=data_path,
+        load_dist=load_dist,
+    )
+    requests = dataloader.generate_workload()
+    random.shuffle(requests)
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times

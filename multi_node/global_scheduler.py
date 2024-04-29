@@ -334,7 +334,9 @@ class GlobalScheduler:
         node_cost_for_gpu = []
         for node, cost in self.histogram.histogram.items():
             # If after adjusting the nodes, the allocation difference is valid, allow adjustment
-            if larger_device in self.gpu_allocations.get(node) and self.histogram.node_to_count[node] > 1:
+            # if larger_device in self.gpu_allocations.get(node) and self.histogram.node_to_count[node] > 1:
+            #     heapq.heappush(node_cost_for_gpu, (cost, node))
+            if larger_device in self.gpu_allocations.get(node) and self.is_large_node(node) and self.histogram.node_to_count[node] > 1:
                 heapq.heappush(node_cost_for_gpu, (cost, node))
 
         if len(node_cost_for_gpu) == 1:
