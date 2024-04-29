@@ -29,6 +29,7 @@ class Workload(WorkloadConfig):
     policy: str
     custom_policy: str
     custom_policy_msg: str
+    server_configs: List[GPUConfig]
 
     def get_starting_policy_message(self):
         custom_msg = ""
@@ -76,10 +77,8 @@ class ConfigurableMajorExperimentArgs:
     csv_log_path: str # for even faster parsing
     simulate: bool
     model_path: str
-    gpu_configs: List[GPUConfig]
     experiment_type: ExperimentType
     workload_configs: List[Workload] # Seperate policies/workloads
-    trace_json_file: Optional[str] = None
     experiment_name: str = "basic experiment"
 
 @dataclass

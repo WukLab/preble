@@ -9,7 +9,10 @@ import heapq
 from collections import deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
+import logging
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+
+logger = logging.getLogger(__name__)
 
 class SlidingWindowHistogram:
     def __init__(self, window_duration: timedelta, gpu_allocations, num_gpus=2):
@@ -157,6 +160,7 @@ class GlobalScheduler:
     # Consider Split nodes
     def handle_split_nodes_gpu_allocations(self, split_nodes, gpu_allocations):
         for child_node, new_node in split_nodes.items():
+            # FIXME: this should be a deepcopy
             gpu_allocations[new_node] = gpu_allocations[child_node].copy()
 
     def handle_split_node_histogram(self, split_nodes):
@@ -211,6 +215,7 @@ class GlobalScheduler:
         if node.has_cached_gpu(gpu_id):
             return 0
         else:
+            # breakpoint()
             return node.num_tokens * node.ref_counter[gpu_id] + self.get_recomp_cost_basic(node.parent, gpu_id)
 
     def evict_callback(self, node: LPTreeNode, runtime_selected: int):
@@ -228,7 +233,6 @@ class GlobalScheduler:
             remove_allocations_recursive_for_children(node, runtime_selected)
             # Remove all of it's children as well?
         return len(node.value)
-
 
     def handle_eviction(self, runtime_selected):
         current_max_tokens = self.max_tokens_gpu[runtime_selected]
@@ -309,8 +313,9 @@ class GlobalScheduler:
     def handle_important_node_stealing(self, scheduled_idx):
         if sum(self.per_gpu_load.values()) < 50:
             return
-        allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu()
+        allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu_with_atleast_min_load(2)
         allocations_with_indices = [(gpu_id, allocation_cost_per_gpu[gpu_id]) for gpu_id in range(len(allocation_cost_per_gpu))]
+        # logger.info(allocations_with_indices)
         allocations_with_indices = list(sorted(allocations_with_indices, key=lambda x: -x[1]))
         self.handle_important_node_stealing_recursive(allocations_with_indices)
 
@@ -329,7 +334,9 @@ class GlobalScheduler:
         node_cost_for_gpu = []
         for node, cost in self.histogram.histogram.items():
             # If after adjusting the nodes, the allocation difference is valid, allow adjustment
-            if larger_device in self.gpu_allocations.get(node) and self.histogram.node_to_count[node] > 1:
+            # if larger_device in self.gpu_allocations.get(node) and self.histogram.node_to_count[node] > 1:
+            #     heapq.heappush(node_cost_for_gpu, (cost, node))
+            if larger_device in self.gpu_allocations.get(node) and self.is_large_node(node) and self.histogram.node_to_count[node] > 1:
                 heapq.heappush(node_cost_for_gpu, (cost, node))
 
         if len(node_cost_for_gpu) == 1:
@@ -350,8 +357,8 @@ class GlobalScheduler:
 
                 assert self.is_large_node(node)
                 # if node.has_cached_gpu(smaller_device): # Avoid copying an existing device
-                if smaller_device in self.gpu_allocations[node]:
-                    continue
+                # if smaller_device in self.gpu_allocations[node]:
+                #     continue
 
                 if larger_allocation_cost - cost < smaller_device_allocation_cost + cost:
                     break

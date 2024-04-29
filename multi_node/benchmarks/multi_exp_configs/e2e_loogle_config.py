@@ -12,7 +12,7 @@ from benchmark_workload_gen import *
 from sglang.srt.managers.router.model_runner import GPUConfig
 from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
 import random
-from multi_exp_configs.multi_exp_utils import create_loogle_dataset, add_simulation_to_gpu_config
+from multi_exp_configs.multi_exp_utils import *
 
 model_name = "mistralai/Mistral-7B-v0.1"
 
@@ -29,6 +29,12 @@ sglang_server_args = {
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -41,32 +47,44 @@ ours_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True,
+    'report_hit_ratio': True 
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
+add_simulation_to_gpu_config(ours_gpu_configs)
 
-exp_time = 300
+exp_time = float('inf')
 configuration_to_test = [
-    [24, 293, 0.4]
+    scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", sglang_server_args, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_server_args, 'load_eviction_v2'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'all_stuff'),
 ]
 
-def gen_workloads_for_loogle(configuration_to_test, policies_to_test):
+def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
         dataloader, requests, send_out_times = create_loogle_dataset(
-            configuration, 
+            configuration,
             model_name, 
-            exp_time=exp_time,
+            exp_time, 
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
+            # print(server_configs)
             yield DefaultWorkload(
                     dataloader=dataloader,
                     policy=policy,
@@ -82,15 +100,17 @@ def gen_workloads_for_loogle(configuration_to_test, policies_to_test):
                     server_configs=server_configs,
                 )
 
-workloads = gen_workloads_for_loogle(configuration_to_test, policies_to_test)
+workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.log",
-    csv_log_path="eviction_logs_for_load_based_histogram/eviction_load_based_histogram_v5_v2.csv",
+    log_file_path="e2e/8r_loogle_rich/exp.log",
+    csv_log_path="e2e/8r_loogle_rich/exp.csv",
+    # log_file_path="logs/debug_loogle_cp_2048/exp.log",
+    # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,
-    experiment_name="loogle_test"
+    experiment_name="loogle_e2e"
 )
 
 exp_args = AllExperiments(
