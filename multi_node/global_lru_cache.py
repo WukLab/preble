@@ -541,9 +541,10 @@ class LPRadixCache:
                 if v == node:
                     num_tokens = len(k)
                     if list(k) == evicted_ids[-num_tokens:]:
-                        node.cached_gpus.remove(gpu_id)
-                        node.evicted_gpus.add(gpu_id)
-                        evicted_ids = evicted_ids[:-num_tokens]
+                        if gpu_id in node.cached_gpus:
+                            node.cached_gpus.remove(gpu_id)
+                            node.evicted_gpus.add(gpu_id)
+                            evicted_ids = evicted_ids[:-num_tokens]
                     break
             if not evicted_ids:
                 break

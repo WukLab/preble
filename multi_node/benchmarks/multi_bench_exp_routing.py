@@ -11,6 +11,7 @@ np.random.seed(10)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import datetime
 import time
+import multi_exp_configs.e2e_loogle_config
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
