@@ -93,7 +93,7 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
     def __init__(self, gpu, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.gpu = gpu
-    
+
 class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -282,7 +282,7 @@ class ModelDetails:
             await asyncio.sleep(0.5)
             await self.update_hit_ratio(runtime_id)
 
-    async def get_request(input_requests, request_rate: float, send_times: Optional[List[float]] = None):
+    async def get_request(self, input_requests, request_rate: float, send_times: Optional[List[float]] = None):
         input_requests = iter(input_requests)
         for i, request in enumerate(input_requests):
             yield request
@@ -389,7 +389,7 @@ class ModelDetails:
         if hit_rates[highest_idx] < 0.7:
             highest_idx = None
         runtime_idx, request_id = await asyncio.to_thread(
-            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx
+            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates
         )
         scheduling_overhead = time.time() - start_time
 

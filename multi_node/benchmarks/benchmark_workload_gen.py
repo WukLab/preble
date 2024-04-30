@@ -616,7 +616,7 @@ class LooGLEDataset(DataLoader):
         #      We replicate QAs w.r.t existing prefix sharing distributions
         scale_factor = self.total_num_requests / num_raw_requests
         
-        for i, item in enumerate(sampled_dataset):
+        for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):

@@ -24,6 +24,7 @@ sglang_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
+    # "chunk_prefill_budget": 512,
 }
 # GPU Configuration
 baseline_gpu_configs = [
@@ -53,26 +54,28 @@ ours_server_args = {
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'all_stuff'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'time_1_6'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
@@ -102,8 +105,8 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_loogle_rich/exp.log",
-    csv_log_path="e2e/8r_loogle_rich/exp.csv",
+    log_file_path="e2e/4r_loogle_rich/exp_7.log",
+    csv_log_path="e2e/4r_loogle_rich/exp_7.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=True,

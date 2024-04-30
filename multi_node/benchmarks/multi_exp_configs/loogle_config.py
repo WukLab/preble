@@ -40,7 +40,7 @@ ours_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
-    "chunk_prefill_budget": 512,
+    # "chunk_prefill_budget": 512,
     'report_hit_ratio': True,
 }
 # GPU Configuration
@@ -48,14 +48,15 @@ ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
+add_simulation_to_gpu_config(ours_gpu_configs)
 
-exp_time = 300
+exp_time = 800
 configuration_to_test = [
-    [24, 293, 0.4]
+    [24, 393, 0.4]
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", sglang_server_args, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_server_args, 'load_eviction_v2'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", sglang_server_args, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'load_eviction_v2'),
 ]
 
 def gen_workloads_for_loogle(configuration_to_test, policies_to_test):
