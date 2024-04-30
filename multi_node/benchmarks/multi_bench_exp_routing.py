@@ -195,6 +195,7 @@ def run_all_experiments(all_experiments: AllExperiments):
 if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.loogle_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
-    from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
+    # from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
+    from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
 
     run_all_experiments(exp_args)

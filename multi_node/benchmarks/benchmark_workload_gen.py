@@ -1155,20 +1155,27 @@ class VirtualEnvLoader(DataLoader):
         with open(data_path, 'r') as f:
             return json.load(f)
 
-    def generate_workload(self, k: int = None):
+    def generate_workload(self, k: int = None) -> List[List[dict]]:
+        """Return:
+        - a list of list of requests, where each list of requests is a conversation.
+        """
         requests = []
+        total_requests = 0
         random.shuffle(self.data)
         for i, sample in enumerate(self.data):
-            if k is not None and len(requests) >= k:
-                break
+            if k is not None and total_requests >= k:
+                requests[-1] = requests[-1][:len(requests[-1]) - (total_requests - k)]
+            req_group = []
             for turn in sample:
-                requests.append({
+                req_group.append({
                     'text': turn['prompt'],
                     'sampling_params': {
                         'temperature': 0.0,
                         'max_new_tokens': turn['usage']['completion_tokens'],
                     },
                 })
+            self.add_input_token_ids_to_workload(req_group)
+            requests.append(req_group)
+            total_requests += len(req_group)
         
-        self.add_input_token_ids_to_workload(requests)
-        return requests[:k]
+        return requests
