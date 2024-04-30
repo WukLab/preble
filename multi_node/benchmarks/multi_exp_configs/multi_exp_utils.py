@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from transformers import AutoTokenizer
 import random
 from benchmark_utils import WorkloadConfig
-from benchmark_workload_gen import WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType, MultiDomainToolBenchDataLoader
+from benchmark_workload_gen import VirtualEnvLoader, WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType, MultiDomainToolBenchDataLoader
 from typing import Iterator
 from benchmark_workload_gen import LoadDistribution
 import numpy as np
@@ -91,3 +91,22 @@ def create_toolbench_dataset(config, model_name, exp_time, data_path, load_dist)
     random.shuffle(requests)
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times
+
+def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize virtualenv dataset')
+    dataloader = VirtualEnvLoader(
+        tokenizer=tokenizer,
+        data_path=data_path,
+    )
+    request_groups = dataloader.generate_workload()
+    random.shuffle(request_groups)
+    send_out_times_list = []
+    for requests in request_groups:
+        # the overall request rate should be split among the different request groups
+        send_out_times = calc_send_out_times(requests, request_rate/len(request_groups), exp_time)
+        send_out_times_list.append(send_out_times)
+    return dataloader, request_groups, send_out_times_list

@@ -6,7 +6,7 @@ import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from benchmark_utils import WorkloadConfig, MajorExperimentArgs
+from benchmark_utils import ExperimentType, WorkloadConfig, MajorExperimentArgs, RequestGroup
 from benchmark_workload_gen import *
 from sglang.srt.managers.router.model_runner import GPUConfig
 from sglang.srt.managers.router.infer_batch import Batch
@@ -55,7 +55,10 @@ def create_workload_configs(configurations_to_test):
                 random_ratio,
                 num_requests,
                 request_rate,
-                requests,
+                [RequestGroup(requests,
+                              request_rate,
+                              send_out_times=None,
+                              request_type=ExperimentType.default)],
                 dataloader,
                 exp_time=exp_time,
             )
