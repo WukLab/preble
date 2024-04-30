@@ -220,7 +220,8 @@ def load_and_run_benchmark(
     num_requests = workload_config.num_requests
     rps = workload_config.request_rate
     exp_time = workload_config.exp_time
-    requests = workload_config.requests
+    assert len(workload_config.request_groups) == 1, "Only support single request group"
+    requests = workload_config.request_groups[0].requests
     tokenizer = workload_config.dataloader.tokenizer
 
     logging.info(

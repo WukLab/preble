@@ -2,12 +2,14 @@ from transformers import AutoTokenizer
 import random
 import sys, os
 
+
 # Add the parent directory of the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from multi_experiment_benchmark_utils import AllExperiments, ExperimentType, DefaultWorkload, ConfigurableMajorExperimentArgs
 
+from benchmark_utils import RequestGroup
 from benchmark_workload_gen import *
 from sglang.srt.managers.router.model_runner import GPUConfig
 from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
@@ -90,8 +92,11 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
                     policy=policy,
                     custom_policy=custom_policy,
                     custom_policy_msg = custom_policy_msg,
-                    requests=requests,
-                    send_out_times=send_out_times,
+                    request_groups=[RequestGroup(requests=requests,
+                                                 request_rate=request_rate,
+                                                 send_out_times=send_out_times,
+                                                 request_type=ExperimentType.default)],
+                    # send_out_times=send_out_times,
                     num_prefix_patterns=num_prefix_patters,
                     random_ratio=0.0,
                     exp_time=exp_time,
