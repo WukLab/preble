@@ -882,10 +882,11 @@ class TBMultiDomainOracle(CustomRuntimeSelector):
 class ChameleonTabMWPLoader(DataLoader):
     """DataLoader for Chameleon + TabMWP dataset"""
 
-    def __init__(self, data_path: str, 
+    def __init__(self, data_path: str, num_patterns: int,
                  tokenizer: PreTrainedTokenizer):
-        super().__init__(data_path, None, None, tokenizer)
+        super().__init__(data_path, num_patterns, None, tokenizer)
         self.data = self.read_data(data_path)
+        self.pattern_req_groups = self.load_data_by_pattern()
 
     def read_data(self, data_path: str):
         data = []
@@ -978,33 +979,54 @@ class ChameleonTabMWPLoader(DataLoader):
             },
         }
 
-    def generate_workload(self, k: int = None):
-        requests = []
-        random.shuffle(self.data)
+    def load_data_by_pattern(self):
+        pattern_req_groups = {}
         for i, sample in enumerate(self.data):
-            if k is not None and len(requests) >= k:
-                break
             # handle predict module requests
-            requests.append(self.generate_module_prediction_request(sample))
+            pattern_req_groups['module_prediction'] = pattern_req_groups.get('module_prediction', []) \
+                + [self.generate_module_prediction_request(sample)]
             
             modules = sample['modules:output']
             if "row_lookup" in modules and sample['row_lookup:input']:
-                requests.append(self.generate_row_lookup_request(sample))
+                pattern_req_groups['row_lookup'] = pattern_req_groups.get('row_lookup', []) \
+                    + [self.generate_row_lookup_request(sample)]
             if "column_lookup" in modules and sample['column_lookup:input']:
-                requests.append(self.generate_column_lookup_request(sample))
+                pattern_req_groups['column_lookup'] = pattern_req_groups.get('column_lookup', []) \
+                    + [self.generate_column_lookup_request(sample)]
             if "table_verbalizer" in modules:
-                requests.append(self.generate_table_verbalizer_request(sample))
+                pattern_req_groups['table_verbalizer'] = pattern_req_groups.get('table_verbalizer', []) \
+                    + [self.generate_table_verbalizer_request(sample)]
             if "knowledge_retrieval" in modules:
-                requests.append(self.generate_knowledge_retrieval_request(sample))
+                pattern_req_groups['knowledge_retrieval'] = pattern_req_groups.get('knowledge_retrieval', []) \
+                    + [self.generate_knowledge_retrieval_request(sample)]
+            # program_generator and program_generator_and_verifier shares the same prompt
             if "program_generator" in modules:
-                requests.append(self.generate_program_generator_request(sample))
+                pattern_req_groups['program_generator_verifier'] = pattern_req_groups.get('program_generator_verifier', []) \
+                    + [self.generate_program_generator_request(sample)]
             if "program_generator_and_verifier" in modules:
-                requests.append(self.generate_program_generator_verifier_request(sample))
+                pattern_req_groups['program_generator_verifier'] = pattern_req_groups.get('program_generator_verifier', []) \
+                    + [self.generate_program_generator_verifier_request(sample)]
             if "solution_generator" in modules:
-                requests.append(self.generate_solution_generator_request(sample))
+                pattern_req_groups['solution_generator'] = pattern_req_groups.get('solution_generator', []) \
+                    + [self.generate_solution_generator_request(sample)]
 
+        return pattern_req_groups
+    
+    def generate_workload(self, k: int = None):
+        num_patterns = self.num_patterns
+        if self.num_patterns > len(self.pattern_req_groups):
+            print(f'Not enough patterns in the dataset. Only {len(self.pattern_req_groups)} patterns available.')
+            num_patterns = len(self.pattern_req_groups)
+        pattern_groups = random.sample(list(self.pattern_req_groups.keys()), num_patterns)
+        requests = []
+        for pattern in pattern_groups:
+            requests += self.pattern_req_groups[pattern]
+        random.shuffle(requests)
+        requests = requests[:k]
         self.add_input_token_ids_to_workload(requests)
-        return requests[:k]
+        if len(requests) < k:
+            print(f'Not enough requests in the dataset. Only {len(requests)} requests available.')
+        return requests
     
 
 class CreatorMATHLoader(DataLoader):

@@ -6,7 +6,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from transformers import AutoTokenizer
 import random
 from benchmark_utils import WorkloadConfig
-from benchmark_workload_gen import VirtualEnvLoader, WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType, MultiDomainToolBenchDataLoader
+from benchmark_workload_gen import (
+    VirtualEnvLoader, 
+    WorkloadPrefixDataLoader, 
+    ToolBenchDataLoader, 
+    LooGLEDataset, 
+    LooGLEDatasetType, 
+    MultiDomainToolBenchDataLoader,
+    ChameleonTabMWPLoader
+)
 from typing import Iterator
 from benchmark_workload_gen import LoadDistribution
 import numpy as np
@@ -102,7 +110,7 @@ def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist
         tokenizer=tokenizer,
         data_path=data_path,
     )
-    request_groups = dataloader.generate_workload()
+    request_groups = dataloader.generate_workload(k=num_requests)
     random.shuffle(request_groups)
     send_out_times_list = []
     for requests in request_groups:
@@ -110,3 +118,18 @@ def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist
         send_out_times = calc_send_out_times(requests, request_rate/len(request_groups), exp_time)
         send_out_times_list.append(send_out_times)
     return dataloader, request_groups, send_out_times_list
+
+def create_chameleon_dataset(config, model_name, exp_time, data_path, load_dist):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize chameleon dataset')
+    dataloader = ChameleonTabMWPLoader(
+        data_path=data_path,
+        tokenizer=tokenizer,
+        num_patterns=num_workloads,
+    )
+    requests = dataloader.generate_workload(k=num_requests)
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, requests, send_out_times
