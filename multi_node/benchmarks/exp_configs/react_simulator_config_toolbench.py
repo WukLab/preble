@@ -16,7 +16,7 @@ import random
 
 # Basic Configuration
 # log_file_path = "logs/sim_hot_cold_rps18_1800.log"
-log_file_path = "e2e/2r_toolbench_sglang_baseline/exp.log"
+log_file_path = "reproduce/round_robin.log"
 # model_name = "meta-llama/Llama-2-7b-hf"
 model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = float('inf')
@@ -28,13 +28,13 @@ ssh_config_08 = {
     "node_name": "08",
 }
 server_args = {
+    "model_path": model_name,
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
     'context_length': 4096,
     "enable_flashinfer": True,
-    'schedule_heuristic': 'lpm',
-    # "chunk_prefill_budget": 512,
-    # 'report_hit_ratio': True,
+    "chunk_prefill_budget": 512,
+    'schedule_heuristic': 'fcfs-mpq',
 }
 # GPU Configuration
 gpu_configs = [
@@ -42,8 +42,6 @@ gpu_configs = [
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08),
     GPUConfig(gpu_id=0, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08, runtime_args=server_args),
 
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, ssh_config=ssh_config_08),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, ssh_config=ssh_config_08),
@@ -64,14 +62,8 @@ add_simulation_to_gpu_config(gpu_configs)
 #     [200, 400, 4],
 # ]
 configurations_to_test = [
-    # [200, 3600, 12],
-    # [800, 7200, 24],
-    # [200, 900, 3],
-    # [200, 1800, 6],
-    # [200, 2700, 9],
     [200, 3600, 12],
-    # [200, 5400, 18],
-    # [200, 7200, 24],
+    # [200, 400, 12],
 ]
 workload_configs = create_toolbench_data_loader(
     configurations_to_test, 
@@ -92,8 +84,7 @@ selectors_configs = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.BASIC_MEM_SCHEDULERV2, 'mem_basic_v2'),
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", 'round_robin'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutRebalancing, ''),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, 'fcfs_rebalance_cp512_load_threshold_1.4'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ''),
     # (DataParallelRuntimeSelectionPolicy.RANDOM, "", 'random'),
 
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.MemSchedulerEvictBasedOnLoad, 'evict_based_on_load'),
@@ -130,13 +121,14 @@ selectors_configs = [
 ]
 
 
+
 exp_args = MajorExperimentArgs(
     workload_configs,
     gpu_configs,
     simulate=True,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
-    model_name=model_name,
+    model_name=model_name
 )
 
 if __name__ == "__main__":

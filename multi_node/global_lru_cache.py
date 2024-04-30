@@ -275,6 +275,11 @@ class LPRadixCache:
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
+    
+    def virtual_evict(self, num_tokens):
+        if self.disable:
+            return RuntimeError()
+        
 
     def evict_with_runtime_id_without_removing(self, num_tokens, evict_callback, runtime_id):
         if self.disable:
@@ -298,7 +303,7 @@ class LPRadixCache:
             # self._delete_node(x, runtime_id)
             # if len(x.parent.children) == 0:
             #     heapq.heappush(leaves, x.parent)
-
+    
     def dec_ref_counter(self, node, runtime_id):
         delta = 0
         node:LPTreeNode
@@ -427,6 +432,15 @@ class LPRadixCache:
                     node.evicted_gpus.remove(runtime_id)
                 node.cached_gpus.add(runtime_id)
             node = node.parent
+    
+    def virtual_lru_eviction(self, num_new_tokens, runtime_id):
+        """calculate eviction cost for a given rquest
+        Args:
+            node (LPTreeNode): leaf node of newly scheduled request
+            runtime_id: intended gpu id
+        """
+        pass
+        
 
     def _print_helper(self, node, indent, depth=0):
         if depth == 5:

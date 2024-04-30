@@ -12,6 +12,7 @@ policy_mapping = {
     'ROUND_ROBIN:': line_sglang,
     'CUSTOM:GlobalScheduler': line_sys,
     'CUSTOM:GlobalSchedulerTime': line_sys,
+    'CUSTOM:GlobalSchedulerWithoutMissRate': line_sys,
 }
 
 import matplotlib
