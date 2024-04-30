@@ -93,12 +93,18 @@ def register_selector(
 
     def handle_histogram_based_recomp():
         return GlobalScheduler(
-            num_nodes=len(model_details.runtimes), enable_eviction=False
+            num_nodes=len(model_details.runtimes), enable_eviction=False, enable_miss_rate=True
         )
 
+    def handle_histogram_based_recomp_without_miss_rate():
+        return GlobalScheduler(
+            num_nodes=len(model_details.runtimes), enable_eviction=False, enable_miss_rate=False
+        )
+    
     selector_creators = {
         CustomPolicyType.BASIC_MEM_SCHEDULERV2: handle_basic_mem_schedulerv2,
         CustomPolicyType.GlobalScheduler: handle_histogram_based_recomp,
+        CustomPolicyType.GlobalSchedulerWithoutMissRate: handle_histogram_based_recomp_without_miss_rate,
     }
 
     if custom_policy not in selector_creators:

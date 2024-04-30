@@ -389,7 +389,7 @@ class ModelDetails:
         if hit_rates[highest_idx] < 0.7:
             highest_idx = None
         runtime_idx, request_id = await asyncio.to_thread(
-            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx
+            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates
         )
         scheduling_overhead = time.time() - start_time
 

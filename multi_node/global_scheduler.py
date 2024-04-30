@@ -15,7 +15,7 @@ tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 logger = logging.getLogger(__name__)
 
 class SlidingWindowHistogram:
-    def __init__(self, window_duration: timedelta, gpu_allocations, num_gpus=2):
+    def __init__(self, window_duration: timedelta, gpu_allocations, num_gpus=2, enable_miss_rate=True):
         self.window_duration = window_duration
         self.gpu_allocations = gpu_allocations
         self.histogram = defaultdict(int)
@@ -23,12 +23,21 @@ class SlidingWindowHistogram:
 
         self.timestamps: List[Tuple[datetime, LPTreeNode, LPTreeNode]] = []
         self.num_gpus = num_gpus
+        self.enable_miss_rate = enable_miss_rate
+        self.prev_mis_rates = {}
+        self.hit_tokens = defaultdict(int)
+        self.prompt_tokens = defaultdict(int)
 
     def update(self, timestamp, node: LPTreeNode, leaf_node: LPTreeNode):
         self.timestamps.append((timestamp, node, leaf_node))
         self.histogram[node] += 1 * leaf_node.context_length
         self.node_to_count[node] += 1
 
+        # of being evicted or not
+        self.hit_tokens[node] += leaf_node.context_length - leaf_node.num_tokens
+        self.prompt_tokens[node] += leaf_node.context_length
+
+        self.prev_mis_rates[node] = 1 - (self.hit_tokens[node] / self.prompt_tokens[node])
         self._remove_old_entries(timestamp)
 
     def _remove_old_entries(self, current_timestamp):
@@ -40,12 +49,18 @@ class SlidingWindowHistogram:
             if self.histogram[node] <= 0:
                 del self.histogram[node]
                 del self.node_to_count[node]
+                del self.prev_mis_rates[node]
+                del self.hit_tokens[node]
+                del self.prompt_tokens[node]
                 self.gpu_allocations[node] = set() # Reset the gpu allocation outside the time window
 
     def rename_node(self, old_node, new_node):
         if old_node in self.histogram:
             self.histogram[new_node] = self.histogram.pop(old_node)
             self.node_to_count[new_node] = self.node_to_count.pop(old_node)
+            self.prev_mis_rates[new_node] = self.prev_mis_rates.pop(old_node)
+            self.hit_tokens[new_node] = self.hit_tokens.pop(old_node)
+            self.prompt_tokens[new_node] = self.prompt_tokens.pop(old_node)
             timestamps = []
             for timestamp, important_node, leaf_node in self.timestamps:
                 if important_node == old_node:
@@ -61,19 +76,25 @@ class SlidingWindowHistogram:
         node: LPTreeNode
         for node, cost in self.histogram.items():
             for gpu in self.gpu_allocations.get(node, {}):
-                allocation[gpu] += cost / len(self.gpu_allocations.get(node))# potentionally divide by length of node.cached_gpus here
+                if self.enable_miss_rate:
+                    allocation[gpu] += cost / len(self.gpu_allocations.get(node)) * self.prev_mis_rates[node] # potentionally divide by length of node.cached_gpus here
+                else:
+                    allocation[gpu] += cost / len(self.gpu_allocations.get(node))
         return allocation
 
     def current_allocation_per_gpu_with_atleast_min_load(self, min_load=2):
         allocation = [0 for _ in range(self.num_gpus)]
         node: LPTreeNode
         for node, cost in self.histogram.items():
-            if self.node_to_count[node] < min_load:
-                continue
             for gpu in self.gpu_allocations.get(node, {}):
-                allocation[gpu] += cost / len(self.gpu_allocations.get(node))# potentionally divide by length of node.cached_gpus here
-        return allocation
+                if self.node_to_count[node] < min_load:
+                    continue
+                if self.enable_miss_rate:
+                    allocation[gpu] += cost / len(self.gpu_allocations.get(node)) * self.prev_mis_rates[node] # potentionally divide by length of node.cached_gpus here
+                else:
+                    allocation[gpu] += cost / len(self.gpu_allocations.get(node)) # potentionally divide by length of node.cached_gpus here
 
+        return allocation
 
 class TTFTWindowedOverloadedDetector:
     # TTFT is a good indicator of overloaded
@@ -138,7 +159,7 @@ class TTFTWindowedOverloadedDetector:
 
 
 class GlobalScheduler:
-    def __init__(self, num_nodes=2, enable_eviction=False, enable_rebalancing=True) -> None:
+    def __init__(self, num_nodes=2, enable_eviction=False, enable_rebalancing=True, enable_miss_rate=True) -> None:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
@@ -150,14 +171,18 @@ class GlobalScheduler:
         self.num_gpus = num_nodes
         self.metrics_dict = []
         self.lock = threading.Lock()
-        self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus)
+        self.enable_miss_rate = enable_miss_rate
+
+        self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus, enable_miss_rate=self.enable_miss_rate)
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
-        self.HIGH_LOAD_THRESHOLD = 1.15
+        self.HIGH_LOAD_THRESHOLD = 1.4
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
-        self.prev_mis_rates = [1 for _ in range(num_nodes)]
+        self.avg_hit_rate_queues = [deque(maxlen=200) for _ in range(num_nodes)] 
 
+
+    
     # Consider Split nodes
     def handle_split_nodes_gpu_allocations(self, split_nodes, gpu_allocations):
         for child_node, new_node in split_nodes.items():
@@ -251,13 +276,21 @@ class GlobalScheduler:
         input_ids=None,
         sampling_params=None,
         runtime_id_with_highest_hit_rate=None,
+        hit_rates=None,
         *args, **kwargs,
     ):
         # Tokenize the text
         start_time = time.time()
         with self.lock:
+            # if hit_rates:
+            #     for gpu_id, hit_rate_gpu in enumerate(hit_rates):
+            #         self.avg_hit_rate_queues[gpu_id].append(hit_rate_gpu)
+            #     self.prev_mis_rates = [(1 - np.mean(queue)) for queue in self.avg_hit_rate_queues]
+            #     if self.counter % 1000:
+            #         logging.info(self.prev_mis_rates)
             split_nodes = {}
             leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
+            
             self.handle_split_nodes_gpu_allocations(split_nodes, self.gpu_allocations) # copies split node gpu allocation
             self.handle_split_node_histogram(split_nodes)
 
@@ -281,13 +314,14 @@ class GlobalScheduler:
             runtime_idx = list(gpu_selected)[0]
             if len(gpu_selected) > 1:
                 runtime_idx = int(np.random.choice(list(gpu_selected)))
-
+            self.counter += 1
+            
             self.per_gpu_load[runtime_idx] += 1
             self.cache.update_allocated_size(leaf_node, runtime_idx)
     
             if self.enable_rebalancing:
                 self.handle_important_node_stealing(runtime_idx)
-                self.work_steal_low_loaded_prefixes()
+                # self.work_steal_low_loaded_prefixes()
 
         self.metrics_dict.append(
             {
@@ -389,8 +423,9 @@ class GlobalScheduler:
 
     def work_steal_low_loaded_prefixes(self):
         low_load_nodes = []
-        max_req = max(max(self.mem_cost), 1)
-        normalized_mem_cost = [x / max_req for x in self.mem_cost]
+        allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu_with_atleast_min_load_or_zero_ref(2)
+        max_req = max(max(allocation_cost_per_gpu), 1)
+        normalized_mem_cost = [x / max_req for x in allocation_cost_per_gpu]
         if self.counter < 20:
             return None
         for runtime_id, node in enumerate(normalized_mem_cost):
