@@ -66,12 +66,12 @@ add_simulation_to_gpu_config(gpu_configs)
 configurations_to_test = [
     # [200, 3600, 12],
     # [800, 7200, 24],
-    [200, 900, 3],
-    [200, 1800, 6],
-    [200, 2700, 9],
+    # [200, 900, 3],
+    # [200, 1800, 6],
+    # [200, 2700, 9],
     [200, 3600, 12],
-    [200, 5400, 18],
-    [200, 7200, 24],
+    # [200, 5400, 18],
+    # [200, 7200, 24],
 ]
 workload_configs = create_toolbench_data_loader(
     configurations_to_test, 

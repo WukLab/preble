@@ -285,7 +285,7 @@ class ModelDetails:
     async def get_request(self, input_requests, request_rate: float, send_times: Optional[List[float]] = None):
         for i, request in enumerate(input_requests):
             yield request
-            if request_rate == float("inf") or not send_times:
+            if request_rate == float("inf") and not send_times:
                 continue
             if send_times:
                 interval = send_times[i + 1] - send_times[i] if i + 1 < len(send_times) else 0
@@ -303,7 +303,6 @@ class ModelDetails:
         tasks: List[asyncio.Task] = []
         try:
             async for request in self.get_request(workload_config.requests, workload_config.request_rate, workload_config.send_out_times):
-                logger.info('send req')
                 task = asyncio.create_task(self.async_send_request(**request))
                 tasks.append(task)
             if workload_config.exp_time != float("inf"):

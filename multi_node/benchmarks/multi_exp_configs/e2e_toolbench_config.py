@@ -29,8 +29,8 @@ sglang_server_args = {
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -53,12 +53,12 @@ ours_server_args = {
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -73,8 +73,8 @@ configuration_to_test = [
     # [200, 7200, 24],
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'all_stuff'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 's2'),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
@@ -106,10 +106,10 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
-    csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
-    # log_file_path="logs/debug/exp.log",
-    # csv_log_path="logs/debug/exp.csv",
+    # log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
+    # csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
+    log_file_path="reproduce/2r_toolbench/exp.log",
+    csv_log_path="reproduce/2r_toolbench/exp.csv",
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,

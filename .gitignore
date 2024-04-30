@@ -182,6 +182,7 @@ tmp*.txt
 logs/
 e2e/
 datasets/
+*.csv
 
 
 # datasets
