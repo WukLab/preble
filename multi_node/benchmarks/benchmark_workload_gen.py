@@ -693,7 +693,7 @@ class LooGLEDataset(DataLoader):
         #      We replicate QAs w.r.t existing prefix sharing distributions
         scale_factor = self.total_num_requests / num_raw_requests
         
-        for i, item in enumerate(sampled_dataset):
+        for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):
@@ -1218,3 +1218,40 @@ class ToolQALoader(DataLoader):
         self.add_input_token_ids_to_workload(requests)
         return requests
 
+
+class VirtualEnvLoader(DataLoader):
+    """DataLoader for VirtualEnv dataset."""
+
+    def __init__(self, data_path: str, 
+                 tokenizer: PreTrainedTokenizer):
+        super().__init__(data_path, None, None, tokenizer)
+        self.data = self.read_data(data_path)
+
+    def read_data(self, data_path: str):
+        with open(data_path, 'r') as f:
+            return json.load(f)
+
+    def generate_workload(self, k: int = None) -> List[List[dict]]:
+        """Return:
+        - a list of list of requests, where each list of requests is a conversation.
+        """
+        requests = []
+        total_requests = 0
+        random.shuffle(self.data)
+        for i, sample in enumerate(self.data):
+            if k is not None and total_requests >= k:
+                requests[-1] = requests[-1][:len(requests[-1]) - (total_requests - k)]
+            req_group = []
+            for turn in sample:
+                req_group.append({
+                    'text': turn['prompt'],
+                    'sampling_params': {
+                        'temperature': 0.0,
+                        'max_new_tokens': turn['usage']['completion_tokens'],
+                    },
+                })
+            self.add_input_token_ids_to_workload(req_group)
+            requests.append(req_group)
+            total_requests += len(req_group)
+        
+        return requests

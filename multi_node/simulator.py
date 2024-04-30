@@ -349,7 +349,15 @@ class SendRequestEvent(SimulationEvent):
         if hit_rates[highest_idx] < 0.7:
             highest_idx = None
         # highest_idx = None
-        runtime_id = simulator.router.select_runtime(text, experiment_id, rid, input_ids, sampling_params=sampling_params, current_time_stamp=self.time, runtime_id_with_highest_hit_rate=highest_idx)
+        runtime_id = simulator.router.select_runtime(
+            text, 
+            experiment_id, 
+            rid, 
+            input_ids, 
+            sampling_params=sampling_params, 
+            current_time_stamp=self.time, 
+            runtime_id_with_highest_hit_rate=highest_idx, 
+            hit_rates=hit_rates)
         generate_input = GenerateReqInput(
             text=text,
             sampling_params=sampling_params,
