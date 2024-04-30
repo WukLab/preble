@@ -60,12 +60,12 @@ ssh_config_08 = {
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=True, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=True, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=True, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=True, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=True, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=True, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=4, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=5, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=6, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=7, url=None, use_ssh=True, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -82,8 +82,9 @@ configuration_to_test = [
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", ours_gpu_configs, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
 
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
 ]
@@ -117,8 +118,8 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_test_toolbench_multi_exp/exp_v5🥲_🙏.log",
-    csv_log_path="e2e/8r_test_toolbench_multi_exp/exp_v5🥲_🙏.csv",
+    log_file_path="e2e/8r_test_toolbench_multi_exp/exp_v6🥲_🙏.log",
+    csv_log_path="e2e/8r_test_toolbench_multi_exp/exp_v6🥲_🙏.csv",
     # log_file_path="logs/debug/exp.log",
     # csv_log_path="logs/debug/exp.csv",
     simulate=True,
