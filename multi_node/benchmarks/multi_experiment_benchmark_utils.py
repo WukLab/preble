@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Iterator
+from typing import List, Optional, Iterator, Tuple, Dict
 from transformers import AutoTokenizer
 AutoTokenizer.from_pretrained("gpt2")
 import sys, os
@@ -12,10 +12,13 @@ from sglang.srt.managers.router.model_runner import GPUConfig
 from enum import Enum, auto
 from benchmarks.benchmark_workload_gen import DataLoader
 from benchmarks.benchmark_utils import WorkloadConfig
+from collections import deque
+import numpy as np
+import asyncio
 
 
 class ExperimentType(Enum):
-    sequential = auto()
+    sequential = auto()  # can send the next request only after the previous one is complete
     concurrent_grouped = auto()
     increasing_rps = auto()
     default = auto() # send each one at a fixed rps
@@ -23,6 +26,100 @@ class ExperimentType(Enum):
 
     def __eq__(self, other):
         return self.value == other.value
+
+@dataclass
+class WorkloadGroupConfig:
+    """Extend for a group of requests."""
+    rps_type: ExperimentType = ExperimentType.default
+    workload: WorkloadConfig = None
+
+class RequestRateManager:
+    """Send requests based on the policy of each group of requests."""
+
+    def __init__(self, workloads: List[Tuple[ExperimentType, WorkloadConfig]]):
+        self.workloads = []
+        for i, workload in enumerate(workloads):
+            self.workloads.append(WorkloadGroupConfig(rps_type=workload[0], workload=workload[1]))
+        self.ready_requests = deque()  # queue of (workload_id, request)
+        self.current_req_done_events: Dict[int, asyncio.Event] = {}  # map from workload_id to asyncio.Event
+        self.new_ready_req_event = asyncio.Event()
+        self.workload_finished = 0
+        self.n_workloads = len(self.workloads)
+
+    async def get_request(self):
+        tasks = []
+        for i, workload in enumerate(self.workloads):
+            task = asyncio.create_task(self.run_req_loop(i, workload))
+            tasks.append(task)
+        while self.workload_finished < self.n_workloads or len(self.ready_requests) > 0:
+            while len(self.ready_requests) > 0:
+                yield self.ready_requests.popleft()
+            if self.workload_finished == self.n_workloads:
+                break
+            done, pending = await asyncio.wait([self.new_ready_req_event.wait(),
+                                                asyncio.sleep(0.5)], return_when=asyncio.FIRST_COMPLETED)
+            self.new_ready_req_event.clear()
+
+    async def run_req_loop(self, workload_id: int, workload_config: WorkloadGroupConfig):
+        """Start an async loop for a workload."""
+        if workload_config.rps_type == ExperimentType.default:
+            await self.send_requests_default(
+                workload_id, workload_config.workload.requests, 
+                workload_config.workload.request_rate, workload_config.workload.send_out_times)
+        elif workload_config.rps_type == ExperimentType.sequential:
+            await self.send_requests_sequential(
+                workload_id, workload_config.workload.requests, 
+                workload_config.workload.request_rate, workload_config.workload.send_out_times)
+        else:
+            raise NotImplementedError(f"Request policy {workload_config.rps_type} not implemented")
+        self.workload_finished += 1
+            
+    async def send_requests_default(self, 
+                                    workload_id: int, 
+                                    requests: List[dict], 
+                                    request_rate: float, 
+                                    send_times: List[float]):
+        """Send requests at a fixed rate."""
+        input_requests = iter(requests)
+        for i, request in enumerate(input_requests):
+            self.ready_requests.append((workload_id, request))
+            self.new_ready_req_event.set()
+            if request_rate == float("inf") and not send_times:
+                continue
+            if send_times:
+                interval = send_times[i + 1] - send_times[i] if i + 1 < len(send_times) else 0
+            else:
+                interval = np.random.exponential(1.0 / request_rate)
+            await asyncio.sleep(interval)
+
+    async def send_requests_sequential(self,
+                                       workload_id: int,
+                                       requests: List[dict],
+                                       request_rate: float,
+                                       send_times: List[float]):
+        """Send requests sequentially. If the request finishes faster
+        than rps, then wait for the next request."""
+        self.current_req_done_events[workload_id] = asyncio.Event()
+        input_requests = iter(requests)
+        for i, request in enumerate(input_requests):
+            self.ready_requests.append((workload_id, request))
+            self.new_ready_req_event.set()
+            if request_rate == float("inf") and not send_times:
+                continue
+            if send_times:
+                interval = send_times[i + 1] - send_times[i] if i + 1 < len(send_times) else 0
+            else:
+                interval = np.random.exponential(1.0 / request_rate)
+            await asyncio.sleep(interval)
+            await self.current_req_done_events[workload_id].wait()
+            self.current_req_done_events[workload_id].clear()
+
+    def mark_current_req_complete(self, workload_id: int):
+        """Internally move to the next requests. 
+        This is useful for sequential setting.
+        """
+        if workload_id in self.current_req_done_events:
+            self.current_req_done_events[workload_id].set()
 
 @dataclass
 class Workload(WorkloadConfig):
