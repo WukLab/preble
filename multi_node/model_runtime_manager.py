@@ -28,8 +28,8 @@ from sglang.srt.managers.router.infer_batch import Batch
 from sglang.srt.managers.io_struct import BatchStrOut
 import torch
 import logging
-from benchmarks.benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig
-from benchmarks.multi_experiment_benchmark_utils import ExperimentType
+from benchmarks.benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig, ExperimentType
+from benchmarks.multi_experiment_benchmark_utils import RequestRateManager
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
     def __init__(self, gpu, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.gpu = gpu
-    
+
 class SSHRuntime(SSHRuntimeManager, EndpointRuntimeInterface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -253,10 +253,12 @@ class ModelDetails:
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
             # simulator.warm_up()
-            requests = workload_config.requests
-            request_rate = workload_config.request_rate
+            assert len(workload_config.request_groups) == 1, "simulator only supports one group of requests for now"
+            assert workload_config.request_groups[0].request_type == ExperimentType.default, "simulator don't support sequential requests yet"
+            requests = workload_config.request_groups[0].requests
+            request_rate = workload_config.request_groups[0].request_rate
             exp_time = workload_config.exp_time
-            send_out_times = workload_config.send_out_times
+            send_out_times = workload_config.request_groups[0].send_out_times
             simulator.initialize_all_request_with_rps(requests, request_rate, exp_time, send_out_times)
             simulator.start_model_forwarding_loop()
             return simulator.run()
@@ -288,7 +290,7 @@ class ModelDetails:
             await self.update_hit_ratio(runtime_id)
 
     async def get_request(self, input_requests, request_rate: float, send_times: Optional[List[float]] = None):
-        # input_requests = iter(input_requests)
+        input_requests = iter(input_requests)
         for i, request in enumerate(input_requests):
             yield request
             if request_rate == float("inf") and not send_times:
@@ -303,6 +305,7 @@ class ModelDetails:
         self,
         workload_config: WorkloadConfig,
     ):
+        request_manager = RequestRateManager(workload_config.request_groups)
         self.current_experiment_state_time = time.time()
         loop = asyncio.get_event_loop()
         loop.create_task(self.request_router.custom_selector.cache.update_loop())
@@ -310,8 +313,10 @@ class ModelDetails:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []
         try:
-            async for request in self.get_request(workload_config.requests, workload_config.request_rate, workload_config.send_out_times):
+            async for workload_id, request in request_manager.get_request():
                 task = asyncio.create_task(self.async_send_request(**request))
+                # so that it use the current workload_id in the callback
+                task.add_done_callback(lambda _, workload_id=workload_id: request_manager.mark_current_req_complete(workload_id))
                 tasks.append(task)
             if workload_config.exp_time != float("inf"):
                 remaining_time = max(0.5, workload_config.exp_time - (time.time() - self.current_experiment_state_time))
@@ -321,6 +326,7 @@ class ModelDetails:
                 done, pending = await asyncio.wait(tasks)
             for task in pending:
                 task.cancel()
+            request_manager.cleanup()  # Cancel all running workload loops if not already done
             return [task.result() for task in done]
         except asyncio.CancelledError:
             # Cancel all tasks if a CancelledError occurs
@@ -328,6 +334,7 @@ class ModelDetails:
                 task.cancel()
             # Wait for all tasks to be cancelled
             await asyncio.gather(*tasks, return_exceptions=True)
+            request_manager.cleanup()  # Cancel all running workload loops if not already done
             # Raise a single CancelledError
             raise
     
@@ -402,7 +409,7 @@ class ModelDetails:
         if hit_rates[highest_idx] < 0.7:
             highest_idx = None
         runtime_idx, request_id = await asyncio.to_thread(
-            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx
+            self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates
         )
         scheduling_overhead = time.time() - start_time
         self.scheduling_overheads.append(scheduling_overhead)

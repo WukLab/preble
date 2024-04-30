@@ -241,18 +241,21 @@ class LPRadixCache:
             current_depth=0,
             split_nodes=split_nodes,
         )
-        # for old_node, new_node in split_nodes.items():
-        #     self.histogram.copy_node(old_node=old_node, new_node=new_node)
 
-        # node: LPTreeNode = created_node
-        # while node is not None:
-        #     if node in all_modified_nodes:
-        #         break
-        #     self.histogram.update(node)
-        #     all_modified_nodes.add(node)
-        #     node = node.parent
-        
+        if len(created_node.parent.children) == 1 and created_node.parent != self.root_node:
+            parent = created_node.parent
+            parent.value += created_node.value
+            self._delete_leaf(created_node)
+            parent.children = {}
+            parent.is_leaf = True
+            created_node = parent
         return created_node
+
+    def _delete_leaf(self, node):
+        for k, v in node.parent.children.items():
+            if v == node:
+                break
+        del node.parent.children[k]
 
     def pretty_print(self):
         self._print_helper(self.root_node, 0)

@@ -392,7 +392,7 @@ class ModelRpcServer:
             f"unique kv tokens: {unique_kvs}"
         )
         return preempted, delayed_batch
-    
+
     # TODO: add log prob
     @torch.inference_mode()
     def budget_forward_step(self, forward_simulation=None, current_time=None):

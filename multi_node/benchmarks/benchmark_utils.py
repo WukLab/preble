@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Iterator
 import csv
 import numpy as np
+from enum import Enum, auto
 
 # Add the parent directory of the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -20,15 +21,34 @@ from sglang.srt.managers.router.model_runner import GPUConfig
 from benchmarks.benchmark_workload_gen import DataLoader
 
 
+class ExperimentType(Enum):
+    sequential = auto()  # can send the next request only after the previous one is complete
+    concurrent_grouped = auto()
+    increasing_rps = auto()
+    default = auto() # send each one at a fixed rps
+    autoscaling = auto()
+
+    def __eq__(self, other):
+        return self.value == other.value
+
+@dataclass
+class RequestGroup:
+    """A group of requests with a specifc request pattern, like sequential"""
+    requests: List[Dict]
+    request_rate: float
+    send_out_times: List[float]
+    request_type: ExperimentType
+
+
 @dataclass
 class WorkloadConfig:
     num_prefix_patterns: int
     random_ratio: float
     num_requests: int
-    request_rate: float
-    requests: List[Dict]
+    request_rate: float  # the global request rate (may not be the req rate within groups)
+    request_groups: List[RequestGroup]
     dataloader: DataLoader
-    send_out_times: List[float]
+    # send_out_times: List[float]
     exp_time: Optional[float]
 
     def __repr__(self) -> str:

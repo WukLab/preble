@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 
 from transformers import AutoTokenizer
 import random
-from benchmark_utils import WorkloadConfig
+from benchmark_utils import ExperimentType, WorkloadConfig, RequestGroup
 from benchmark_workload_gen import WorkloadPrefixDataLoader, ToolBenchDataLoader, LooGLEDataset, LooGLEDatasetType, MultiDomainToolBenchDataLoader
 from typing import Iterator
 from benchmark_workload_gen import LoadDistribution
@@ -46,9 +46,12 @@ def create_workload_prefix_configs(configurations_to_test, model_name, exp_time,
             random_ratio,
             num_requests,
             request_rate,
-            requests,
+            [RequestGroup(requests=requests,
+                          request_rate=request_rate,
+                          send_out_times=send_out_times,
+                          request_type=ExperimentType.default)],
             dataloader,
-            send_out_times=send_out_times,
+            # send_out_times=send_out_times,
             exp_time=exp_time,
         )
         yield workload_config
@@ -81,9 +84,12 @@ def create_mixture_react(configurations_to_test, model_name, exp_time, list_num_
             random_ratio,
             num_requests * len(list_num_exampls),
             request_rate,
-            requests,
+            [RequestGroup(requests=requests,
+                          request_rate=request_rate,
+                          send_out_times=send_out_times,
+                          request_type=ExperimentType.default)],
             dataloader,
-            send_out_times=send_out_times,
+            # send_out_times=send_out_times,
             exp_time=exp_time,
         )
         yield workload_config
@@ -112,11 +118,14 @@ def create_toolbench_data_loader(configurations_to_test, model_name, exp_time, d
                 num_prefix_patterns=num_workloads,
                 num_requests=num_requests,
                 request_rate=request_rate,
-                requests=requests,
+                request_groups=[RequestGroup(requests=requests,
+                                             request_rate=request_rate,
+                                             send_out_times=send_out_times,
+                                             request_type=ExperimentType.default)],
                 dataloader=dataloader,
                 exp_time=exp_time,
                 random_ratio=0.0,
-                send_out_times=send_out_times
+                # send_out_times=send_out_times
             )        
         yield workload_config
 
@@ -145,11 +154,14 @@ def create_multi_domain_toolbench_data_loader(configurations_to_test, model_name
                 num_prefix_patterns=num_workloads,
                 num_requests=num_requests,
                 request_rate=request_rate,
-                requests=requests,
+                request_groups=[RequestGroup(requests=requests,
+                                             request_rate=request_rate,
+                                             send_out_times=send_out_times,
+                                             request_type=ExperimentType.default)],
                 dataloader=dataloader,
                 exp_time=exp_time,
                 random_ratio=f"{num_domains}-{domain_size}",
-                send_out_times=send_out_times
+                # send_out_times=send_out_times
             )        
         yield workload_config
 
@@ -176,11 +188,14 @@ def create_loogle_dataset(configurations_to_test, model_name, exp_time, max_toke
                 num_prefix_patterns=num_workloads,
                 num_requests=num_requests,
                 request_rate=request_rate,
-                requests=requests,
+                request_groups=[RequestGroup(requests=requests,
+                                             request_rate=request_rate,
+                                             send_out_times=send_out_times,
+                                             request_type=ExperimentType.default)],
                 dataloader=dataloader,
                 exp_time=exp_time,
                 random_ratio=0.0,
-                send_out_times=send_out_times
+                # send_out_times=send_out_times
             )
         yield workload_config
 
@@ -226,11 +241,14 @@ def create_mixture_dataset3(configurations_to_test, model_name, exp_time, data_p
                 num_prefix_patterns=num_workloads,
                 num_requests=num_requests * 3,
                 request_rate=request_rate,
-                requests=toolbench_requests + workload_prefix_requests +toolbench_requests2,
+                request_groups=[RequestGroup(requests=all_requests,
+                                             request_rate=request_rate,
+                                             send_out_times=send_out_times,
+                                             request_type=ExperimentType.default)],
                 dataloader=dataloader,
                 exp_time=exp_time * 3,
                 random_ratio=0.0,
-                send_out_times=send_out_times
+                # send_out_times=send_out_times
             )        
         yield workload_config
 
@@ -273,7 +291,10 @@ def create_mixture_diff_toolbench_burts(configurations_to_test, model_name, exp_
                 num_prefix_patterns=num_workloads,
                 num_requests=num_requests * 3,
                 request_rate=request_rate,
-                requests=toolbench_requests + workload_prefix_requests +toolbench_requests2,
+                request_groups=[RequestGroup(requests=toolbench_requests + workload_prefix_requests + toolbench_requests2,
+                                             request_rate=request_rate,
+                                             send_out_times=None,
+                                             request_type=ExperimentType.default)],
                 dataloader=dataloader,
                 exp_time=exp_time * 3,
                 random_ratio=0.0

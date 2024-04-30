@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 
 from multi_experiment_benchmark_utils import AllExperiments, ExperimentType, DefaultWorkload, ConfigurableMajorExperimentArgs
 
+from benchmark_utils import RequestGroup
 from benchmark_workload_gen import *
 from sglang.srt.managers.router.model_runner import GPUConfig
 from data_parallel_request_cache import DataParallelRuntimeSelectionPolicy, CustomPolicyType
@@ -40,7 +41,7 @@ ours_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
-    "chunk_prefill_budget": 512,
+    # "chunk_prefill_budget": 512,
     'report_hit_ratio': True,
 }
 # GPU Configuration
@@ -48,14 +49,15 @@ ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
+add_simulation_to_gpu_config(ours_gpu_configs)
 
-exp_time = 300
+exp_time = 800
 configuration_to_test = [
-    [24, 293, 0.4]
+    [24, 393, 0.4]
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", sglang_server_args, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_server_args, 'load_eviction_v2'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", sglang_server_args, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'load_eviction_v2'),
 ]
 
 def gen_workloads_for_loogle(configuration_to_test, policies_to_test):
@@ -72,8 +74,11 @@ def gen_workloads_for_loogle(configuration_to_test, policies_to_test):
                     policy=policy,
                     custom_policy=custom_policy,
                     custom_policy_msg = custom_policy_msg,
-                    requests=requests,
-                    send_out_times=send_out_times,
+                    request_groups=[RequestGroup(requests=requests,
+                                                 request_rate=request_rate,
+                                                 send_out_times=send_out_times,
+                                                 request_type=ExperimentType.default)],
+                    # send_out_times=send_out_times,
                     num_prefix_patterns=num_prefix_patters,
                     random_ratio=0.0,
                     exp_time=exp_time,
