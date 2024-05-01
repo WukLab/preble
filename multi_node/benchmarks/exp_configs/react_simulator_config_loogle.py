@@ -23,7 +23,7 @@ model_name = "mistralai/Mistral-7B-v0.1"
 exp_time = float("inf")
 ssh_config_08 = {
     "hostname": "192.168.1.18",
-    "username": "vikranth",
+    "username": "reyna",
     "port": 456,
     "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
     "node_name": "08",

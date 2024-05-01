@@ -30,8 +30,8 @@ sglang_server_args = {
 }
 # GPU Configuration
 baseline_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -43,6 +43,15 @@ add_simulation_to_gpu_config(baseline_gpu_configs)
 
 """ours server runtime config
 """
+
+ssh_config_08 = {
+    "hostname": "192.168.1.18",
+    "username": "reyna",
+    "port": 456,
+    "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+    "node_name": "08",
+}
+
 ours_server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
@@ -55,8 +64,8 @@ ours_server_args = {
 }
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config=ssh_config_08, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
