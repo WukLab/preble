@@ -49,7 +49,8 @@ ours_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True
+    'report_hit_ratio': True,
+    'enable_iterative_eviction': True,
 }
 ssh_config_08 = {
     "hostname": "192.168.1.18",
@@ -62,8 +63,8 @@ ssh_config_08 = {
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -85,7 +86,7 @@ configuration_to_test = [
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'global_scheduler_eviction'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
 
@@ -126,8 +127,8 @@ workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
     # log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
     # csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
-    log_file_path="newest_scheduler/4r_toolbench_eviction_rerun/exp.log",
-    csv_log_path="newest_scheduler/4r_toolbench_eviction_rerun/exp.csv",
+    log_file_path="newest_scheduler/2r_toolbench_eviction_iterative_feedback/exp.log",
+    csv_log_path="newest_scheduler/2r_toolbench_eviction_iterative_feedback/exp.csv",
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,

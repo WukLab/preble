@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import List, Tuple
 import zmq
 import zmq.asyncio
+from sglang.srt.managers.router.radix_cache import EvictionData
 
 logging = logging.getLogger(__name__)
 DEBUG_COUNTER = 0
@@ -551,10 +552,14 @@ class LPRadixCache:
     async def update_loop(self):
         while True:
             gpu_id, recv_obj = await self.recv_from_detokenizer.recv_pyobj()
-            for obj in recv_obj:
-                with self.lock:
-                    self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
-
+            self._update_eviction_event(gpu_id, recv_obj)
+    
+    def _update_eviction_event(self, gpu_id, recv_obj: List[EvictionData]):
+        for obj in recv_obj:
+            with self.lock:
+                self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
+        
+    
     def get_evictable_size(self, runtime_id):
         nodes = self._collect_nodes()
         current_allocated_size = 0
@@ -583,7 +588,7 @@ class LPRadixCache:
 
         node = self.find_node(input_ids)
         while node != self.root_node:
-            for k,v in node.parent.children.items():
+            for k, v in node.parent.children.items():
                 if v == node:
                     num_tokens = len(k)
                     if list(k) == evicted_ids[-num_tokens:]:

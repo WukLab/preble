@@ -198,7 +198,7 @@ class GlobalSchedulerWithTime:
         self.avg_topt_per_gpu = [deque(maxlen=200) for _ in range(num_nodes)] 
 
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus, enable_miss_rate=self.enable_miss_rate)
-        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
+        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.HIGH_LOAD_THRESHOLD = 1.5
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
@@ -363,9 +363,10 @@ class GlobalSchedulerWithTime:
             
             self.per_gpu_load[runtime_idx] += 1
             self.cache.update_allocated_size(leaf_node, runtime_idx)
-    
-            if self.enable_eviction:
-                self.handle_eviction(runtime_idx)
+
+            # NOTE: eviction handled by iterative feedback
+            # if self.enable_eviction:
+            #     self.handle_eviction(runtime_idx)
             if self.enable_rebalancing:
                 self.handle_important_node_stealing(runtime_idx)
                 # self.work_steal_low_loaded_prefixes()

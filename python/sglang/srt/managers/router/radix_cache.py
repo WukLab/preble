@@ -99,7 +99,7 @@ class RadixCache:
     def total_size(self):
         return self._total_size_helper(self.root_node)
 
-    def evict(self, num_tokens, evict_callback):
+    def evict(self, num_tokens, evict_callback, collect_evicted_node=False):
         # curr_evict = self.evictable_size()
         # start = time.perf_counter()
         if self.disable:
@@ -119,7 +119,8 @@ class RadixCache:
 
             num_evicted += evict_callback(x.value)
             self._delete_leaf(x)
-            self.add_node_to_evicted_iteration(x)
+            if collect_evicted_node:
+                self.add_node_to_evicted_iteration(x)
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)

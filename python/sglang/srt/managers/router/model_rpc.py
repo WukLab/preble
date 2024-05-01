@@ -58,6 +58,7 @@ class ModelRpcServer:
         self.chunk_prefill_budget = server_args.chunk_prefill_budget
         # self.use_sleep_forwarding = False if not gpu_config else gpu_config.forward_simulation is not None
         self.use_sleep_forwarding = False
+        self.enable_iterative_eviction = server_args.enable_iterative_eviction
 
         logger.info(f"Use sleep forwarding: {self.use_sleep_forwarding}")
         # Copy arguments
@@ -328,7 +329,7 @@ class ModelRpcServer:
             new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
             if (batch.token_to_kv_pool.available_size() < new_tokens 
                 and not batch.tree_cache.disable):
-                batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.free)
+                batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.free, self.enable_iterative_eviction)
             # 2. if not enough, evict running requests
             while batch.token_to_kv_pool.available_size() < new_tokens:
                 if not current_running_idx:
@@ -476,7 +477,7 @@ class ModelRpcServer:
             self.schedule_waiting_overhead += time.time() - schedule_waiting_start
         
         if scheduled_waiting_batch is not None:
-            scheduled_waiting_batch.prepare_for_extend_v2(self.model_config.vocab_size, self.int_token_logit_bias)
+            scheduled_waiting_batch.prepare_for_extend_v2(self.model_config.vocab_size, self.int_token_logit_bias, self.enable_iterative_eviction)
             if self.running_batch:
                 self.running_batch.concat(scheduled_waiting_batch)
             else:
@@ -946,7 +947,7 @@ class ModelRpcServer:
     def forward_fill_batch(self, batch: Batch, forward_simulation=None):
         # Build batch tensors
         batch.prepare_for_extend_v2(
-            self.model_config.vocab_size, self.int_token_logit_bias
+            self.model_config.vocab_size, self.int_token_logit_bias, self.enable_iterative_eviction
         )
 
         logprobs = None
@@ -1152,7 +1153,7 @@ class ModelRpcServer:
     def forward_decode_batch(self, batch: Batch, forward_simulation=None):
         start_decoding_schedule = time.time()
         # check if decode out of memory
-        if not batch.check_decode_mem():
+        if not batch.check_decode_mem(self.enable_iterative_eviction):
             old_ratio = self.new_token_ratio
             self.new_token_ratio = min(old_ratio + self.new_token_ratio_step[1], 1.0)
 

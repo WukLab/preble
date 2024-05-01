@@ -40,6 +40,7 @@ class ServerArgs:
     chunk_prefill_budget: int = 0
     hit_trace_window_size: int = 30 # seconds
     report_hit_ratio: bool = True
+    enable_iterative_eviction: bool = False
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -252,6 +253,11 @@ class ServerArgs:
             '--report-hit-ratio',
             action='store_true',
             help='Whether to return hit ratio. If disabled will always return 0, which disables hot/cold mixed scheduling.',
+        )
+        parser.add_argument(
+            '--enable-iterative-eviction',
+            action='store_true',
+            help='Enable iterative eviction feedback.',
         )
 
     @classmethod

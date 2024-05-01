@@ -63,7 +63,7 @@ class RouterManager:
             out_pyobjs = await self.model_client.step(next_step_input)
 
             if self.model_client.model_server.tree_cache.evicted_iteration:
-                self.send_to_sched.send_pyobj(
+                await self.send_to_sched.send_pyobj(
                     (self.gpu_id, self.model_client.model_server.tree_cache.evicted_iteration)
                 )
                 self.model_client.model_server.tree_cache.flush_evicted()
