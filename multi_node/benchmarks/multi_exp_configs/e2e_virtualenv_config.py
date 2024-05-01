@@ -22,9 +22,9 @@ model_name = "mistralai/Mistral-7B-v0.1"
 """
 sglang_server_args = {
     'log_prefix_hit': True,
-    'mem_fraction_static': 0.8,
-    'context_length': 32768,
-    "enable_flashinfer": False,
+    'mem_fraction_static': 0.5,
+    'context_length': 4096,
+    "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
 }
 # GPU Configuration
@@ -44,9 +44,9 @@ baseline_gpu_configs = [
 """
 ours_server_args = {
     'log_prefix_hit': True,
-    'mem_fraction_static': 0.3,
+    'mem_fraction_static': 0.5,
     'context_length': 4096,
-    "enable_flashinfer": False,
+    "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
     'report_hit_ratio': True 
@@ -64,6 +64,28 @@ ours_gpu_configs = [
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
+ours_server_args_lpm = {
+    'log_prefix_hit': True,
+    'mem_fraction_static': 0.5,
+    'context_length': 4096,
+    "enable_flashinfer": True,
+    'schedule_heuristic': 'lpm',
+    "chunk_prefill_budget": 512,
+    'report_hit_ratio': True 
+}
+# GPU Configuration
+ours_gpu_configs_lpm = [
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args_lpm),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args_lpm),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+]
+add_simulation_to_gpu_config(ours_gpu_configs_lpm)
+
 exp_time = float('inf')
 configuration_to_test = [
     # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
@@ -75,7 +97,9 @@ configuration_to_test = [
 ]
 policies_to_test = [
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs_lpm, 'all_stuff_lpm'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'all_stuff'),
+
 ]
 
 def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
@@ -112,8 +136,8 @@ def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_virtualenv(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_virtual_rich/exp_2.log",
-    csv_log_path="e2e/8r_virtual_rich/exp_2.csv",
+    log_file_path="e2e/8r_virtual_rich/exp_3.log",
+    csv_log_path="e2e/8r_virtual_rich/exp_3.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=False,

@@ -321,6 +321,7 @@ class ModelDetails:
                 task.cancel()
             request_manager.cleanup()  # Cancel all running workload loops if not already done
             return [task.result() for task in done]
+
         except asyncio.CancelledError:
             # Cancel all tasks if a CancelledError occurs
             for task in tasks:

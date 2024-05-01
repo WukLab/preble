@@ -1219,5 +1219,13 @@ class VirtualEnvLoader(DataLoader):
                 })
             self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
-        
+        num_items_per_group = [len(group) for group in requests]
+        avg_items_per_group = sum(num_items_per_group) / len(num_items_per_group)
+        max_items_per_group = max(num_items_per_group)
+        min_items_per_group = min(num_items_per_group)
+
+        print(f"Avg items per group: {avg_items_per_group}")
+        print(f"Max items per group: {max_items_per_group}")
+        print(f"Min items per group: {min_items_per_group}")
+    
         return requests
