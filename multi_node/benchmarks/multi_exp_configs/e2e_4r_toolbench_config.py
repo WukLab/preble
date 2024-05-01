@@ -74,9 +74,9 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    # scale_to_gpu([200, 900, 3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 900, 3], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
     scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
     scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
     scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
