@@ -33,10 +33,10 @@ baseline_gpu_configs = [
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -48,7 +48,7 @@ ours_server_args = {
     'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
-    "chunk_prefill_budget": 512,
+    # "chunk_prefill_budget": 512,
     'report_hit_ratio': True
 }
 ssh_config_08 = {
@@ -62,12 +62,12 @@ ssh_config_08 = {
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=True, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=True, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=True, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=True, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=True, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=True, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=True, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -81,29 +81,29 @@ configuration_to_test = [
     # scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
     # [200, 7200, 24],
     {
-        # 'toolbench': scale_to_gpu([200, 1000, 15], len(ours_gpu_configs) // 2),
-        'chameleon': scale_to_gpu([7, 1000, 15], len(ours_gpu_configs) // 2),
+        'toolbench': scale_to_gpu([100, 2000, 15], len(ours_gpu_configs) // 2),
+        'chameleon': scale_to_gpu([7, 70, 15], len(ours_gpu_configs) // 2),
     }
 ]
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", ours_gpu_configs, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler_with_time'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
-
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
 ]
 
 def gen_workloads_for_mix(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         requests = []
-        request_rate = None
+        request_rate = 30
         num_prefix_patters = 0
         for dataset, config in configuration.items():
-            assert request_rate is None or request_rate == config[2], "Request rate should be the same for all datasets"
+            # assert request_rate is None or request_rate == config[2], "Request rate should be the same for all datasets"
             num_prefix_patters += config[0] if config[0] is not None else 0
-            request_rate = config[2]
+            # request_rate = config[2]
             if dataset == 'toolbench':
                 dataloader, requests_toolbench, _ = create_toolbench_dataset(
                     config,
@@ -122,7 +122,8 @@ def gen_workloads_for_mix(configuration_to_test, policies_to_test):
                     load_dist=LoadDistribution.EVEN,
                 )
                 requests += requests_chameleon
-                
+                breakpoint()
+
         random.shuffle(requests)
         send_out_times = calc_send_out_times(requests, request_rate, exp_time)
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
@@ -132,10 +133,12 @@ def gen_workloads_for_mix(configuration_to_test, policies_to_test):
                     policy=policy,
                     custom_policy=custom_policy,
                     custom_policy_msg = custom_policy_msg,
-                    request_groups=[RequestGroup(requests=requests,
+                    request_groups=[
+                        RequestGroup(requests=requests,
                                                  request_rate=request_rate,
                                                  send_out_times=send_out_times,
-                                                 request_type=ExperimentType.default)],
+                                                 request_type=ExperimentType.default)
+                                        ],
                     # send_out_times=send_out_times,
                     num_prefix_patterns=num_prefix_patters,
                     random_ratio=0.0,
@@ -147,8 +150,8 @@ def gen_workloads_for_mix(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_mix(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_test_mix_chameleon_exp/exp_v6_🙏.log",
-    csv_log_path="e2e/8r_test_mix_chameleon_exp/exp_v6_🙏.csv",
+    log_file_path="e2e/8r_test_mix_chameleon_exp/exp_v8.log",
+    csv_log_path="e2e/8r_test_mix_chameleon_exp/exp_v8.csv",
     # log_file_path="logs/debug/exp.log",
     # csv_log_path="logs/debug/exp.csv",
     simulate=True,
