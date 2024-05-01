@@ -67,7 +67,7 @@ def create_loogle_dataset(config, model_name, exp_time, max_tokens_override=45) 
         loogle_dataset_type=LooGLEDatasetType.SHORT_QA,
         max_tokens_override=max_tokens_override
     )
-    requests = dataloader.generate_workload(max_length=32768)
+    requests = dataloader.generate_workload(max_length=32768 - max_tokens_override)
     random.shuffle(requests)
     requests = requests[:num_requests]
     print(f"Generated {len(requests)} requests")
