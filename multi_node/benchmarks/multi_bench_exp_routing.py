@@ -207,11 +207,11 @@ if __name__ == "__main__":
     # from multi_node.benchmarks.multi_exp_configs.e2e_2r_toolbench_config import toolbench_experiment as tb_2r_config
     # exp_args = AllExperiments([tb_2r_config, tb_4r_config])
     
-    # from multi_node.benchmarks.multi_exp_configs.e2e_2r_loogle_config import loogle_experiment as lg_2r_config
-    # from multi_node.benchmarks.multi_exp_configs.e2e_4r_loogle_config import loogle_experiment as lg_4r_config
-    # exp_args = AllExperiments([lg_2r_config, lg_4r_config])
+    from multi_node.benchmarks.multi_exp_configs.e2e_2r_loogle_config import loogle_experiment as lg_2r_config
+    from multi_node.benchmarks.multi_exp_configs.e2e_4r_loogle_config import loogle_experiment as lg_4r_config
+    exp_args = AllExperiments([lg_2r_config, lg_4r_config])
     
-    from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
+    # from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
 
