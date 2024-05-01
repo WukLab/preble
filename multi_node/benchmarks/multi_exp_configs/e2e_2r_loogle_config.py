@@ -32,8 +32,8 @@ sglang_server_args = {
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -43,15 +43,6 @@ add_simulation_to_gpu_config(baseline_gpu_configs)
 
 """ours server runtime config
 """
-
-ssh_config_08 = {
-    "hostname": "192.168.1.18",
-    "username": "reyna",
-    "port": 456,
-    "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
-    "node_name": "08",
-}
-
 ours_server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
@@ -64,8 +55,8 @@ ours_server_args = {
 }
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, ssh_config=ssh_config_08, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, ssh_config=ssh_config_08, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -120,8 +111,8 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="ckpt_all_in_one/4r_loogle_limited/exp.log",
-    csv_log_path="ckpt_all_in_one/4r_loogle_limited/exp.csv",
+    log_file_path="ckpt_all_in_one/2r_loogle/exp.log",
+    csv_log_path="ckpt_all_in_one/2r_loogle/exp.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=True,
