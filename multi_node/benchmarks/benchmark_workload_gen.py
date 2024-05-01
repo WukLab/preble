@@ -1200,6 +1200,7 @@ class VirtualEnvLoader(DataLoader):
         for i, sample in enumerate(self.data):
             if k is not None and total_requests >= k:
                 requests[-1] = requests[-1][:len(requests[-1]) - (total_requests - k)]
+                break
             req_group = []
             for turn in sample:
                 req_group.append({
