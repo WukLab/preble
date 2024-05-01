@@ -66,11 +66,12 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 5000, 15], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
@@ -84,7 +85,7 @@ def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
             configuration,
             model_name, 
             exp_time, 
-            data_path='/mnt/data/ssd/sglang_multi_model/multi_node/benchmarks/datasets/virtualenv_react_agent_trace.json',
+            data_path='/mnt/data/ssd/dongming/stateful_llm_serving/multi_node/benchmarks/datasets/results_trace_updated_v2.json',
             load_dist=LoadDistribution.EVEN,  # this have no effect on virtualenv
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
@@ -111,8 +112,8 @@ def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_virtualenv(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_virtual_rich/exp.log",
-    csv_log_path="e2e/8r_virtual_rich/exp.csv",
+    log_file_path="e2e/8r_virtual_rich/exp_2.log",
+    csv_log_path="e2e/8r_virtual_rich/exp_2.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=False,

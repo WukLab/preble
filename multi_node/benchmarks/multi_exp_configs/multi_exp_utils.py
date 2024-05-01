@@ -108,6 +108,7 @@ def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist
     print(f'Initialize virtualenv dataset')
     dataloader = VirtualEnvLoader(
         tokenizer=tokenizer,
+        num_patterns=num_workloads,
         data_path=data_path,
     )
     request_groups = dataloader.generate_workload(k=num_requests)

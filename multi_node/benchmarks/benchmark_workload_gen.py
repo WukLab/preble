@@ -1168,9 +1168,9 @@ class ToolQALoader(DataLoader):
 class VirtualEnvLoader(DataLoader):
     """DataLoader for VirtualEnv dataset."""
 
-    def __init__(self, data_path: str, 
+    def __init__(self, data_path: str, num_patterns: int,
                  tokenizer: PreTrainedTokenizer):
-        super().__init__(data_path, None, None, tokenizer)
+        super().__init__(data_path, num_patterns, None, tokenizer)
         self.data = self.read_data(data_path)
 
     def read_data(self, data_path: str):
@@ -1181,15 +1181,22 @@ class VirtualEnvLoader(DataLoader):
         """Return:
         - a list of list of requests, where each list of requests is a conversation.
         """
-        requests = []
-        total_requests = 0
         random.shuffle(self.data)
-        for i, sample in enumerate(self.data):
-            if k is not None and total_requests >= k:
-                requests[-1] = requests[-1][:len(requests[-1]) - (total_requests - k)]
-                break
+        k = k if k is not None else len(self.data)
+        num_patterns = self.num_patterns
+        if self.num_patterns > len(self.data):
+            print(f'Not enough patterns in the dataset. Only {len(self.data)} patterns available.')
+            num_patterns = len(self.data)
+        examples_per_pattern = np.ceil(k / num_patterns)
+        data = [examples for examples in self.data if len(examples) >= examples_per_pattern]
+        if len(data) < num_patterns:
+            print(f'Not enough patterns in the dataset with {examples_per_pattern} examples. Only {len(data)} patterns available.')
+        requests = []
+        for i, sample in enumerate(data[:num_patterns]):
             req_group = []
-            for turn in sample:
+            for j, turn in enumerate(sample):
+                if j == examples_per_pattern:
+                    break
                 req_group.append({
                     'text': turn['prompt'],
                     'sampling_params': {
@@ -1199,6 +1206,5 @@ class VirtualEnvLoader(DataLoader):
                 })
             self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
-            total_requests += len(req_group)
         
         return requests
