@@ -74,14 +74,12 @@ server_args = {
     'context_length': 33000,
     'enable_flashinfer': True,
     'schedule_heuristic': 'fcfs-mpq',
-    # 'chunk_prefill_budget': 512,
-    'load_format': 'dummy',
+    'chunk_prefill_budget': 512,
     'report_hit_ratio': True,
 }
 # GPU Configuration
 gpu_configs = [
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False),

@@ -11,6 +11,8 @@ import logging
 from benchmarks.benchmark_utils import RequestFuncOutput
 from datetime import datetime, timedelta
 from typing import List, Tuple
+import zmq
+import zmq.asyncio
 
 logging = logging.getLogger(__name__)
 DEBUG_COUNTER = 0
@@ -144,11 +146,19 @@ def match(key, seq):
 
 
 class LPRadixCache:
-    def __init__(self, histogram, disable=False, num_gpus=2):
+    def __init__(self, histogram, disable=False, num_gpus=2, lock=None):
         self.num_gpus = num_gpus
         self.reset()
         self.disable = disable
         self.histogram: SlidingWindowHistogram = histogram
+        
+        context = zmq.asyncio.Context(1)
+        self.recv_from_detokenizer = context.socket(zmq.PULL)
+        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
+
+        self.num_iters = 0
+        self.lock = lock
+        self.updates = {}
 
     ##### Public API #####
 
@@ -538,6 +548,13 @@ class LPRadixCache:
         self.allocated_size_[runtime_id] = current_allocated_size
         return priority_queue
 
+    async def update_loop(self):
+        while True:
+            gpu_id, recv_obj = await self.recv_from_detokenizer.recv_pyobj()
+            for obj in recv_obj:
+                with self.lock:
+                    self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
+
     def get_evictable_size(self, runtime_id):
         nodes = self._collect_nodes()
         current_allocated_size = 0
@@ -546,3 +563,35 @@ class LPRadixCache:
             if node.ref_counter[runtime_id] == 0 and node.has_cached_gpu(runtime_id):
                 current_allocated_size += len(node.value)
         return current_allocated_size
+
+    # def aggregate_eviction_updates(self):
+    #     latest_updates = {}
+    #     with self.lock:
+    #         latest_updates = copy.deepcopy(self.updates)
+    #         self.updates = {}
+            
+    #     for gpu_id, eviction_list in latest_updates.items():
+    #         for obj in eviction_list:
+    #             self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
+
+    def _evict_by_node(self, input_ids, evicted_ids, gpu_id):
+        # pseudocode:
+        # 1. find the path
+        # 2. loop until the tree node token ids > remaining evicted ids
+            # evict the leaf node from the given gpu
+            # walk to its parent
+
+        node = self.find_node(input_ids)
+        while node != self.root_node:
+            for k,v in node.parent.children.items():
+                if v == node:
+                    num_tokens = len(k)
+                    if list(k) == evicted_ids[-num_tokens:]:
+                        if gpu_id in node.cached_gpus:
+                            node.cached_gpus.remove(gpu_id)
+                            node.evicted_gpus.add(gpu_id)
+                            evicted_ids = evicted_ids[:-num_tokens]
+                    break
+            if not evicted_ids:
+                break
+            node = node.parent

@@ -74,7 +74,7 @@ configuration_to_test = [
     scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, ''),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
@@ -115,7 +115,7 @@ loogle_experiment = ConfigurableMajorExperimentArgs(
     csv_log_path="newest_scheduler/4r_loogle_rich/exp.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
-    simulate=True,
+    simulate=False,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,

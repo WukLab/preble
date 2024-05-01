@@ -1,4 +1,5 @@
 import requests
+import zmq.asyncio
 from data_parallel_request_cache import (
     DataParallelRuntimeSelectionPolicy
 )
@@ -11,6 +12,7 @@ from typing import List, Iterable, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor
 import json
 import asyncio
+import zmq
 import numpy as np
 import time
 import paramiko
@@ -154,6 +156,9 @@ class ModelDetails:
         self.request_sent_time = []
         self.current_experiment_state_time = None
         self.simulate = simulate
+
+        self.scheduling_overheads = []
+        self.num_iters = 0
 
     def load_runtimes(self, model_path, gpu_configs, **kwargs):
         logger.info(kwargs)
@@ -303,6 +308,8 @@ class ModelDetails:
     ):
         request_manager = RequestRateManager(workload_config.request_groups)
         self.current_experiment_state_time = time.time()
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.request_router.custom_selector.cache.update_loop())
         if self.start_time is None:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []
@@ -362,6 +369,7 @@ class ModelDetails:
 
             for task in pending:
                 task.cancel()
+            self.num_iters = self.request_router.custom_selector.cache.num_iters // 2
 
             return [task.result() for task in done]
 
@@ -392,6 +400,12 @@ class ModelDetails:
     ) -> RequestFuncOutput: 
         start_time = time.time()
         st = time.perf_counter()
+        
+        # self.request_router.custom_selector.cache.aggregate_eviction_updates()
+        # end = time.perf_counter()
+        # print(end-st)
+
+        # print(end-st)
         hit_rates = [r.hit_ratio for r in self.runtimes]
         highest_idx = int(np.argmax(hit_rates))
         if hit_rates[highest_idx] < 0.7:
@@ -400,6 +414,7 @@ class ModelDetails:
             self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates
         )
         scheduling_overhead = time.time() - start_time
+        self.scheduling_overheads.append(scheduling_overhead)
 
         api_url = self.runtimes[runtime_idx].generate_url
         # If request in sampling_params pop it
@@ -413,6 +428,8 @@ class ModelDetails:
         output.send_out_time = start_time - self.current_experiment_state_time
         output.runtime_selected = runtime_idx
         output.num_gpus = len(self.runtimes)
+
+
 
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
