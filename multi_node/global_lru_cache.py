@@ -507,10 +507,9 @@ class LPRadixCache:
     async def update_loop(self):
         while True:
             gpu_id, recv_obj = await self.recv_from_detokenizer.recv_pyobj()
-            if gpu_id in self.updates:
-                self.updates[gpu_id].extend(recv_obj)
-            else:
-                self.updates[gpu_id] = recv_obj
+            for obj in recv_obj:
+                with self.lock:
+                    self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
 
     def get_evictable_size(self, runtime_id):
         nodes = self._collect_nodes()
