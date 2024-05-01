@@ -11,6 +11,9 @@ import logging
 from benchmarks.benchmark_utils import RequestFuncOutput
 from datetime import datetime, timedelta
 from typing import List, Tuple
+import zmq
+import zmq.asyncio
+from sglang.srt.managers.router.radix_cache import EvictionData
 
 logging = logging.getLogger(__name__)
 DEBUG_COUNTER = 0
@@ -60,8 +63,12 @@ class LPTreeNode:
     def num_tokens(self):
         return len(self.value)
 
+    #NOTE: for real eviction this two-level sorting might not follow pure lru
+    #       so filter our ref_cnt = 0 first before sort this
     def __lt__(self, other):
-        return self.last_access_time < other.last_access_time
+        if self.ref_counter == other.ref_counter:
+            return self.last_access_time < other.last_access_time
+        return self.ref_counter < other.ref_counter
 
     def __eq__(self, other):
         if isinstance(other, LPTreeNode):
@@ -140,11 +147,19 @@ def match(key, seq):
 
 
 class LPRadixCache:
-    def __init__(self, histogram, disable=False, num_gpus=2):
+    def __init__(self, histogram, disable=False, num_gpus=2, lock=None):
         self.num_gpus = num_gpus
         self.reset()
         self.disable = disable
         self.histogram: SlidingWindowHistogram = histogram
+        
+        context = zmq.asyncio.Context(1)
+        self.recv_from_detokenizer = context.socket(zmq.PULL)
+        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
+
+        self.num_iters = 0
+        self.lock = lock
+        self.updates = {}
 
     ##### Public API #####
 
@@ -275,7 +290,7 @@ class LPRadixCache:
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
-
+    
     def evict_with_runtime_id_without_removing(self, num_tokens, evict_callback, runtime_id):
         if self.disable:
             raise RuntimeError()
@@ -293,12 +308,19 @@ class LPRadixCache:
                 continue
             if x.has_cached_gpu(runtime_id):
                 self.allocated_size_[runtime_id] -= len(x.value)
-            num_evicted += evict_callback(x)
+                num_evicted += evict_callback(x)
+                evicted_all_sibling_on_this_runtime = \
+                    not any([child.has_cached_gpu(runtime_id)
+                        for child in x.parent.children.values() 
+                        if child != x])
+                if evicted_all_sibling_on_this_runtime:
+                    heapq.heappush(leaves, x.parent)
             # self._delete_leaf(x)
             # self._delete_node(x, runtime_id)
+            
             # if len(x.parent.children) == 0:
             #     heapq.heappush(leaves, x.parent)
-
+    
     def dec_ref_counter(self, node, runtime_id):
         delta = 0
         node:LPTreeNode
@@ -427,6 +449,39 @@ class LPRadixCache:
                     node.evicted_gpus.remove(runtime_id)
                 node.cached_gpus.add(runtime_id)
             node = node.parent
+    
+    def virtual_lru_eviction(self, num_new_tokens, runtime_id):
+        leaves = self.collect_nodes_on_runtime_by_ref_cnt_and_access_time(runtime_id)
+        heapq.heapify(leaves)
+        
+        num_evicted = 0
+        visited = set()
+        evicited = set()
+        while num_evicted < num_new_tokens and len(leaves):
+            x: LPTreeNode
+            x = heapq.heappop(leaves)
+            if x == self.root_node:
+                break
+            num_evicted += len(x.value)
+            evicited.add(x)
+            visited.add(x)
+            visited_all_sibling_on_this_runtime = \
+                all([child in visited 
+                     for child in x.parent.children.values() 
+                     if child != x and child.has_cached_gpu(runtime_id)])
+            if visited_all_sibling_on_this_runtime:
+                heapq.heappush(leaves, x.parent)
+        return evicited
+    
+    #TODO: maintain a set of leaf node to prevent repeat dfs
+    def collect_nodes_on_runtime_by_ref_cnt_and_access_time(self, runtime_id):
+        nodes = self._collect_nodes()
+        priority_queue = []
+        for node in nodes:
+            node: LPTreeNode
+            if node.has_cached_gpu(runtime_id):
+                heapq.heappush(priority_queue, node)
+        return priority_queue
 
     def _print_helper(self, node, indent, depth=0):
         if depth == 5:
@@ -494,6 +549,17 @@ class LPRadixCache:
         self.allocated_size_[runtime_id] = current_allocated_size
         return priority_queue
 
+    async def update_loop(self):
+        while True:
+            gpu_id, recv_obj = await self.recv_from_detokenizer.recv_pyobj()
+            self._update_eviction_event(gpu_id, recv_obj)
+    
+    def _update_eviction_event(self, gpu_id, recv_obj: List[EvictionData]):
+        for obj in recv_obj:
+            with self.lock:
+                self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
+        
+    
     def get_evictable_size(self, runtime_id):
         nodes = self._collect_nodes()
         current_allocated_size = 0
@@ -502,3 +568,35 @@ class LPRadixCache:
             if node.ref_counter[runtime_id] == 0 and node.has_cached_gpu(runtime_id):
                 current_allocated_size += len(node.value)
         return current_allocated_size
+
+    # def aggregate_eviction_updates(self):
+    #     latest_updates = {}
+    #     with self.lock:
+    #         latest_updates = copy.deepcopy(self.updates)
+    #         self.updates = {}
+            
+    #     for gpu_id, eviction_list in latest_updates.items():
+    #         for obj in eviction_list:
+    #             self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
+
+    def _evict_by_node(self, input_ids, evicted_ids, gpu_id):
+        # pseudocode:
+        # 1. find the path
+        # 2. loop until the tree node token ids > remaining evicted ids
+            # evict the leaf node from the given gpu
+            # walk to its parent
+
+        node = self.find_node(input_ids)
+        while node != self.root_node:
+            for k, v in node.parent.children.items():
+                if v == node:
+                    num_tokens = len(k)
+                    if list(k) == evicted_ids[-num_tokens:]:
+                        if gpu_id in node.cached_gpus:
+                            node.cached_gpus.remove(gpu_id)
+                            node.evicted_gpus.add(gpu_id)
+                            evicted_ids = evicted_ids[:-num_tokens]
+                    break
+            if not evicted_ids:
+                break
+            node = node.parent

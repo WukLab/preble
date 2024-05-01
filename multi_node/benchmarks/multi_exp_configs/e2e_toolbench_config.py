@@ -21,7 +21,7 @@ model_name = "mistralai/Mistral-7B-v0.1"
 """sgalng baseline server runtime config
 """
 sglang_server_args = {
-    'log_prefix_hit': True,
+    'log_prefix_hit': False,
     'mem_fraction_static': 0.8,
     'context_length': 4096,
     "enable_flashinfer": True,
@@ -33,23 +33,24 @@ baseline_gpu_configs = [
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
 """ours server runtime config
 """
 ours_server_args = {
-    'log_prefix_hit': True,
+    'log_prefix_hit': False,
     'mem_fraction_static': 0.8,
     'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True
+    'report_hit_ratio': True,
+    'enable_iterative_eviction': True,
 }
 ssh_config_08 = {
     "hostname": "192.168.1.18",
@@ -60,14 +61,14 @@ ssh_config_08 = {
 }
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -77,15 +78,16 @@ configuration_to_test = [
     # scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
     # scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
     # scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 1000, 15], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
     # [200, 7200, 24],
 ]
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", ours_gpu_configs, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'global_scheduler_eviction'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
 
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
@@ -123,10 +125,10 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/8r_test_toolbench_multi_exp/exp_v6🥲_🙏.log",
-    csv_log_path="e2e/8r_test_toolbench_multi_exp/exp_v6🥲_🙏.csv",
-    # log_file_path="logs/debug/exp.log",
-    # csv_log_path="logs/debug/exp.csv",
+    # log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
+    # csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
+    log_file_path="newest_scheduler/2r_toolbench_eviction_iterative_feedback/exp.log",
+    csv_log_path="newest_scheduler/2r_toolbench_eviction_iterative_feedback/exp.csv",
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,

@@ -11,6 +11,7 @@ np.random.seed(10)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import datetime
 import time
+import multi_exp_configs.e2e_loogle_config
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -107,6 +108,7 @@ def register_selector(
         CustomPolicyType.GlobalScheduler: handle_histogram_based_recomp,
         CustomPolicyType.GlobalSchedulerWithoutMissRate: handle_histogram_based_recomp_without_miss_rate,
         CustomPolicyType.GlobalSchedulerTime: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes)),
+        CustomPolicyType.GlobalSchedulerTimeWithEviction: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes), enable_eviction=True),
     }
 
     if custom_policy not in selector_creators:
@@ -201,9 +203,8 @@ def run_all_experiments(all_experiments: AllExperiments):
         run_experiment(experiment)
 
 if __name__ == "__main__":
-    # from benchmarks.multi_exp_configs.loogle_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
-    # from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
-    from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
+    from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
+    # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
 
     run_all_experiments(exp_args)

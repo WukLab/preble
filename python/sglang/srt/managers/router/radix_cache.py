@@ -6,6 +6,10 @@ from typing import Tuple, List
 
 import torch
 
+@dataclass
+class EvictionData():
+    input_ids: list
+    evicted_ids: list
 
 class TreeNode:
     def __init__(self):
@@ -32,14 +36,33 @@ class RadixCache:
     def __init__(self, disable=False):
         self.reset()
         self.disable = disable
+        self.evicted_iteration = []
 
     ##### Public API #####
+
+    def flush_evicted(self):
+        self.evicted_iteration = []
+
+    def add_node_to_evicted_iteration(self, node):
+        input_ids = []
+        evicted_ids = []
+        while node != self.root_node:
+            for k,v in node.parent.children.items():
+                if v == node:
+                    input_ids = list(k) + input_ids
+                    if not evicted_ids:
+                        evicted_ids = list(k)
+                    break
+            node = node.parent
+        self.evicted_iteration.append(EvictionData(input_ids, evicted_ids))
+        
 
     def reset(self):
         self.root_node = TreeNode()
         self.root_node.value = []
         self.root_node.ref_counter = 1
         self.evictable_size_ = 0
+        self.evicted_iteration = []
 
     def match_prefix(self, key):
         if self.disable:
@@ -76,7 +99,9 @@ class RadixCache:
     def total_size(self):
         return self._total_size_helper(self.root_node)
 
-    def evict(self, num_tokens, evict_callback):
+    def evict(self, num_tokens, evict_callback, collect_evicted_node=False):
+        # curr_evict = self.evictable_size()
+        # start = time.perf_counter()
         if self.disable:
             raise RuntimeError()
 
@@ -94,9 +119,13 @@ class RadixCache:
 
             num_evicted += evict_callback(x.value)
             self._delete_leaf(x)
+            if collect_evicted_node:
+                self.add_node_to_evicted_iteration(x)
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
+        # end = time.perf_counter()
+        # print(f"Eviction: {end-start}, Amount evicted: {curr_evict - self.evictable_size()}")
                 
     def total_unique_kv_tokens(self, reqs):
         seen = set()

@@ -28,6 +28,7 @@ import re
 from benchmarks import chameleon
 from benchmarks import toolqa
 import os
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -462,6 +463,82 @@ class ToolBenchDataLoader(DataLoader):
             "total_num_requests": self.total_num_requests,
             "load_dist": str(self.load_dist),
         }
+        
+class VideoDataLoader(DataLoader):
+    def __init__(
+        self,
+        data_path: str,
+        total_num_requests: int,
+        max_prompt_token_length: int,
+        num_patterns: int,
+        tokenizer,
+    ):
+        super().__init__(data_path = data_path,
+                       num_patterns = 0, 
+                       total_num_requests = total_num_requests,
+                       tokenizer = tokenizer,
+                       load_dist = None)
+        
+        self.sysprompt = "Please answer the questions based on the following information before the question."
+        self.max_prompt_token_length = max_prompt_token_length
+        self.num_patterns = num_patterns
+        self.data = self.read_data()
+        self.sysprompt_tokens = self.tokenizer.encode(self.sysprompt)
+        return
+    
+    def read_data(
+        self
+    ):
+        df = pd.read_csv(self.data_path)
+        frame_counts = df["frame_count"]
+        vids = df["video"]
+        questions = df["question"]
+        selected_answers = df["answer"]
+        video_token = 0
+        vid_to_token = {}
+        data = []
+        for i in range(len(frame_counts)):
+            frame_count = frame_counts[i]
+            num_tokens = int(frame_count * 32) + len()
+            # the video is too long
+            if num_tokens > self.max_prompt_token_length:
+                continue
+            question = questions[i]
+            answer = df["a" + str(selected_answers[i])][i]
+            vid = vids[i]
+            if vid in vid_to_token:
+                token = vid_to_token[vid]
+            else:
+                vid_to_token[vid] = video_token
+                token = video_token
+                video_token += 1
+            prompt_tokens = self.sysprompt_tokens + [token] * num_tokens
+            prompt_tokens += self.tokenizer.encode(question)
+            prompt_tokens = prompt_tokens[:self.max_prompt_token_length]
+            data.append([prompt_tokens, answer])
+        if len(data) < self.num_patterns:
+            logger.info("Asking for too many prefixes patterns")
+        return data
+    
+    def generate_workload(self):
+        workload = []
+        selected_video_qa = np.random.choice(
+            self.data, self.num_patterns, replace=False
+        )
+        for prompt_tokens, answer in selected_video_qa:
+            max_new_tokens = len(self.tokenizer(answer).input_ids)
+            workload.append(
+                {
+                    "text": self.tokenizer.decode(prompt_tokens),
+                    "input_ids" : prompt_tokens,
+                    "sampling_params": {
+                        "temperature": 0,
+                        "max_new_tokens" : max_new_tokens
+                    },
+                }
+            )
+            # request["sampling_params"]["max_new_tokens"] = max_new_tokens
+        return workload
 
 @dataclass
 class Oracle(CustomRuntimeSelector):
@@ -877,7 +954,6 @@ class TBMultiDomainOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
-
 
 class ChameleonTabMWPLoader(DataLoader):
     """DataLoader for Chameleon + TabMWP dataset"""

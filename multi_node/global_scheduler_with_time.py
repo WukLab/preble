@@ -112,7 +112,17 @@ class SlidingWindowHistogram:
         active_requests = node.ref_counter[gpu]
         decode_cost = active_requests * output_len * topt
         return prefill_cost + decode_cost
-                                                                       
+
+    # FIXME: miss-rate is not per-gpu
+    def get_eviction_prefill_cost(self, node: LPTreeNode, gpu, is_large_node: bool):
+        if is_large_node:
+            eviction_cost = self.prev_mis_rates.get(node, 1.0) * \
+                            self.node_to_count.get(node, node.ref_counter[gpu]) * \
+                            prefill_time(node.num_tokens, node.context_length)
+        else:
+            eviction_cost = 0
+        return eviction_cost
+                                                                                
 class TTFTWindowedOverloadedDetector:
     # TTFT is a good indicator of overloaded
 
@@ -200,7 +210,7 @@ class GlobalSchedulerWithTime:
             enable_miss_rate=self.enable_miss_rate,
             avg_topt_per_gpu=self.avg_topt_per_gpu
         )
-        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
+        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.HIGH_LOAD_THRESHOLD = 1.5
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
@@ -290,7 +300,19 @@ class GlobalSchedulerWithTime:
         if self.cache.allocated_size(runtime_selected) > current_max_tokens:
             num_tokens = self.cache.allocated_size(runtime_selected) - current_max_tokens
             self.cache.evict_with_runtime_id_without_removing(num_tokens, lambda node: self.evict_callback(node, runtime_selected), runtime_selected)
-
+    
+    # NOTE: simple heuristic used: assume GPU memory is always full
+    #       -> evict size is the leaf node size
+    def virtual_evict_for_routing(self, leaf_node: LPTreeNode, runtime_selected: int):
+        num_to_evict = leaf_node.num_tokens
+        evicted_tree_nodes = self.cache.virtual_lru_eviction(num_to_evict, runtime_selected)
+        # eviction_cost = ref_cnt * miss_rate * prefill_time(node.num_tokens)
+        eviction_cost = 0
+        victim: LPTreeNode
+        for victim in evicted_tree_nodes:
+            eviction_cost += self.histogram.get_eviction_prefill_cost(victim, runtime_selected, self.is_large_node(victim))
+        return eviction_cost
+    
     def runtime_selector(
         self,
         text: str = None,
@@ -327,7 +349,20 @@ class GlobalSchedulerWithTime:
                         recomputation_cost = 0
                         recom_costs.append(recomputation_cost)
                     histogram_mem_cost = self.histogram.current_allocation_per_gpu()
-                    gpu_selected = int(np.argmin([recom_costs[gpu_id] + histogram_mem_cost[gpu_id] for gpu_id in range(self.num_gpus)]))
+                    if self.enable_eviction:
+                        costs = [
+                            recom_costs[gpu_id] + \
+                            histogram_mem_cost[gpu_id] + \
+                            self.virtual_evict_for_routing(leaf_node, gpu_id)
+                            for gpu_id in range(self.num_gpus)
+                        ]
+                    else:
+                        costs = [
+                            recom_costs[gpu_id] + \
+                            histogram_mem_cost[gpu_id]
+                            for gpu_id in range(self.num_gpus)
+                        ]
+                    gpu_selected = int(np.argmin(costs))
                     gpu_selected = set([gpu_selected])
                 else:
                     gpu_selected = set([runtime_id_with_highest_hit_rate])
@@ -341,7 +376,10 @@ class GlobalSchedulerWithTime:
             
             self.per_gpu_load[runtime_idx] += 1
             self.cache.update_allocated_size(leaf_node, runtime_idx)
-    
+
+            # NOTE: eviction handled by iterative feedback
+            # if self.enable_eviction:
+            #     self.handle_eviction(runtime_idx)
             if self.enable_rebalancing:
                 self.handle_important_node_stealing(runtime_idx)
                 # self.work_steal_low_loaded_prefixes()

@@ -163,7 +163,7 @@ class GlobalScheduler:
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
-        self.enable_eviction = enable_eviction
+        self.enable_eviction = True # enable_eviction
         self.per_gpu_load = {i: 0 for i in range(num_nodes)}
         self.all_gpus = set(range(num_nodes))
 
@@ -174,7 +174,7 @@ class GlobalScheduler:
         self.enable_miss_rate = enable_miss_rate
 
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus, enable_miss_rate=self.enable_miss_rate)
-        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus)
+        self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.HIGH_LOAD_THRESHOLD = 1.4
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))

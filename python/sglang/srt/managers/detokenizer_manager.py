@@ -7,9 +7,9 @@ from sglang.srt.hf_transformers_utils import get_tokenizer
 from sglang.srt.managers.io_struct import BatchStrOut, BatchTokenIDOut, SchedulingMetricsOut
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import get_exception_traceback
+import time
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
 
 class DetokenizerManager:
     def __init__(
@@ -23,6 +23,9 @@ class DetokenizerManager:
 
         self.send_to_tokenizer = context.socket(zmq.PUSH)
         self.send_to_tokenizer.connect(f"tcp://127.0.0.1:{port_args.tokenizer_port}")
+
+        # self.send_to_sched = context.socket(zmq.PUSH)
+        # self.send_to_sched.connect(f"tcp://127.0.0.1:10200")
 
         self.tokenizer = get_tokenizer(
             server_args.tokenizer_path,
@@ -72,6 +75,17 @@ class DetokenizerManager:
                         recv_obj.finished,
                     )
                 )
+
+                # self.send_to_sched.send_pyobj(
+                #     BatchStrOut(
+                #         recv_obj.rids,
+                #         output_strs,
+                #         recv_obj.meta_info,
+                #         recv_obj.finished,
+                #     )
+                # )
+                
+
             elif isinstance(recv_obj, SchedulingMetricsOut):
                 self.send_to_tokenizer.send_pyobj(recv_obj)
             else:

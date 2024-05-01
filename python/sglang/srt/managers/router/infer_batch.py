@@ -267,7 +267,7 @@ class Batch:
     def is_empty(self):
         return len(self.reqs) == 0
 
-    def prepare_for_extend(self, vocab_size: int, int_token_logit_bias: torch.Tensor):
+    def prepare_for_extend(self, vocab_size: int, int_token_logit_bias: torch.Tensor, enable_iterative_eviction):
         device = "cuda"
         bs = len(self.reqs)
         reqs = self.reqs
@@ -305,7 +305,7 @@ class Batch:
         out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
         if out_cache_loc is None:
             if not self.tree_cache.disable:
-                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free)
+                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free, enable_iterative_eviction)
                 out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
 
             if out_cache_loc is None:
@@ -365,13 +365,13 @@ class Batch:
         )
         self.logit_bias = logit_bias
 
-    def check_decode_mem(self):
+    def check_decode_mem(self, enable_iterative_eviction):
         bs = len(self.reqs)
         if self.token_to_kv_pool.available_size() >= bs:
             return True
 
         if not self.tree_cache.disable:
-            self.tree_cache.evict(bs, self.token_to_kv_pool.free)
+            self.tree_cache.evict(bs, self.token_to_kv_pool.free, enable_iterative_eviction)
         if self.token_to_kv_pool.available_size() >= bs:
             return True
 
@@ -652,7 +652,7 @@ class Batch:
         self.prefix_lens = torch.tensor([r.num_cached_tokens for r in self.reqs], dtype=torch.int32, device=device)
         
     
-    def prepare_for_extend_v2(self, vocab_size: int, int_token_logit_bias: torch.Tensor):
+    def prepare_for_extend_v2(self, vocab_size: int, int_token_logit_bias: torch.Tensor, enable_iterative_eviction: bool):
         device = "cuda"
         bs = len(self.reqs)
         reqs = self.reqs
@@ -691,7 +691,7 @@ class Batch:
         out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
         if out_cache_loc is None:
             if not self.tree_cache.disable:
-                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free)
+                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free, enable_iterative_eviction)
                 out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
 
             if out_cache_loc is None:

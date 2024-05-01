@@ -32,12 +32,12 @@ sglang_server_args = {
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -50,18 +50,19 @@ ours_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True 
+    'report_hit_ratio': True ,
+    'enable_iterative_eviction': False,
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
