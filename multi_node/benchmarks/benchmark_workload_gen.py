@@ -220,6 +220,101 @@ class WorkloadPrefixDataLoader(DataLoader):
         num_in_context_examples: int = 4,
         random_workload_path=None,
         workload_start_from: int = 0,
+        decoding_size=None,
+    ):
+        super().__init__(
+            "random", num_patterns, total_num_requests, tokenizer, load_dist
+        )
+        self.distribution_of_non_shared = distribution_of_non_shared
+        self.output_len = output_len
+        self.num_in_context_examples = num_in_context_examples
+        self.random_workload_path=random_workload_path
+        self.workload_start_from = workload_start_from
+        self.decoding_size = decoding_size
+
+    def generate_workload(self, k):
+        num_prefixed_shared = int(
+            self.total_num_requests * (1 - self.distribution_of_non_shared)
+        )
+        num_non_shared = int(self.total_num_requests * self.distribution_of_non_shared)
+        workload = []
+        output_len = self.output_len
+        if self.decoding_size:
+            output_len = self.decoding_size
+        sampling_params = {
+            "experiment_id": f"random_experiment_{self.num_patterns}_{self.distribution_of_non_shared}_{self.total_num_requests}",
+            "temperature": 0,
+            "max_new_tokens": output_len,
+            "ignore_eos": True, # For better micro-benchmark
+        }
+        for i in range(num_prefixed_shared):
+            workload_num = self.workload_start_from + i % self.num_patterns
+            prompt = get_react_workload(
+                f"Workload {workload_num} ", num_examples=self.num_in_context_examples
+            )
+            workload.append(
+                {
+                    "text": prompt,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
+                }
+            )
+
+        # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
+        for _ in range(num_non_shared):
+            # prompt = random.choice(random_workload)
+            prompt = get_react_workload(
+                uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
+            )
+            workload.append(
+                {
+                    "text": prompt,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
+                }
+            )
+        self.add_input_token_ids_to_workload(workload)
+        random.shuffle(workload)
+
+        prompt_lens = [len(p["input_ids"]) for p in workload]
+        plt.hist(prompt_lens)
+        plt.savefig(f"react_prompt_length.png")
+        return workload
+    
+    @staticmethod
+    def is_hot(output):
+        return output.prompt_text.startswith("Workload ")
+    
+    @staticmethod
+    def get_prefix_index(output):
+        match = re.search(r'\bWorkload\s+(\d+)', output.prompt_text)
+        if match:
+            return int(match.group(1))
+        else:
+            return None
+
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+            "load_dist": str(self.load_dist),
+            "random_ratio": self.distribution_of_non_shared,
+            "output_len": self.output_len if not self.decoding_size else self.decoding_size,
+            "num_in_context_examples": self.num_in_context_examples,
+        }
+
+class WorkloadPrefixShareGPTDataLoader(DataLoader):
+    def __init__(
+        self,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
+        distribution_of_non_shared: float = 0.0,
+        output_len: int = 1,
+        num_in_context_examples: int = 4,
+        random_workload_path=None,
+        workload_start_from: int = 0,
     ):
         super().__init__(
             "random", num_patterns, total_num_requests, tokenizer, load_dist
@@ -255,12 +350,9 @@ class WorkloadPrefixDataLoader(DataLoader):
                 }
             )
 
-        # random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
+        random_workload = generate_random_workload(random_workload_path=self.random_workload_path)
         for _ in range(num_non_shared):
-            # prompt = random.choice(random_workload)
-            prompt = get_react_workload(
-                uuid.uuid4().hex + " ", num_examples=self.num_in_context_examples
-            )
+            prompt = random.choice(random_workload)
             workload.append(
                 {
                     "text": prompt,
