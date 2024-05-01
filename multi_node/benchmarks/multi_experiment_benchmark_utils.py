@@ -29,16 +29,19 @@ class RequestRateManager:
         self.n_workloads = len(self.workloads)
         self.workload_loops: List[asyncio.Task] = []
 
-    def cleanup(self):
+    async def cleanup(self):
         """Cancel all running workload loops"""
         for task in self.workload_loops:
             task.cancel()
+        # wait for all tasks to be cancelled
+        await asyncio.gather(*self.workload_loops, return_exceptions=True)
 
     async def get_request(self):
         self.workload_loops = []
         for i, workload in enumerate(self.workloads):
             task = asyncio.create_task(self.run_req_loop(i, workload))
             self.workload_loops.append(task)
+        cancelled_waits = []
         while self.workload_finished < self.n_workloads or len(self.ready_requests) > 0:
             while len(self.ready_requests) > 0:
                 yield self.ready_requests.popleft()
@@ -47,6 +50,14 @@ class RequestRateManager:
             done, pending = await asyncio.wait([self.new_ready_req_event.wait(),
                                                 asyncio.sleep(0.5)], return_when=asyncio.FIRST_COMPLETED)
             self.new_ready_req_event.clear()
+            # cancel the pending tasks for graceful shutdown
+            # need to cancel the pending tasks because they may be waiting for new_ready_req_event
+            # It is possible some tasks never wait for new_ready_req_event to fire before everything is
+            # done. In that case, when gc.collect() is called, it will get Task was destroyed but it is pending!
+            for task in pending:
+                task.cancel()
+                cancelled_waits.append(task)
+        await asyncio.gather(*cancelled_waits, return_exceptions=True)
 
     async def run_req_loop(self, workload_id: int, workload: RequestGroup):
         """Start an async loop for a workload."""
