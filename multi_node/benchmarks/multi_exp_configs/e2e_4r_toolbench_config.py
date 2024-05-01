@@ -21,19 +21,18 @@ model_name = "mistralai/Mistral-7B-v0.1"
 """sgalng baseline server runtime config
 """
 sglang_server_args = {
-    'log_prefix_hit': True,
+    'log_prefix_hit': False,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
-    # "chunk_prefill_budget": 512,
 }
 # GPU Configuration
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -44,21 +43,28 @@ add_simulation_to_gpu_config(baseline_gpu_configs)
 """ours server runtime config
 """
 ours_server_args = {
-    'log_prefix_hit': True,
+    'log_prefix_hit': False,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True ,
+    'report_hit_ratio': True,
     'enable_iterative_eviction': True,
+}
+ssh_config_08 = {
+    "hostname": "192.168.1.18",
+    "username": "vikranth",
+    "port": 456,
+    "python_process": "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python",
+    "node_name": "08",
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -68,26 +74,32 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 900, 3], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
+    # [200, 7200, 24],
 ]
+
 policies_to_test = [
-    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'time_1_6'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'latest_global_scheduler'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_loogle_dataset(
+        dataloader, requests, send_out_times = create_toolbench_dataset(
             configuration,
             model_name, 
             exp_time, 
+            data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
+            load_dist=LoadDistribution.EVEN,
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
             # print(server_configs)
@@ -110,18 +122,18 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
                 )
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
-loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="e2e/4r_loogle_rich/exp_8.log",
-    csv_log_path="e2e/4r_loogle_rich/exp_8.csv",
-    # log_file_path="logs/debug_loogle_cp_2048/exp.log",
-    # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
+toolbench_experiment = ConfigurableMajorExperimentArgs(
+    # log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
+    # csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
+    log_file_path="ckpt_all_in_one/4r_toolbench/exp.log",
+    csv_log_path="ckpt_all_in_one/4r_toolbench/exp.csv",
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,
-    experiment_name="loogle_e2e"
+    experiment_name="toolbench_test"
 )
 
 exp_args = AllExperiments(
-    [loogle_experiment]
+    [toolbench_experiment]
 )
