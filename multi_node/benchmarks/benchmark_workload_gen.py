@@ -1023,7 +1023,20 @@ class ChameleonTabMWPLoader(DataLoader):
             requests += self.pattern_req_groups[pattern]
         random.shuffle(requests)
         requests = requests[:k]
+        # decoding_lengths = []
+        for request in requests:
+            request['sampling_params']['max_new_tokens'] = 26
+            # decoding_lengths.append(request['sampling_params']['max_new_tokens'])
+        # Get stats of decoding lengths
+        # print(f"Decoding mean: {np.mean(decoding_lengths)}, std: {np.std(decoding_lengths)} max: {np.max(decoding_lengths)}")
         self.add_input_token_ids_to_workload(requests)
+        # input_lengths = []
+        # for request in requests:
+        #     input_lengths.append(len(request['input_ids']))
+
+        # print(f"Input mean: {np.mean(input_lengths)}, std: {np.std(input_lengths)} max: {np.max(input_lengths)}")
+        # breakpoint()
+
         if len(requests) < k:
             print(f'Not enough requests in the dataset. Only {len(requests)} requests available.')
         return requests
