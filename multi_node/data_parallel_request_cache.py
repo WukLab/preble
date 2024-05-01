@@ -57,6 +57,7 @@ class CustomPolicyType(Enum):
     GlobalSchedulerWithoutRebalancing = auto()
     GlobalSchedulerWithoutMissRate = auto()
     GlobalSchedulerTime = auto()
+    GlobalSchedulerTimeWithEviction = auto()
 
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()

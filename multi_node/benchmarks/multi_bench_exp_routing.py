@@ -107,6 +107,7 @@ def register_selector(
         CustomPolicyType.GlobalScheduler: handle_histogram_based_recomp,
         CustomPolicyType.GlobalSchedulerWithoutMissRate: handle_histogram_based_recomp_without_miss_rate,
         CustomPolicyType.GlobalSchedulerTime: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes)),
+        CustomPolicyType.GlobalSchedulerTimeWithEviction: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes), enable_eviction=True),
     }
 
     if custom_policy not in selector_creators:

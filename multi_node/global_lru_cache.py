@@ -60,8 +60,12 @@ class LPTreeNode:
     def num_tokens(self):
         return len(self.value)
 
+    #NOTE: for real eviction this two-level sorting might not follow pure lru
+    #       so filter our ref_cnt = 0 first before sort this
     def __lt__(self, other):
-        return self.last_access_time < other.last_access_time
+        if self.ref_counter == other.ref_counter:
+            return self.last_access_time < other.last_access_time
+        return self.ref_counter < other.ref_counter
 
     def __eq__(self, other):
         if isinstance(other, LPTreeNode):
@@ -276,11 +280,6 @@ class LPRadixCache:
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
     
-    def virtual_evict(self, num_tokens):
-        if self.disable:
-            return RuntimeError()
-        
-
     def evict_with_runtime_id_without_removing(self, num_tokens, evict_callback, runtime_id):
         if self.disable:
             raise RuntimeError()
@@ -298,9 +297,16 @@ class LPRadixCache:
                 continue
             if x.has_cached_gpu(runtime_id):
                 self.allocated_size_[runtime_id] -= len(x.value)
-            num_evicted += evict_callback(x)
+                num_evicted += evict_callback(x)
+                evicted_all_sibling_on_this_runtime = \
+                    not any([child.has_cached_gpu(runtime_id)
+                        for child in x.parent.children.values() 
+                        if child != x])
+                if evicted_all_sibling_on_this_runtime:
+                    heapq.heappush(leaves, x.parent)
             # self._delete_leaf(x)
             # self._delete_node(x, runtime_id)
+            
             # if len(x.parent.children) == 0:
             #     heapq.heappush(leaves, x.parent)
     
@@ -434,13 +440,37 @@ class LPRadixCache:
             node = node.parent
     
     def virtual_lru_eviction(self, num_new_tokens, runtime_id):
-        """calculate eviction cost for a given rquest
-        Args:
-            node (LPTreeNode): leaf node of newly scheduled request
-            runtime_id: intended gpu id
-        """
-        pass
+        leaves = self.collect_nodes_on_runtime_by_ref_cnt_and_access_time(runtime_id)
+        heapq.heapify(leaves)
         
+        num_evicted = 0
+        visited = set()
+        evicited = set()
+        while num_evicted < num_new_tokens and len(leaves):
+            x: LPTreeNode
+            x = heapq.heappop(leaves)
+            if x == self.root_node:
+                break
+            num_evicted += len(x.value)
+            evicited.add(x)
+            visited.add(x)
+            visited_all_sibling_on_this_runtime = \
+                all([child in visited 
+                     for child in x.parent.children.values() 
+                     if child != x and child.has_cached_gpu(runtime_id)])
+            if visited_all_sibling_on_this_runtime:
+                heapq.heappush(leaves, x.parent)
+        return evicited
+    
+    #TODO: maintain a set of leaf node to prevent repeat dfs
+    def collect_nodes_on_runtime_by_ref_cnt_and_access_time(self, runtime_id):
+        nodes = self._collect_nodes()
+        priority_queue = []
+        for node in nodes:
+            node: LPTreeNode
+            if node.has_cached_gpu(runtime_id):
+                heapq.heappush(priority_queue, node)
+        return priority_queue
 
     def _print_helper(self, node, indent, depth=0):
         if depth == 5:
