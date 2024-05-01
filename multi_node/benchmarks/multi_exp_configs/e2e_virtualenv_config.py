@@ -44,8 +44,8 @@ baseline_gpu_configs = [
 """
 ours_server_args = {
     'log_prefix_hit': True,
-    'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'mem_fraction_static': 0.3,
+    'context_length': 4096,
     "enable_flashinfer": False,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
@@ -71,11 +71,11 @@ configuration_to_test = [
     # scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
     # scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
     # scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 5000, 15], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 5000, 25], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'all_stuff'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'all_stuff'),
 ]
 
 def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):

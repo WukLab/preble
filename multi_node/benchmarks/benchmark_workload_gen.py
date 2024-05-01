@@ -1214,7 +1214,7 @@ class VirtualEnvLoader(DataLoader):
                     'text': turn['prompt'],
                     'sampling_params': {
                         'temperature': 0.0,
-                        'max_new_tokens': turn['usage']['completion_tokens'],
+                        'max_new_tokens': 26,
                     },
                 })
             self.add_input_token_ids_to_workload(req_group)
