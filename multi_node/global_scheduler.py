@@ -176,7 +176,7 @@ class GlobalScheduler:
         self.histogram = SlidingWindowHistogram(window_duration=timedelta(minutes=3), gpu_allocations=self.gpu_allocations, num_gpus=self.num_gpus, enable_miss_rate=self.enable_miss_rate)
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
-        self.HIGH_LOAD_THRESHOLD = 1.4
+        self.HIGH_LOAD_THRESHOLD = 1.5
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
         self.avg_hit_rate_queues = [deque(maxlen=200) for _ in range(num_nodes)] 
