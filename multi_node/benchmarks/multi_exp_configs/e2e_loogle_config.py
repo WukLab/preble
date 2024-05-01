@@ -77,9 +77,8 @@ configuration_to_test = [
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, ''),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'time_1_6'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
@@ -112,8 +111,8 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="newest_scheduler/2r_loogle_rich_iterative_eviction_compare_reproduce/exp.log",
-    csv_log_path="newest_scheduler/2r_loogle_rich_iterative_eviction_compare_reproduce/exp.csv",
+    log_file_path="e2e/4r_loogle_rich/exp_8.log",
+    csv_log_path="e2e/4r_loogle_rich/exp_8.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=True,
