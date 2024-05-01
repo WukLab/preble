@@ -520,15 +520,15 @@ class LPRadixCache:
                 current_allocated_size += len(node.value)
         return current_allocated_size
 
-    def aggregate_eviction_updates(self):
-        latest_updates = {}
-        with self.lock:
-            latest_updates = copy.deepcopy(self.updates)
-            self.updates = {}
+    # def aggregate_eviction_updates(self):
+    #     latest_updates = {}
+    #     with self.lock:
+    #         latest_updates = copy.deepcopy(self.updates)
+    #         self.updates = {}
             
-        for gpu_id, eviction_list in latest_updates.items():
-            for obj in eviction_list:
-                self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
+    #     for gpu_id, eviction_list in latest_updates.items():
+    #         for obj in eviction_list:
+    #             self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
 
     def _evict_by_node(self, input_ids, evicted_ids, gpu_id):
         # pseudocode:
