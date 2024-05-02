@@ -445,8 +445,6 @@ class GlobalSchedulerWithTime:
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node].add(smaller_device)
                 self.overload_detector.delete_after_allocation(node, larger_device)
-
-                
         else:
             while node_cost_for_gpu:
                 node: LPTreeNode
