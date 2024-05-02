@@ -2,6 +2,7 @@ import random
 import json
 import string
 import uuid
+import pandas as pd
 
 import numpy as np
 import random
@@ -1321,3 +1322,30 @@ class VirtualEnvLoader(DataLoader):
         print(f"Min items per group: {min_items_per_group}")
     
         return requests
+    
+
+
+def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration"):
+    TRACE_NAMES = [
+        "Coding",
+        "Conversation",
+    ]
+    TRACE_FILENAMES = [
+        "AzureLLMInferenceTrace_code.csv",
+        "AzureLLMInferenceTrace_conv.csv",
+    ]
+    # Read all traces
+    df_traces = {}
+    for trace_name, trace_filename in zip(TRACE_NAMES, TRACE_FILENAMES):
+        df_traces[trace_name] = pd.read_csv(os.path.join(azure_llm_infernce_trace_dir, trace_filename), parse_dates=["TIMESTAMP"])
+    convo_trace = df_traces["Conversation"]
+    first_timestamp = convo_trace['TIMESTAMP'].iloc[0]
+    convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'] - first_timestamp
+    convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'].dt.total_seconds()
+    convo_trace.drop("ContextTokens", axis=1, inplace=True)
+    convo_trace.drop("GeneratedTokens", axis=1, inplace=True)
+    convo_trace = convo_trace[convo_trace['TIMESTAMP'] != 0.0]
+    first_timestamp = convo_trace['TIMESTAMP'].iloc[0]
+    convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'] - first_timestamp
+    send_out_times = list(convo_trace["TIMESTAMP"])
+    return send_out_times
