@@ -19,7 +19,7 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 class RouterManager:
-    def __init__(self, model_client: ModelRpcClient, port_args: PortArgs, gpu_id):
+    def __init__(self, model_client: ModelRpcClient, port_args: PortArgs):
         # Init communication
         context = zmq.asyncio.Context(6)
         self.recv_from_tokenizer = context.socket(zmq.PULL)
@@ -53,7 +53,7 @@ class RouterManager:
         # Dict[uid -> migration url]
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}
         
-        self.gpu_id = gpu_id
+        self.gpu_id = self.model_client.model_server.current_gpu
 
     async def loop_for_forward(self):
         i = 1
@@ -183,7 +183,7 @@ def start_router_process(
 
     try:
         model_client = ModelRpcClient(server_args, port_args, gpu_config=gpu_config)
-        router = RouterManager(model_client, port_args, gpu_config.gpu_id)
+        router = RouterManager(model_client, port_args)
     except Exception:
         pipe_writer.send(get_exception_traceback())
         raise

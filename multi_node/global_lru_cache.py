@@ -196,7 +196,7 @@ class LPRadixCache:
                 if child.cached_gpus:
                     current_gpu_selection = child.cached_gpus
                 if prefix_len < len(c_key):
-                    print(prefix_len, len(c_key))
+                    # print(prefix_len, len(c_key))
                     # assert False
                     return {}, None
                     new_node = self._split_node(
@@ -587,7 +587,7 @@ class LPRadixCache:
             # walk to its parent
 
         node = self.find_node(input_ids)
-        while node != self.root_node:
+        while node and node != self.root_node:
             for k, v in node.parent.children.items():
                 if v == node:
                     num_tokens = len(k)

@@ -892,7 +892,7 @@ class ModelRpcServer:
             self.schedule_waiting_overhead += time.time() - schedule_waiting_start
             return None
         # tune k to trade off between cache hit and fairness
-        k = 5
+        k = 10
         max_schedule_allowed = (schedule_group_idx + 1) * k
 
         # Get priority queue
