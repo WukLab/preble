@@ -32,6 +32,7 @@ ssh_config_08 = {
 server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
+    'stream_interval': 1,
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
@@ -121,7 +122,7 @@ selectors_configs = [
 exp_args = MajorExperimentArgs(
     workload_configs=workload_configs,
     gpu_configs=gpu_configs,
-    simulate=True,
+    simulate=False,
     log_file_path=log_file_path,
     selector_configs=selectors_configs,
     model_name=model_name

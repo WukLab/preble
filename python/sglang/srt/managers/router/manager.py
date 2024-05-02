@@ -19,9 +19,9 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 class RouterManager:
-    def __init__(self, model_client: ModelRpcClient, port_args: PortArgs):
+    def __init__(self, model_client: ModelRpcClient, port_args: PortArgs, gpu_id):
         # Init communication
-        context = zmq.asyncio.Context(5)
+        context = zmq.asyncio.Context(6)
         self.recv_from_tokenizer = context.socket(zmq.PULL)
         self.recv_from_tokenizer.bind(f"tcp://127.0.0.1:{port_args.router_port}")
 
@@ -37,6 +37,12 @@ class RouterManager:
         self.recv_from_migration_source = context.socket(zmq.PULL)
         self.recv_from_migration_source.bind(f'tcp://0.0.0.0:{port_args.migrate_port}')
         
+        self.send_to_sched = context.socket(zmq.PUSH)
+        self.send_to_sched.connect(f"tcp://127.0.0.1:10340")
+
+        # self.recv_from_sched = context.socket(zmq.PULL)
+        # self.recv_from_sched.bind(f"tcp://127.0.0.1:10340")
+        
         # Init status
         self.model_client = model_client
         self.recv_reqs = []
@@ -46,12 +52,28 @@ class RouterManager:
         
         # Dict[uid -> migration url]
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}
+        
+        self.gpu_id = gpu_id
 
     async def loop_for_forward(self):
+        i = 1
         while True:
             next_step_input = list(self.recv_reqs)
             self.recv_reqs = []
             out_pyobjs = await self.model_client.step(next_step_input)
+
+            if self.model_client.model_server.tree_cache.evicted_iteration:
+                await self.send_to_sched.send_pyobj(
+                    (self.gpu_id, self.model_client.model_server.tree_cache.evicted_iteration)
+                )
+                self.model_client.model_server.tree_cache.flush_evicted()
+            # start = time.perf_counter()
+            # await self.send_to_sched.send_pyobj(self.model_client.model_server.tree_cache)
+            # duration = time.perf_counter() - start
+            # print(f"Send whole tree: {duration}")
+
+            # tree = await self.recv_from_sched.recv_pyobj()
+            # print(tree)
 
             for obj in out_pyobjs:
                 await self.send_to_detokenizer.send_pyobj(obj)
@@ -67,6 +89,9 @@ class RouterManager:
 
             if not slept:
                 await asyncio.sleep(0.0006)
+            
+            i += 1
+            # await self.recv_from_sched.recv_pyobj()
 
     async def loop_for_push_request(self):
         while True:
@@ -158,7 +183,7 @@ def start_router_process(
 
     try:
         model_client = ModelRpcClient(server_args, port_args, gpu_config=gpu_config)
-        router = RouterManager(model_client, port_args)
+        router = RouterManager(model_client, port_args, model_client.model_server.current_gpu)
     except Exception:
         pipe_writer.send(get_exception_traceback())
         raise

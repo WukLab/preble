@@ -34,10 +34,10 @@ baseline_gpu_configs = [
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -50,7 +50,8 @@ ours_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True 
+    'report_hit_ratio': True ,
+    'enable_iterative_eviction': True,
 }
 # GPU Configuration
 ours_gpu_configs = [
@@ -58,25 +59,26 @@ ours_gpu_configs = [
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'time_1_6_fresh'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
 ]
 

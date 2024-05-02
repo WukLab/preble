@@ -680,6 +680,7 @@ class Runtime:
         chunk_prefill_budget: int = 0,
         hit_trace_window_size: int = 30,
         report_hit_ratio: bool = True,
+        enable_iterative_eviction: bool = False,
         **kwargs,   # additional args not specific to sglang
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
@@ -715,6 +716,7 @@ class Runtime:
             chunk_prefill_budget=chunk_prefill_budget,
             hit_trace_window_size=hit_trace_window_size,
             report_hit_ratio=report_hit_ratio,
+            enable_iterative_eviction=enable_iterative_eviction,
         )
 
         self.url = self.server_args.url()

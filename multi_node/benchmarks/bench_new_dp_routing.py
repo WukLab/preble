@@ -267,19 +267,22 @@ def test_oracle_random_basic(exp_args: MajorExperimentArgs):
             )  # TODO: clear cache instead of reload
             policy, custom_policy, custom_msg = selector_config
             load_and_run_benchmark(model_details, workload_config, policy, custom_policy, custom_msg, gpu_configs=gpu_configs)
+            print("hello")
             if custom_policy == CustomPolicyType.GREEDY_LP:
                 lp_scheduler: GurobiGreedyLPScheduler = model_details.request_router.custom_selector
                 lp_scheduler.lp_tree_traversal.pretty_print(lp_scheduler.tree_cache.root_node, depth_limit=4)
             loader.unload_model(model_details)
             torch.cuda.empty_cache()
             gc.collect()
+            print("hi")
             time.sleep(10)
+            #exit(0)
 
 
 if __name__ == "__main__":
-    from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
+    # from benchmarks.exp_configs.react_simulator_config_toolbench import exp_args
     # from benchmarks.exp_configs.react_simulator_config import exp_args
-    # from benchmarks.exp_configs.react_mixed_config import exp_args
+    from benchmarks.exp_configs.react_mixed_config import exp_args
     # from benchmarks.exp_configs.react_simulator_config_loogle import exp_args
     # from benchmarks.exp_configs.react_simulator_config_loogle import exp_args
     directory = os.path.dirname(exp_args.log_file_path)
