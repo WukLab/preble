@@ -26,6 +26,7 @@ sglang_server_args = {
     'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
+    'load_format': 'dummy',
 }
 # GPU Configuration
 baseline_gpu_configs = [
@@ -51,6 +52,7 @@ ours_server_args = {
     "chunk_prefill_budget": 512,
     'report_hit_ratio': True,
     'enable_iterative_eviction': True,
+    'load_format': 'dummy',
 }
 ssh_config_08 = {
     "hostname": "192.168.1.18",
@@ -74,18 +76,18 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    scale_to_gpu([200, 900, 3], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([200, 900, 3], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([200, 1800, 6], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
     scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
     # [200, 7200, 24],
 ]
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'latest_global_scheduler'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
@@ -125,9 +127,9 @@ workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
     # log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
     # csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
-    log_file_path="ckpt_all_in_one/2r_toolbench/exp.log",
-    csv_log_path="ckpt_all_in_one/2r_toolbench/exp.csv",
-    simulate=True,
+    log_file_path="real_ckpt_all_in_one/2r_toolbench/exp.log",
+    csv_log_path="real_ckpt_all_in_one/2r_toolbench/exp.csv",
+    simulate=False,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,

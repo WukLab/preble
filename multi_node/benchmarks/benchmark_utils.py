@@ -117,7 +117,8 @@ class RequestFuncOutput:
             self.tpot = (self.request_latency - self.ttft) / (self.output_len - 1)
         if self.request_latency:
             self.prefill_decode_ratio = self.ttft / self.request_latency
-            self.normalized_latency = self.request_latency / self.output_len
+            if self.output_len:
+                self.normalized_latency = self.request_latency / self.output_len
 
     @property
     def total_tokens(self):

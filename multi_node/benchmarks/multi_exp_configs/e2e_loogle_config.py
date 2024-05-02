@@ -69,9 +69,9 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 exp_time = float('inf')
 configuration_to_test = [
     # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
@@ -111,11 +111,11 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="ckpt_all_in_one/4r_loogle_s2/exp.log",
-    csv_log_path="ckpt_all_in_one/4r_loogle_s2/exp.csv",
+    log_file_path="real_ckpt_all_in_one/2r_loogle/exp.log",
+    csv_log_path="real_ckpt_all_in_one/2r_loogle/exp.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
-    simulate=True,
+    simulate=False,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,

@@ -183,7 +183,7 @@ def start_router_process(
 
     try:
         model_client = ModelRpcClient(server_args, port_args, gpu_config=gpu_config)
-        router = RouterManager(model_client, port_args, model_client.model_server.current_gpu)
+        router = RouterManager(model_client, port_args)
     except Exception:
         pipe_writer.send(get_exception_traceback())
         raise
