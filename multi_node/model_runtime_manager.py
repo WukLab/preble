@@ -313,7 +313,8 @@ class ModelDetails:
         # Add cache update loop
         loop = asyncio.get_event_loop()
         if workload_config.policy is DataParallelRuntimeSelectionPolicy.CUSTOM and workload_config.custom_policy is CustomPolicyType.GlobalSchedulerTimeWithEviction:
-            loop.create_task(self.request_router.custom_selector.cache.update_loop())
+            if workload_config.server_configs[0].runtime_args.get("enable_iterative_eviction", False):
+                loop.create_task(self.request_router.custom_selector.cache.update_loop())
         if self.start_time is None:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []

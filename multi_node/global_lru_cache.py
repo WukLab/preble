@@ -152,10 +152,10 @@ class LPRadixCache:
         self.reset()
         self.disable = disable
         self.histogram: SlidingWindowHistogram = histogram
-        
-        context = zmq.asyncio.Context(1)
-        self.recv_from_detokenizer = context.socket(zmq.PULL)
-        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
+
+        # context = zmq.asyncio.Context(1)
+        # self.recv_from_detokenizer = context.socket(zmq.PULL)
+        # self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
 
         self.num_iters = 0
         self.lock = lock

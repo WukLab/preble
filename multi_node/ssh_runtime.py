@@ -65,7 +65,7 @@ class SSHRuntimeManager:
         }
         python_process = self.ssh_config.get("python_process", "/mnt/ssd1/vikranth/sglang_experiments/sglang_env/bin/python")
         command = f'setsid env CUDA_VISIBLE_DEVICES={self.gpu} {python_process} -m sglang.launch_server --model-path {self.model_path} {cli_args} --host 0.0.0.0'
-        logging.info(f"Running command {command} on gpu {self.gpu}")
+        logger.info(f"Running command {command} on gpu {self.gpu}")
         transport = self.ssh_client.get_transport()
         channel = transport.open_session(window_size=paramiko.common.MAX_WINDOW_SIZE)
         self.channel = channel
@@ -146,11 +146,23 @@ class SSHRuntimeManager:
 
 if __name__ == "__main__":
     ssh_config = {
-        "hostname": "192.168.1.18",
-        "username": "vikranth",
+        "hostname": "192.168.1.16",
+        "username": "wuklab",
         "port": 456,
+        "python_process": "/mnt/data/ssd/sglang_env/bin/python",
+        "node_name": "06",
     }
-    runtime = SSHRuntimeManager("mistralai/Mistral-7B-v0.1", ssh_config, 0, cuda_devices=0)
+    ours_server_args = {
+        'log_prefix_hit': True,
+        'mem_fraction_static': 0.8,
+        'context_length': 32768,
+        "enable_flashinfer": True,
+        'schedule_heuristic': 'fcfs-mpq',
+        "chunk_prefill_budget": 512,
+        'report_hit_ratio': True ,
+        'enable_iterative_eviction': False,
+    }
+    runtime = SSHRuntimeManager("mistralai/Mistral-7B-v0.1", ssh_config, 0, cuda_devices=0, **ours_server_args)
     print(f"Running on port {runtime.port}")
     time.sleep(30)
     runtime.shutdown()

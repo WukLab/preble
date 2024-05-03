@@ -26,7 +26,10 @@ ssh_config_08 = {
 # -----------------------------------------------------------------------------
 
 def scale_to_gpu(workload, gpus):
-    return [w * gpus for w in workload]
+    new_workload = [w * gpus for w in workload]
+    for i in range(2):
+        new_workload[i] = int(new_workload[i])
+    return new_workload
 
 def pipeline_parallelism(pp: int, forward_equation):
     def pp_forward_time(*args):

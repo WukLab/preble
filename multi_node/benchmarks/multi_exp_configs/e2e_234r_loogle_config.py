@@ -17,6 +17,13 @@ import random
 from multi_exp_configs.multi_exp_utils import *
 
 model_name = "mistralai/Mistral-7B-v0.1"
+ssh_config_06 = {
+    "hostname": "192.168.1.16",
+    "username": "wuklab",
+    "port": 456,
+    "python_process": "/mnt/data/ssd/zijian_sglang_env/bin/python",
+    "node_name": "06",
+}
 
 """sgalng baseline server runtime config
 """
@@ -28,16 +35,13 @@ sglang_server_args = {
     'schedule_heuristic': 'lpm',
     # "chunk_prefill_budget": 512,
 }
+
 # GPU Configuration
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -51,12 +55,15 @@ ours_server_args = {
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
     'report_hit_ratio': True ,
-    'enable_iterative_eviction': True,
+    'enable_iterative_eviction': False,
+    'enable_partial_eviction': True,
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -65,20 +72,6 @@ ours_gpu_configs = [
     # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
-
-exp_time = float('inf')
-configuration_to_test = [
-    scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
-]
-policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs, 'consistent_hashing'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
-]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
@@ -108,19 +101,37 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
                     server_configs=server_configs,
                 )
 
-workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
-loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="real_ckpt_all_in_one/2r_loogle/exp.log",
-    csv_log_path="real_ckpt_all_in_one/2r_loogle/exp.csv",
-    # log_file_path="logs/debug_loogle_cp_2048/exp.log",
-    # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
-    simulate=False,
-    model_path=model_name,
-    workload_configs=workloads,
-    experiment_type=ExperimentType.default,
-    experiment_name="loogle_e2e"
-)
+
+exp_time = float('inf')
+
+exp_list = []
+for i in [4]:
+    configuration_to_test = [
+        scale_to_gpu([24, 168, 0.3], i / 2),
+        scale_to_gpu([24, 281, 0.5], i / 2),
+        scale_to_gpu([24, 393, 0.7], i / 2),
+        scale_to_gpu([24, 561, 1.0], i / 2),
+        scale_to_gpu([24, 673, 1.2], i / 2),
+    ]
+    policies_to_test = [
+        (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+    ]
+    workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
+    loogle_experiment = ConfigurableMajorExperimentArgs(
+        log_file_path=f"real_ckpt_all_in_one/{i}r_loogle/exp.log",
+        csv_log_path=f"real_ckpt_all_in_one/{i}r_loogle/exp.csv",
+        # log_file_path="logs/debug_loogle/exp.log",
+        # csv_log_path="logs/debug_loogle/exp.csv",
+        simulate=False,
+        model_path=model_name,
+        workload_configs=workloads,
+        experiment_type=ExperimentType.default,
+        experiment_name="loogle_e2e"
+    )
+    exp_list.append(loogle_experiment)
 
 exp_args = AllExperiments(
-    [loogle_experiment]
+    exp_list
 )
