@@ -1,0 +1,99 @@
+    1  ls
+    2  pwd
+    3  cd /workspace/
+    4  ls
+    5  cd stateful_llm_serving/
+    6  source ../sglang_env/bin/activate
+    7  cd multi_node/b
+    8  cd multi_node/benchmarks/
+    9  vim multi_bench_exp_routing.py 
+   10  python multi_bench_exp_routing.py 
+   11  export hf_token=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
+   12  cat /workspace/setup.sh 
+   13  python multi_bench_exp_routing.py 
+   14  vim /workspace/setup.sh 
+   15  python multi_bench_exp_routing.py 
+   16  vim multi_bench_exp_routing.py 
+   17  source /workspace/setup.sh 
+   18  python multi_bench_exp_routing.py 
+   19  exit
+   20  ls
+   21  cd /workspace/
+   22  ls
+   23  python --version
+   24  python -m venv zijian_env
+   25  source zijian_env/bin/activate
+   26  ls
+   27  git clone https://github.com/WukLab/stateful_llm_serving.git
+   28  git clone https://github.com/WukLab/stateful_llm_serving.git zijian_sglang_repo
+   29  cd zijian_sglang_repo/
+   30  nvcc -v
+   31  nvcc --version
+   32  pip install -e "python[all]"
+   33  pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.1
+   34  pip install scipy matplotlib datasets paramiko gurobipy
+   35  code .
+   36  nsys profile -w true -t cuda,nvtx -o prompt_1_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 8192 --enable-flashinfer --num-prompt 1 --ctx-len 8192
+   37  nvcc --version
+   38  nsys profile -w true -t cuda,nvtx -o prompt_1_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 8192 --enable-flashinfer --num-prompt 1 --ctx-len 8192
+   39  source ../sglang_env/bin/activate
+   40  nsys profile -w true -t cuda,nvtx -o prompt_1_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 8192 --enable-flashinfer --num-prompt 1 --ctx-len 8192
+   41  pip install --upgrade huggingface_hub
+   42  huggingface-cli login
+   43  nsys profile -w true -t cuda,nvtx -o prompt_1_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 8192 --enable-flashinfer --num-prompt 1 --ctx-len 8192
+   44  nsys profile -w true -t cuda,nvtx -o mul_8192_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 8192 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 8192
+   45  nsys profile -w true -t cuda,nvtx -o mul_8192_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 8192
+   46  git status
+   47  git checkout .
+   48  git fetch all
+   49  git fetch origin
+   50  git config --local credential.helper store
+   51  git fetch origin
+   52  git fetch origina feat/partial_eviction
+   53  git fetch origin feat/partial_eviction
+   54  git checkout feat/partial_eviction
+   55  nsys profile -w true -t cuda,nvtx -o mul_8192_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 8192
+   56  nsys profile -w true -t cuda,nvtx -o prompt_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 8192 --mul-qs 8192 --num-prompt
+   57  nsys profile -w true -t cuda,nvtx -o prompt_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 8192 --mul-qs 8192 --num-prompt 1
+   58  mv nsight-systems-2023.3.1_2023.3.1.92-1_amd64.deb /workspace/
+   59  rm prompt_1_8192.nsys-rep 
+   60  rm prompt_8192.nsys-rep 
+   61  nsys profile -w true -t cuda,nvtx -o prompt_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 8192 --mul-qs 8192 --num-prompt 1
+   62  nsys profile -w true -t cuda,nvtx -o mul_4096_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 4096
+   63  nsys profile -w true -t cuda,nvtx -o mul_2048_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 2048
+   64  nsys profile -w true -t cuda,nvtx -o mul_1024_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 1024
+   65  nsys profile -w true -t cuda,nvtx -o mul_512_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 512
+   66  nsys profile -w true -t cuda,nvtx -o mul_256_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 256
+   67  nsys profile -w true -t cuda,nvtx -o mul_128_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 128
+   68  nsys profile -w true -t cuda,nvtx -o mul_64_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 64
+   69  nsys profile -w true -t cuda,nvtx -o mul_16_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 16
+   70  nsys profile -w true -t cuda,nvtx -o mul_1_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 1
+   71  nsys profile -w true -t cuda,nvtx -o prompt_14166 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 0 --num-prompt 1
+   72  nsys profile -w true -t cuda,nvtx -o prompt_14166 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 14166 --mul-qs 0 --num-prompt 1
+   73  nsys profile -w true -t cuda,nvtx -o prompt_28232 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 28232 --mul-qs 0 --num-prompt 1
+   74  nsys profile -w true -t cuda,nvtx -o mul_256_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 8192 --mul-qs 256
+   75  python model_equation_fitting.py 
+   76  pip install sklearn
+   77  pip install -U scikit-learn
+   78  python model_equation_fitting.py 
+   79  nsys profile -w true -t cuda,nvtx -o mul_256_4096 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 4096 --mul-qs 256
+   80  nsys profile -w true -t cuda,nvtx -o mul_512_4096 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 4096 --mul-qs 512
+   81  nsys profile -w true -t cuda,nvtx -o mul_1024_4096 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 4096 --mul-qs 1024
+   82  nsys profile -w true -t cuda,nvtx -o mul_512_16384 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 16384 --mul-qs 512
+   83  nsys profile -w true -t cuda,nvtx -o mul_512_32768 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 1 --ctx-len 32768 --mul-qs 512
+   84  nsys profile -w true -t cuda,nvtx -o mul_2x256_8192 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 2 --ctx-len 8192 --mul-qs 256
+   85  nsys profile -w true -t cuda,nvtx -o prompt_512 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 8192 --mul-qs 512 --num-prompt 1
+   86  nsys profile -w true -t cuda,nvtx -o prompt_512 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 512 --mul-qs 512 --num-prompt 1
+   87  nsys profile -w true -t cuda,nvtx -o prompt_4096 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 4096 --mul-qs 512 --num-prompt 1
+   88  python model_equation_fitting.py 
+   89  nsys profile -w true -t cuda,nvtx -o prompt_1024 -f true --capture-range=cudaProfilerApi --capture-range-end stop python multi_node/profile_model_forwarding.py --model-path mistralai/Mistral-7B-v0.1 --mem-fraction-static 0.85 --load-format dummy --stream-interval 1 --context-length 33000 --enable-flashinfer --num-mul 0 --ctx-len 1024 --mul-qs 512 --num-prompt 1
+   90  python model_equation_fitting.py 
+   91  git add -A
+   92  git status
+   93  git commit -m "A100 mistrial prefill time estimation"
+   94  git config --local user.email zih015@ucsd.edu
+   95  git config --local user.name jiange91
+   96  git commit -m "A100 mistrial prefill time estimation"
+   97  source /workspace/setup.sh 
+   98* 
+   99  history > profile.log
