@@ -132,7 +132,7 @@ class ModelRpcServer:
         logger.info(server_args.get_optional_modes_logging())
 
         # Init cache
-        self.tree_cache = RadixCache(server_args.disable_radix_cache)
+        self.tree_cache = RadixCache(server_args.disable_radix_cache, server_args.enable_partial_eviction)
         self.tree_cache_metrics = {"total": 0, "hit": 0}
         self.scheduler = Scheduler(
             self.schedule_heuristic,
@@ -459,7 +459,7 @@ class ModelRpcServer:
                     scheduled_waiting_batch = None
                 else:
                     # tune k to trade off between cache hit and fairness
-                    k = 5
+                    k = 10
                     max_schedule_allowed = (schedule_group_idx + 1) * k
 
                     # Get priority queue
@@ -499,6 +499,7 @@ class ModelRpcServer:
                 f"unique kv tokens: {unique_kvs}, "
                 f"#remaining_req: {self.num_waiting_reqs()}, "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+                f"evictable mem: {self.tree_cache.evictable_size() / self.max_total_num_token:.2f}, "
                 f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
             )
         self.total_forwarded_tokens += num_batched_tokens
@@ -755,12 +756,13 @@ class ModelRpcServer:
             self.token_to_kv_pool.available_size() + self.tree_cache.evictable_size()
         )
         if self.running_batch:
-            available_size -= sum(
+            reservation = sum(
                 [
                     (r.max_new_tokens() - len(r.output_ids)) * self.new_token_ratio
                     for r in self.running_batch.reqs
                 ]
             )
+            available_size -= reservation
         req: Req
         for req in target_waiting_queue:
             if budget and budget.get_remaining_token_budget() <= 0:
@@ -848,6 +850,7 @@ class ModelRpcServer:
                 f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
                 f"hit_tokens: {hit_tokens}. "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+                f"evictable mem: {self.tree_cache.evictable_size() / self.max_total_num_token:.2f}"
             )
             # logger.debug(
             #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
@@ -892,7 +895,7 @@ class ModelRpcServer:
             self.schedule_waiting_overhead += time.time() - schedule_waiting_start
             return None
         # tune k to trade off between cache hit and fairness
-        k = 5
+        k = 10
         max_schedule_allowed = (schedule_group_idx + 1) * k
 
         # Get priority queue

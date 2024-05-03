@@ -75,10 +75,9 @@ configuration_to_test = [
     scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, ''),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs, 'consistent_hashing'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
@@ -111,8 +110,8 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="real_ckpt_all_in_one/2r_loogle_ours_k_5_mpq/exp.log",
-    csv_log_path="real_ckpt_all_in_one/2r_loogle_ours_k_5_mpq/exp.csv",
+    log_file_path="real_ckpt_all_in_one/2r_loogle/exp.log",
+    csv_log_path="real_ckpt_all_in_one/2r_loogle/exp.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=False,

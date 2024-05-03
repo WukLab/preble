@@ -26,14 +26,15 @@ sglang_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
+    # 'enable_partial_eviction': True,
     # "chunk_prefill_budget": 512,
 }
 # GPU Configuration
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -50,15 +51,16 @@ ours_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True ,
+    'report_hit_ratio': True,
     'enable_iterative_eviction': True,
+    'enable_partial_eviction': True,
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -68,17 +70,16 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 
 exp_time = float('inf')
 configuration_to_test = [
-    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
+    scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
     scale_to_gpu([24, 673, 1.2], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs, 'consistent_hashing'),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
@@ -111,11 +112,11 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="real_ckpt_all_in_one/2r_loogle/exp.log",
-    csv_log_path="real_ckpt_all_in_one/2r_loogle/exp.csv",
-    # log_file_path="logs/debug_loogle_cp_2048/exp.log",
-    # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
-    simulate=False,
+    log_file_path="ckpt_all_in_one_partial_comparison/4r_loogle_k=10/exp.log",
+    csv_log_path="ckpt_all_in_one_partial_comparison/4r_loogle_k=10/exp.csv",
+    # log_file_path="debug/loogle_partial_eviction/exp.log",
+    # csv_log_path="debug/loogle_partial_eviction/exp.csv",
+    simulate=True,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,

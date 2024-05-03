@@ -3,8 +3,11 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Tuple, List
+import logging
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class EvictionData():
@@ -33,25 +36,26 @@ def match(key, seq):
 
 
 class RadixCache:
-    def __init__(self, disable=False):
+    def __init__(self, disable=False, enable_partial_eviction=False):
         self.reset()
         self.disable = disable
         self.evicted_iteration = []
+        self.enable_partial_eviction = enable_partial_eviction
 
     ##### Public API #####
 
     def flush_evicted(self):
         self.evicted_iteration = []
 
-    def add_node_to_evicted_iteration(self, node):
+    def add_node_to_evicted_iteration(self, node, num_evited_token):
         input_ids = []
         evicted_ids = []
         while node != self.root_node:
-            for k,v in node.parent.children.items():
+            for k, v in node.parent.children.items():
                 if v == node:
                     input_ids = list(k) + input_ids
                     if not evicted_ids:
-                        evicted_ids = list(k)
+                        evicted_ids = list(k[-num_evited_token:])
                     break
             node = node.parent
         self.evicted_iteration.append(EvictionData(input_ids, evicted_ids))
@@ -116,11 +120,15 @@ class RadixCache:
                 break
             if x.ref_counter > 0:
                 continue
-
-            num_evicted += evict_callback(x.value)
-            self._delete_leaf(x)
+                
+            holding_slots = len(x.value)
+            desired_eviction = min(holding_slots, num_tokens - num_evicted) if self.enable_partial_eviction else holding_slots
+            num_evicted += evict_callback(x.value[-desired_eviction:]).item()
+            # logger.info(f'evicted: {desired_eviction} - {num_evicted}')
+            self._delete_leaf(x, desired_eviction)
+            
             if collect_evicted_node:
-                self.add_node_to_evicted_iteration(x)
+                self.add_node_to_evicted_iteration(x, desired_eviction)
 
             if len(x.parent.children) == 0:
                 heapq.heappush(leaves, x.parent)
@@ -246,12 +254,18 @@ class RadixCache:
             print(" " * indent, len(key), key[:10], f"r={child.ref_counter}")
             self._print_helper(child, indent=indent + 2)
 
-    def _delete_leaf(self, node):
+    #NOTE: tree node should not be deleted if partial eviction
+    def _delete_leaf(self, node, num_evict_token):
+        assert num_evict_token > 0, "num_evict_token should be greater than 0"
         for k, v in node.parent.children.items():
             if v == node:
                 break
+        
         del node.parent.children[k]
-        self.evictable_size_ -= len(k)
+        if num_evict_token < len(node.value):
+            node.value = node.value[:-num_evict_token]
+            node.parent.children[k[:-num_evict_token]] = node
+        self.evictable_size_ -= num_evict_token
 
     def _total_size_helper(self, node):
         x = len(node.value)

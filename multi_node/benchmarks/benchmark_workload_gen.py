@@ -756,6 +756,7 @@ class LooGLEDataset(DataLoader):
                 new_tokenized_prompt = self.tokenizer.encode(new_prompt)
                 request["text"] = new_prompt
                 request["input_ids"] = new_tokenized_prompt
+                print(f'prompt length: {len(new_tokenized_prompt)}')
             return request
 
         with ThreadPoolExecutor(64) as executor:
@@ -779,7 +780,7 @@ class LoogleOracle(CustomRuntimeSelector):
         self.tbl = {}
         self.counter = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
         match = re.search(r"(.*)Question:", text, re.DOTALL)
         if match:
             tool = match.group(1)

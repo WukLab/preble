@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Iterator
 import csv
 import numpy as np
 from enum import Enum, auto
+import re
 
 # Add the parent directory of the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -338,7 +339,7 @@ class BenchmarkMetrics:
 
     def to_csv_file(self, csv_file, exp_params):
         headers = [
-            "experiment_id", "policy", "custom_policy", "custom_policy_msg", "num_finished_requests", "average_finished_topt", "p50_tpot", "p90_tpot", "p99_tpot",
+            "policy", "custom_policy", "custom_policy_msg", "rps",  "num_finished_requests", "average_finished_topt", "p50_tpot", "p90_tpot", "p99_tpot",
             "p50_ttft", "p90_ttft", "p99_ttft", "p50_norm_latency", "p90_norm_latency", "p99_norm_latency", "average_request_latency", "std_request_latency", "average_p90",
             "max_latency", "p50_latency", "p90_latency", "p99_latency", "average_ttft", "average_topt",
             "throughput_tok_sec", "requests_per_sec", "avg_scheduling_overhead", "max_scheduling_overhead"
@@ -355,10 +356,11 @@ class BenchmarkMetrics:
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(headers)  # Write headers if the file did not exist
-
+            rps = parsed_params.get("rps")
             # Prepare data row
             data = [
-                exp_params, policy, custom_policy, custom_policy_msg, self.num_finished_requests, self.average_finished_topt, self.p50_tpot, self.p90_tpot,
+                policy, custom_policy, custom_policy_msg, rps,
+                self.num_finished_requests, self.average_finished_topt, self.p50_tpot, self.p90_tpot,
                 self.p99_tpot, self.p50_ttft, self.p90_ttft, self.p99_ttft, self.p50_norm_latency, self.p90_norm_latency, self.p99_norm_latency, self.average_request_latency,
                 self.std_request_latency, self.average_p90, self.max_latency, self.p50_latency, self.p90_latency,
                 self.p99_latency, self.average_ttft, self.average_topt, self.throughput_tok_sec,
