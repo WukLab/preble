@@ -203,7 +203,7 @@ if __name__ == "__main__":
     random.seed(10)
     np.random.seed(10)
     
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     ServerArgs.add_cli_args(parser)
     parser.add_argument("--num-prompt", type=int, default=0,

@@ -36,6 +36,16 @@ def mistral_7b_A6000_sglang_linear(num_batched_tokens: int):
         forward_time = 22
     return forward_time / 1e3
 
+def mistral_7b_A100_sglang_linear(num_batched_tokens: int):
+    if num_batched_tokens >= 256:
+        forward_time = 0.05031337 * num_batched_tokens + 5.505996896412796
+    elif num_batched_tokens >= 64:
+    #    -118 + 1.25x + -2.56E-03x^2 
+        forward_time = 10.5
+    else:
+        forward_time = 8.96
+    return forward_time / 1e3
+
 
 def mistral_7b_A6000_sglang_attention(num_reqs, total_context, num_unique_kv: int):
     if num_unique_kv is None:
@@ -48,6 +58,7 @@ def mistral_7b_A6000_sglang_attention(num_reqs, total_context, num_unique_kv: in
         if num_unique_kv / num_reqs <= 1024 and num_reqs * num_unique_kv <= 32 * 256 * 2048:
             forward_time /= 2
     return forward_time / 1e3
+
     
 def mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv = None):
     forward_time = mistral_7b_A6000_sglang_linear(num_batched_tokens) + \
@@ -76,22 +87,35 @@ def mistral_7b_A6000_sglang_extend_flashinfer(
     attn_quad /= 1e3
     return (base + attn_quad) / 0.9
 
-def mistrial_7b_A6000_sglang_decode_flashinfer(
-    num_reqs, 
-    num_batched_tokens, 
-    total_context, 
-    num_unique_kv = None
-):
-    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.9
-
 
 def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
     # if num_extend_tokens < 192:
     #     print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")
     #     return num_extend_tokens / 1000
     return mistral_7b_A6000_sglang_extend_flashinfer(
-        1, num_extend_tokens, total_context, [num_extend_tokens], num_extend_tokens
+        1, num_extend_tokens, total_context, [num_extend_tokens], num_extend_tokens, torch.tensor([total_context])
     )
+    
+def mistral_7b_A100_sglang_extend_flashinfer(
+    num_reqs, 
+    num_batched_tokens, 
+    total_context, 
+    input_id_lens,
+    num_unique_kv = None,
+    seq_lens: torch.Tensor = None,
+):
+    linear = mistral_7b_A100_sglang_linear(num_batched_tokens)
+    attn = 0
+    for i, extend_lengths in enumerate(input_id_lens):
+        seq_len = seq_lens[i].item()
+        if extend_lengths * seq_len >= 1024 * 1024:
+            attn += 0.12386358316396695 + -7.45358651e-04 * extend_lengths + 1.72022673e-03 * seq_len + 1.36265841e-06 * extend_lengths * seq_len
+        else:
+            # This is insignificant
+            attn += mistral_7b_A6000_sglang_attention(num_reqs, total_context, num_unique_kv)
+    attn /= 1e3
+    return (linear + attn) / 0.85
+
 
 if __name__ == '__main__':
     test_extend = mistral_7b_A6000_sglang_extend_flashinfer(
