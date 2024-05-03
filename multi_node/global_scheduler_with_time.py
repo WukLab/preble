@@ -107,8 +107,9 @@ class SlidingWindowHistogram:
         prefill_cost = self.prev_mis_rates[node] * self.node_to_count[node] * prefill_time(node.num_tokens, node.context_length) / len(self.gpu_allocations.get(node)) # potentionally divide by length of node.cached_gpus here
         
         topt = np.median(self.avg_topt_per_gpu[gpu])
-
         output_len = self.decoding_size[node]
+        if node.decode_length:
+            output_len = np.median(node.decode_length)
         active_requests = node.ref_counter[gpu]
         decode_cost = active_requests * output_len * topt
         return prefill_cost + decode_cost
@@ -399,7 +400,12 @@ class GlobalSchedulerWithTime:
     ):
         with self.lock:
             runtime_id = func_output.runtime_selected
-            # self.update_overload_detector(input_ids, runtime_id, func_output)
+            self.update_overload_detector(input_ids, runtime_id, func_output)
+            important_node = self.get_important_node(self.cache.find_node(input_ids))
+            
+            if func_output.output_len != 1:
+                important_node.decode_length.append(func_output.output_len)
+
             self.cache.remove_completed_input_ids(input_ids, runtime_id)
             if func_output.tpot != 0 and func_output.output_len != 1:
                 self.avg_topt_per_gpu[runtime_id].append(func_output.tpot)
@@ -445,7 +451,6 @@ class GlobalSchedulerWithTime:
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node].add(smaller_device)
                 self.overload_detector.delete_after_allocation(node, larger_device)
-
                 
         else:
             while node_cost_for_gpu:

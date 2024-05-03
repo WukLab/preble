@@ -739,7 +739,13 @@ class LooGLEDataset(DataLoader):
             futures = []
             for request in workload:
                 futures.append(executor.submit(tokenize_workload, request))
-            wait(futures)
+
+            # Wrap tqdm around the futures to display a progress bar
+            for future in tqdm(futures, desc="Processing workload"):
+                # Using as_completed would be more typical for tqdm, but here we're just ensuring completion
+                future.result()
+
+
         random.shuffle(workload)
         return workload
 
@@ -1255,3 +1261,130 @@ class VirtualEnvLoader(DataLoader):
             total_requests += len(req_group)
         
         return requests
+    
+
+class ProgrammingDataset(DataLoader):
+    def __init__(
+        self,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer,
+        crop_max_decode=True,
+        max_tokens_override=None,
+    ):
+        super().__init__(
+            "programming",
+            num_patterns,
+            total_num_requests,
+            tokenizer=tokenizer,
+        )
+        self.data = self.read_data()
+        self.max_tokens_override = max_tokens_override
+        self.p_90_sample_lengths_of_dataset = 12979
+
+        # Short QA has about
+
+    def read_data(
+        self
+    ):
+        ds = load_dataset("codeparrot/apps", split="test", difficulties=["introductory"])
+        self.data = ds
+        return self.data
+
+    def generate_workload(self, max_length: int):
+        workload = []
+        max_num_patterns = len(self.data)
+        logging.debug(f"Total patterns available {max_num_patterns}")
+        if self.num_patterns > max_num_patterns:
+            logging.warning(
+                f"num_patterns {self.num_patterns} is larger than the number of patterns in the dataset {max_num_patterns}."
+            )
+            self.num_patterns = max_num_patterns
+        print(f"Generating workload for {self.num_patterns} patterns")
+        
+        sampled_dataset = self.data
+
+        num_raw_requests = 0
+        new_sampled_dataset = []
+        i = 0
+        while len(new_sampled_dataset) != self.num_patterns:
+            item = sampled_dataset[i]
+
+            try:
+                solution = json.loads(item["solutions"])
+                num_raw_requests += len(solution)
+                input_output = json.loads(item["input_output"]) # Test to hande errors
+                new_sampled_dataset.append(item)
+            except Exception as e:
+                print(e)
+                continue
+            i += 1
+        scale_factor = self.total_num_requests / num_raw_requests
+
+        shared_prompt = self.tokenizer.decode([1 for _ in range(2400)])
+        logging.info(f"Length of new sampled dataset actually has {len(new_sampled_dataset)} patterns")
+
+        workload = []
+        for i in tqdm(range(len(new_sampled_dataset))):
+            sample = new_sampled_dataset[i]
+            sample["solutions"] = json.loads(sample["solutions"])
+            sample["input_output"] = json.loads(sample["input_output"])
+            input_output_strings = ""
+            for input in sample["input_output"]["inputs"]:
+                input_output_strings += str(input) + "\n"
+            for output in sample["input_output"]["outputs"]:
+                input_output_strings += str(output) + "\n"
+
+            if not sample.get("fn_name"):
+                input_format = "\nUse Standard Input format"#\n"
+            else:
+                input_format = "\nUse Call-Based format"#\n"
+            question = sample["question"]
+            sample_prompt = f"Question: {question} {input_format} {input_output_strings} \n\nAnswer:\n"
+            if len(sample_prompt) > self.p_90_sample_lengths_of_dataset: # p90 
+                continue
+            num_qa_pairs = len(sample["solutions"])
+            for solution_i in range(math.ceil(num_qa_pairs * scale_factor)):
+                solution = sample["solutions"][solution_i % num_qa_pairs]
+                workload.append(
+                    {
+                        "text": shared_prompt + sample_prompt + uuid.uuid4().hex, # Make each request unique
+                        "output": solution,
+                        "sampling_params": {
+                            "temperature": 0,
+                        },
+                    }
+                )
+        def tokenize_workload(request):
+            input_ids = self.tokenizer(request["text"], max_length=32768, truncation=True).input_ids
+            max_new_tokens = len(self.tokenizer(request["output"], max_length=32768, truncation=True).input_ids)
+            request.pop("output")
+            if max_new_tokens > self.max_tokens_override:
+                max_new_tokens = self.max_tokens_override
+            request["sampling_params"]["max_new_tokens"] = max_new_tokens
+            # if self.max_tokens_override:
+                # request["sampling_params"]["max_new_tokens"] = self.max_tokens_override
+            request["input_ids"] = input_ids
+            if len(input_ids) > 32768 - max_new_tokens:
+                request["input_ids"] = input_ids[:32768 - max_new_tokens]
+            return request
+    
+        with ThreadPoolExecutor(64) as executor:
+            futures = []
+            for request in workload:
+                futures.append(executor.submit(tokenize_workload, request))
+
+            # Wrap tqdm around the futures to display a progress bar
+            for future in tqdm(futures, desc="Processing workload"):
+                # Using as_completed would be more typical for tqdm, but here we're just ensuring completion
+                future.result()
+
+
+        random.shuffle(workload)
+        return workload
+
+    def workload_specific_args(self):
+        return {
+            "num_patterns": self.num_patterns,
+            "total_num_requests": self.total_num_requests,
+        }

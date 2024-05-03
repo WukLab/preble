@@ -1,11 +1,13 @@
 name_sys = 'Name'
-name_new_sys = 'WithEvictionCost'
+name_new_sys = 'OurPolicy'
+name_new_sys_unfair = 'PolicyWithoutFairness'
 name_sglang = 'SGLang'
 name_vllm = 'vLLM'
 
 MARKER_SIZE = 3
 
 line_sys = {'color': '#2ca02c', 'label': name_sys, 'marker': 'v', 'markersize': MARKER_SIZE}
+line_sys_without_fairness = {'color': '#2ca02d', 'label': name_new_sys_unfair, 'marker': 'v', 'markersize': MARKER_SIZE}
 line_new_sys = {'color': '#1f77b4', 'label': name_new_sys, 'marker': 's', 'markersize': MARKER_SIZE}
 line_sglang = {'color': '#ff7f0e', 'label': name_sglang, 'marker': 'o', 'markersize': MARKER_SIZE}
 line_vllm = {'color': '#EA4336', 'label': name_vllm, 'marker': 'x', 'markersize': MARKER_SIZE}
@@ -13,7 +15,10 @@ line_vllm = {'color': '#EA4336', 'label': name_vllm, 'marker': 'x', 'markersize'
 policy_mapping = {
     'ROUND_ROBIN:': line_sglang,
     'CUSTOM:GlobalScheduler': line_sys,
+
     'CUSTOM:GlobalSchedulerTime': line_sys,
+    'CUSTOM:GlobalSchedulerTimeWithEvictionWithLPM': line_sys_without_fairness,
+
     'CUSTOM:GlobalSchedulerWithoutMissRate': line_sys,
     'CUSTOM:GlobalSchedulerTimeWithEviction': line_new_sys,
 }
