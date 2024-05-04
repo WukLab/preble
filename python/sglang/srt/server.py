@@ -157,7 +157,7 @@ async def make_openai_style_logprobs(token_logprobs):
 @app.post("/generate")
 async def generate_request(obj: GenerateReqInput):
     obj.post_init()
-    # logger.debug(f"{datetime.datetime.utcnow()} {obj.text[:20]} ...")
+    logger.debug(f"{obj.text[:20]} ...")
     if obj.stream:
 
         async def stream_results():

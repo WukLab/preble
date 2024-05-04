@@ -37,9 +37,9 @@ class RouterManager:
         self.recv_from_migration_source = context.socket(zmq.PULL)
         self.recv_from_migration_source.bind(f'tcp://0.0.0.0:{port_args.migrate_port}')
         
-        if model_client.model_server.enable_iterative_eviction:
-            self.send_to_sched = context.socket(zmq.PUSH)
-            self.send_to_sched.connect(f"tcp://127.0.0.1:10340")
+        # if model_client.model_server.enable_iterative_eviction:
+            # self.send_to_sched = context.socket(zmq.PUSH)
+            # self.send_to_sched.connect(f"tcp://127.0.0.1:10340")
 
         # self.recv_from_sched = context.socket(zmq.PULL)
         # self.recv_from_sched.bind(f"tcp://127.0.0.1:10340")
@@ -54,7 +54,8 @@ class RouterManager:
         # Dict[uid -> migration url]
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}
         
-        self.gpu_id = self.model_client.model_server.current_gpu
+        # self.gpu_id = self.model_client.model_server.current_gpu
+        self.gpu_id = 0
 
     async def loop_for_forward(self):
         i = 1
@@ -63,11 +64,12 @@ class RouterManager:
             self.recv_reqs = []
             out_pyobjs = await self.model_client.step(next_step_input)
 
-            if self.model_client.model_server.tree_cache.evicted_iteration:
-                await self.send_to_sched.send_pyobj(
-                    (self.gpu_id, self.model_client.model_server.tree_cache.evicted_iteration)
-                )
-                self.model_client.model_server.tree_cache.flush_evicted()
+            # if self.model_client.model_server.tree_cache.evicted_iteration:
+            #     await self.send_to_sched.send_pyobj(
+            #         (self.gpu_id, self.model_client.model_server.tree_cache.evicted_iteration)
+            #     )
+            #     self.model_client.model_server.tree_cache.flush_evicted()
+            
             # start = time.perf_counter()
             # await self.send_to_sched.send_pyobj(self.model_client.model_server.tree_cache)
             # duration = time.perf_counter() - start
