@@ -139,7 +139,6 @@ def run_single_workload(
 
     torch.manual_seed(10)
     np.random.seed(10)
-
     tic_benchmark = time.time()
     results: List[RequestFuncOutput] = model_details.get_experiment_results_for_experiment_type(
         workload_config,
@@ -222,7 +221,8 @@ if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.e2e_videoQA_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
-    from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
     
     run_all_experiments(exp_args)

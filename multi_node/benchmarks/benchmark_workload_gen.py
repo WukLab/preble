@@ -609,7 +609,8 @@ class VideoDataLoader(DataLoader):
         for i in range(len(frame_counts)):
             frame_count = frame_counts[i]
             num_tokens = int(frame_count / 30 * 256)
-            question = questions[i]
+            options = [df["a" + str(k)][i] for k in range(5)]
+            question = questions[i] + " " + " ".join(options)
             answer = df["a" + str(selected_answers[i])][i]
             vid = vids[i]
             if vid in vid_to_token:
@@ -630,16 +631,17 @@ class VideoDataLoader(DataLoader):
         selected_video_qa = np.random.choice(
             np.arange(len(self.data)), self.num_patterns, replace=False
         )
-        qa_per_video = math.ceil(self.total_num_requests / self.num_patterns)
+        total_prompt_length = sum(len(p) for p, _, _ in selected_video_qa)
+        qa_per_video = [math.ceil(self.total_num_requests / total_prompt_length * len(p)) for p, _, _ in selected_video_qa] 
         cnt = 0
         total_prefix_length = 0
         for i, idx in enumerate(selected_video_qa):
             prompt_tokens, question, answer = self.data[idx]
             max_new_tokens = len(self.tokenizer(answer).input_ids)
-            print(len(prompt_tokens))
+            print(len(prompt_tokens), max_new_tokens, answer)
             total_prefix_length += len(prompt_tokens)
             for _ in range(qa_per_video):
-                question_tokens = self.tokenizer.encode(str(cnt) + " " + question)
+                question_tokens = self.tokenizer.encode(uuid.uuid4().hex + " " + question)
                 workload.append(
                     {
                         # "text": self.tokenizer.decode(prompt_tokens + question_tokens),
