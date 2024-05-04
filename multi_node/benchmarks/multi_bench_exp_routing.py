@@ -221,8 +221,6 @@ if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
     from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
-    # from multi_node.benchmarks.multi_exp_configs.e2e_2r_loogle_config import loogle_experiment as lg_2r_config
-    # exp_args = AllExperiments([tb_2r_config, lg_2r_config])
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
     
-
     run_all_experiments(exp_args)
