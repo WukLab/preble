@@ -102,6 +102,14 @@ def llama3_70b_A100_tp2_sglang_extend_flashinfer(
     total_time /= 1e3
     return total_time
 
+def mistrial_7b_A6000_sglang_decode_flashinfer(
+    num_reqs, 
+    num_batched_tokens, 
+    total_context, 
+    num_unique_kv = None
+):
+    return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.9
+
 def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
     # if num_extend_tokens < 192:
     #     print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")

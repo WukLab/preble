@@ -572,6 +572,17 @@ class ToolBenchDataLoader(DataLoader):
             "total_num_requests": self.total_num_requests,
             "load_dist": str(self.load_dist),
         }
+
+class VideoOracle(CustomRuntimeSelector):
+    trace = {}
+    counter = {}
+    rr = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
+        video = input_ids[30]
+        self.counter[video] = self.counter.get(video, 0) + 1
+        num_nodes = self.num_nodes
+        return video % num_nodes
         
 class VideoDataLoader(DataLoader):
     def __init__(
@@ -592,6 +603,7 @@ class VideoDataLoader(DataLoader):
         self.max_shared_prompt_token_length = max_shared_prompt_token_length
         self.num_patterns = num_patterns
         self.sysprompt_tokens = self.tokenizer.encode(self.sysprompt)
+        print(len(self.sysprompt_tokens))
         self.data = self.read_data()
         return
     
@@ -609,7 +621,8 @@ class VideoDataLoader(DataLoader):
         for i in range(len(frame_counts)):
             frame_count = frame_counts[i]
             num_tokens = int(frame_count / 30 * 256)
-            question = questions[i]
+            options = [df["a" + str(k)][i] for k in range(5)]
+            question = questions[i] + " " + " ".join(options)
             answer = df["a" + str(selected_answers[i])][i]
             vid = vids[i]
             if vid in vid_to_token:
@@ -630,16 +643,18 @@ class VideoDataLoader(DataLoader):
         selected_video_qa = np.random.choice(
             np.arange(len(self.data)), self.num_patterns, replace=False
         )
-        qa_per_video = math.ceil(self.total_num_requests / self.num_patterns)
+        total_prompt_length = sum(len(self.data[idx][0]) for idx in selected_video_qa)
+        qa_per_video = [math.ceil(self.total_num_requests / total_prompt_length * len(self.data[idx][0])) for idx in selected_video_qa] 
+        print('STD of example per prefix', np.std(qa_per_video))
         cnt = 0
         total_prefix_length = 0
         for i, idx in enumerate(selected_video_qa):
             prompt_tokens, question, answer = self.data[idx]
             max_new_tokens = len(self.tokenizer(answer).input_ids)
-            print(len(prompt_tokens))
+            print(len(prompt_tokens), max_new_tokens, answer, qa_per_video[i])
             total_prefix_length += len(prompt_tokens)
-            for _ in range(qa_per_video):
-                question_tokens = self.tokenizer.encode(str(cnt) + " " + question)
+            for _ in range(qa_per_video[i]):
+                question_tokens = self.tokenizer.encode(uuid.uuid4().hex + " " + question)
                 workload.append(
                     {
                         # "text": self.tokenizer.decode(prompt_tokens + question_tokens),
@@ -787,7 +802,7 @@ class LooGLEDataset(DataLoader):
         if LooGLE_dataset_type == LooGLEDatasetType.LONG_QA:
             data = load_dataset("bigainlco/LooGLE", "longdep_qa", split="test")
         elif LooGLE_dataset_type == LooGLEDatasetType.SHORT_QA:
-            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test")
+            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test", download_mode='force_redownload')
         self.data = data
         self.prompt_format = self.prompt_format[LooGLE_dataset_type]
         return data
@@ -809,11 +824,12 @@ class LooGLEDataset(DataLoader):
         #NOTE: loogle dataset has not enought QAs for each document
         #      We replicate QAs w.r.t existing prefix sharing distributions
         scale_factor = self.total_num_requests / num_raw_requests
-        
+        request_pre_prefix = [0] * len(sampled_dataset)
         for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):
+                request_pre_prefix[i] += 1
                 j = qa_pairs[i][k % num_qa_pairs]
                 json_obj = {"Q": uuid.uuid4().hex + j["Q"], "input": raw_inputs}
                 prompt = self.prompt_format.format(**json_obj)
@@ -831,6 +847,7 @@ class LooGLEDataset(DataLoader):
                         },
                     }
                 )
+        print(f"STD loogle requests per prefix: {np.std(request_pre_prefix)}")
 
         def tokenize_workload(request):
             input_ids = self.tokenizer(request["text"]).input_ids

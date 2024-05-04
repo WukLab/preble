@@ -28,9 +28,9 @@ ssh_config_06 = {
 """sgalng baseline server runtime config
 """
 sglang_server_args = {
-    'log_prefix_hit': True,
+    'log_prefix_hit': False,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
     # "chunk_prefill_budget": 512,
@@ -50,7 +50,7 @@ add_simulation_to_gpu_config(baseline_gpu_configs)
 ours_server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
@@ -76,10 +76,12 @@ add_simulation_to_gpu_config(ours_gpu_configs)
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_loogle_dataset(
+        dataloader, requests, send_out_times = create_toolbench_dataset(
             configuration,
             model_name, 
             exp_time, 
+            data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
+            load_dist=LoadDistribution.EVEN,
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
             # print(server_configs)
@@ -105,34 +107,30 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 exp_time = float('inf')
 
 exp_list = []
-for i in [2]:
+for i in [3]:
     configuration_to_test = [
-        # scale_to_gpu([24, 168, 0.1], i / 2),
-        # scale_to_gpu([24, 168, 0.2], i / 2),
-        # scale_to_gpu([24, 168, 0.3], i / 2),
-        # scale_to_gpu([24, 281, 0.5], i / 2),
-        # scale_to_gpu([24, 393, 0.7], i / 2),
-        # scale_to_gpu([24, 449, 0.8], i / 2),
-        scale_to_gpu([24, 505, 0.9], i / 2),
-        # scale_to_gpu([24, 561, 1.0], i / 2),
-        # scale_to_gpu([24, 673, 1.2], i / 2),
+    # scale_to_gpu([200, 900, 3], i / 2),
+    # scale_to_gpu([200, 1800, 6], i / 2),
+    # scale_to_gpu([200, 2700, 9], i / 2),
+    # scale_to_gpu([200, 3600, 12], i / 2),
+    # scale_to_gpu([200, 4500, 15], i / 2),
+    scale_to_gpu([200, 5400, 18], i / 2),
     ]
     policies_to_test = [
         (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
     workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"ckpt_all_in_one/{i}r_loogle_test/exp.log",
-        csv_log_path=f"ckpt_all_in_one/{i}r_loogle_test/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/{i}r_toolbench/exp.log",
+        csv_log_path=f"real_ckpt_all_in_one/{i}r_toolbench/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=True,
+        simulate=False,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,
-        experiment_name="loogle_e2e"
+        experiment_name="toolbench_e2e"
     )
     exp_list.append(loogle_experiment)
 

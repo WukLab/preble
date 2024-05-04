@@ -73,13 +73,15 @@ ours_gpu_configs = [
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
-def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
+def gen_workloads_for_videoQA(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_loogle_dataset(
+        dataloader, requests, send_out_times = create_videoQA_dataset(
             configuration,
             model_name, 
             exp_time, 
+            data_path="datasets/VideoQA.csv",
+            max_shared_prompt_length=8192,
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
             # print(server_configs)
@@ -105,34 +107,34 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 exp_time = float('inf')
 
 exp_list = []
-for i in [2]:
+for i in [2, 4]:
     configuration_to_test = [
-        # scale_to_gpu([24, 168, 0.1], i / 2),
-        # scale_to_gpu([24, 168, 0.2], i / 2),
-        # scale_to_gpu([24, 168, 0.3], i / 2),
-        # scale_to_gpu([24, 281, 0.5], i / 2),
-        # scale_to_gpu([24, 393, 0.7], i / 2),
-        # scale_to_gpu([24, 449, 0.8], i / 2),
-        scale_to_gpu([24, 505, 0.9], i / 2),
-        # scale_to_gpu([24, 561, 1.0], i / 2),
-        # scale_to_gpu([24, 673, 1.2], i / 2),
+        scale_to_gpu([150, 150, 0.5], i / 2),
+        scale_to_gpu([150, 300, 1], i / 2),
+        scale_to_gpu([150, 600, 2], i / 2),
+        scale_to_gpu([150, 900, 3], i / 2),
+        scale_to_gpu([150, 1200, 4], i / 2),
+        scale_to_gpu([150, 1200, 5], i / 2),
+        # scale_to_gpu([150, 1800, 6], i / 2),
+        # scale_to_gpu([150, 2100, 7], i / 2),
+        # scale_to_gpu([150, 3000, 10], i / 2),
     ]
     policies_to_test = [
         (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
-    workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
+    workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"ckpt_all_in_one/{i}r_loogle_test/exp.log",
-        csv_log_path=f"ckpt_all_in_one/{i}r_loogle_test/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/{i}r_videoQA_proportional_to_video_length/exp.log",
+        csv_log_path=f"real_ckpt_all_in_one/{i}r_videoQA_proportional_to_video_length/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=True,
+        simulate=False,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,
-        experiment_name="loogle_e2e"
+        experiment_name="videoQA_e2e"
     )
     exp_list.append(loogle_experiment)
 
