@@ -87,6 +87,20 @@ def mistral_7b_A6000_sglang_extend_flashinfer(
     attn_quad /= 1e3
     return (base + attn_quad) / 0.9
 
+def llama3_70b_A100_tp2_sglang_extend_flashinfer(
+    num_reqs, 
+    num_batched_tokens, 
+    total_context, 
+    input_id_lens,
+    num_unique_kv = None,
+    seq_lens: torch.Tensor = None,
+):
+    total_time = 0
+    for i, extend_lengths in enumerate(input_id_lens):
+        seq_len = seq_lens[i].item()
+        total_time += 28.931389307785594 + 1.82233431e-01 * extend_lengths + 4.00365142e-03 * seq_len + 2.55050069e-06 * extend_lengths * seq_len
+    total_time /= 1e3
+    return total_time
 
 def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
     # if num_extend_tokens < 192:
