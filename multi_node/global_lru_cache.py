@@ -247,13 +247,13 @@ class LPRadixCache:
             split_nodes=split_nodes,
         )
 
-        if len(created_node.parent.children) == 1 and created_node.parent != self.root_node:
-            parent = created_node.parent
-            parent.value += created_node.value
-            self._delete_leaf(created_node)
-            parent.children = {}
-            parent.is_leaf = True
-            created_node = parent
+        # if len(created_node.parent.children) == 1 and created_node.parent != self.root_node:
+        #     parent = created_node.parent
+        #     parent.value += created_node.value
+        #     self._delete_leaf(created_node)
+        #     parent.children = {}
+        #     parent.is_leaf = True
+        #     created_node = parent
         return created_node
 
     def _delete_leaf(self, node):
