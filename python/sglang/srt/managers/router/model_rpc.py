@@ -132,7 +132,7 @@ class ModelRpcServer:
         logger.info(server_args.get_optional_modes_logging())
 
         # Init cache
-        self.tree_cache = RadixCache(server_args.disable_radix_cache)
+        self.tree_cache = RadixCache(server_args.disable_radix_cache, server_args.enable_partial_eviction)
         self.tree_cache_metrics = {"total": 0, "hit": 0}
         self.scheduler = Scheduler(
             self.schedule_heuristic,
@@ -301,6 +301,12 @@ class ModelRpcServer:
         ret = self.out_pyobjs
         self.out_pyobjs = []
         return ret
+
+    def exposed_handle_generate_request(
+        self,
+        recv_req: TokenizedGenerateReqInput,
+    ):
+        return self.handle_finished_requests(recv_req)
     
     def _schedule_running(
         self, 
@@ -499,6 +505,7 @@ class ModelRpcServer:
                 f"unique kv tokens: {unique_kvs}, "
                 f"#remaining_req: {self.num_waiting_reqs()}, "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+                f"evictable mem: {self.tree_cache.evictable_size() / self.max_total_num_token:.2f}, "
                 f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
             )
         self.total_forwarded_tokens += num_batched_tokens
@@ -710,6 +717,7 @@ class ModelRpcServer:
             self.max_total_num_token - 128 - len(req.input_ids),
         )
         self.forward_queue.append(req)
+        return 0
     
     def check_req_hit(self, queue: List[Req], skip: bool=False):
         if not skip:
@@ -755,12 +763,13 @@ class ModelRpcServer:
             self.token_to_kv_pool.available_size() + self.tree_cache.evictable_size()
         )
         if self.running_batch:
-            available_size -= sum(
+            reservation = sum(
                 [
                     (r.max_new_tokens() - len(r.output_ids)) * self.new_token_ratio
                     for r in self.running_batch.reqs
                 ]
             )
+            available_size -= reservation
         req: Req
         for req in target_waiting_queue:
             if budget and budget.get_remaining_token_budget() <= 0:
@@ -848,6 +857,7 @@ class ModelRpcServer:
                 f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
                 f"hit_tokens: {hit_tokens}. "
                 f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+                f"evictable mem: {self.tree_cache.evictable_size() / self.max_total_num_token:.2f}"
             )
             # logger.debug(
             #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
@@ -892,7 +902,7 @@ class ModelRpcServer:
             self.schedule_waiting_overhead += time.time() - schedule_waiting_start
             return None
         # tune k to trade off between cache hit and fairness
-        k = 5
+        k = 10
         max_schedule_allowed = (schedule_group_idx + 1) * k
 
         # Get priority queue
@@ -1383,6 +1393,11 @@ class ModelRpcClient:
     def __init__(self, server_args: ServerArgs, port_args: PortArgs, gpu_config: GPUConfig = None):
         tp_size = server_args.tp_size
         self.gpu_config = gpu_config
+        self.tokenizer = get_tokenizer(
+            server_args.tokenizer_path,
+            tokenizer_mode=server_args.tokenizer_mode,
+            trust_remote_code=server_args.trust_remote_code,
+        )
 
         if tp_size == 1:
             # Init model
@@ -1398,6 +1413,7 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap(self.model_server.exposed_step)
+            self.forward_once = async_wrap(self.model_server.forward_step)
             self.push_req_step = async_wrap(self.model_server.handle_generate_request)
             self.get_migrate_candidates = async_wrap(self.model_server.exposed_get_migration_candidates)
             self.scheduler_metrics_request = async_wrap(
@@ -1413,28 +1429,42 @@ class ModelRpcClient:
 
                 # Init model
                 def init_model(i):
-                    return self.remote_services[i].ModelRpcServer(
+                    return self.remote_services[i].exposed_ModelRpcServer(
                         i, server_args, port_args
                     )
 
                 self.model_servers = executor.map(init_model, range(tp_size))
-
+            
+            # rets = []
+            # for i in range(tp_size):
+            #     rets.append(start_model_process(port_args.model_rpc_ports[i]))
+            # self.remote_services = [x[0] for x in rets]
+            # self.procs = [x[1] for x in rets]
+            
+            # # Init model
+            # def init_model(i):
+            #     return self.remote_services[i].ModelRpcServer(
+            #         i, server_args, port_args
+            #     )
+            # self.model_servers = []
+            # for i in range(tp_size):
+            #     self.model_servers.append(init_model(i))
+                
             # Wrap functions
             def async_wrap(func_name):
                 fs = [rpyc.async_(getattr(m, func_name)) for m in self.model_servers]
-
                 async def _func(*args, **kwargs):
                     tasks = [f(*args, **kwargs) for f in fs]
                     await asyncio.gather(*[asyncio.to_thread(t.wait) for t in tasks])
                     return obtain(tasks[0].value)
-
                 return _func
 
             self.step = async_wrap("step")
+            self.forward_once = async_wrap("forward_step")
             # TODO: test push_req_step in TP mode
             self.push_req_step = async_wrap("handle_generate_request")
             self.scheduler_metrics_request = async_wrap(
-                self.model_server.exposed_scheduler_metrics_request
+                'exposed_scheduler_metrics_request'
             ) # TODO test metric collection in TP mode
 
 def _init_service(port):

@@ -4,7 +4,7 @@ import numpy as np
 print('-'*50 + "Fitting Linear" + '-'*50)
 # Fit a linear regression model to the linear part 
 X = np.array([
-384,
+256,
 512,
 1024,
 2048,
@@ -14,14 +14,14 @@ X = np.array([
 28232,
 ]).reshape(-1, 1)
 y = [
-41.88,
-59.7,
-116,
-232,
-469,
-878.7,
-1520,
-3076,
+15.318,
+30.128,
+59,
+110.4,
+208.842,
+417,
+725,
+1423,
 ]
 linear = LinearRegression()
 # Fit the model
@@ -41,21 +41,72 @@ print('-'*50 + "Fitting extend attention" + '-'*50)
 # Fit a linear regression model to attention part of prompt calculation
 # Example dataset
 query_tokens = [
-1024, 2048, 4096, 8192, 14166, 28232,
-256, 512, 1024, 512, 512, 512, 256,
+128,
+256,
+512,
+1024,
+2048,
+4096,
+8192,
+14166,
+28232,
+
+256,
+256,
+512,
+1024,
+1024,
+512,
+512,
+512,
+4096,
 ]
 
 ctx_lens = [
-1024,2048,4096,8192,14166,28232,
-4096, 4096, 4096, 8192, 16384, 32768, 8192,
+8192,
+8192,
+8192,
+8192,
+8192,
+8192,
+8192,
+14166,
+28232,
+
+4096,
+8192,
+4096,
+4096,
+8192,
+8192,
+16384,
+32768,
+4096,
 ]
 
 ops = [q * c for q, c in zip(query_tokens, ctx_lens)]
 
 X = [[q, c, o] for q, c, o in zip(query_tokens, ctx_lens, ops)]
 y = [
-9.6, 13.2, 45, 169, 482, 1827,
-7.02, 11.9, 21.769, 24.1, 47.255, 95.273, 14.829
+12.939,
+13.122,
+19.001,
+29.326,
+48.529,
+75.11,
+101,
+287.931,
+1113,
+
+6.661,
+13.122,
+9.54,
+14.3,
+29.326,
+19.001,
+37.893,
+75.709,
+1.283,
 ]
 
 # Create a linear regression model
@@ -72,8 +123,8 @@ print("multi query attention Intercept:", model.intercept_)
 r2_score = model.score(X, y)
 print("multi query attention R2 value:", r2_score)
 
-new_query = 512
-new_ctx = 4097
+new_query = 1024
+new_ctx = 1024
 
 p = model.predict([[new_query, new_ctx, new_query * new_ctx]])
 # p = model.predict(X)

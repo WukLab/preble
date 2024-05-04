@@ -7,7 +7,6 @@ import pandas as pd
 from sglang.srt.managers.router.model_runner import GPUConfig
 import threading
 import numpy as np
-from benchmarks.benchmark_utils import RequestFuncOutput
 
 
 @dataclass
@@ -111,7 +110,7 @@ class DataParallelRequestRouter:
         )
         return selected_runtime
 
-    def finish_request(self, text, experiment_id, request_id, input_ids=None, func_output: RequestFuncOutput=None) -> int:
+    def finish_request(self, text, experiment_id, request_id, input_ids=None, func_output=None) -> int:
         if self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.RANDOM or self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.ROUND_ROBIN:
             pass
         elif self.runtime_selection_policy == DataParallelRuntimeSelectionPolicy.LEAST_OUTSTANDING_REQUESTS:

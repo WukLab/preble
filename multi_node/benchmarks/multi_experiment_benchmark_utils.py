@@ -10,7 +10,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 
 from sglang.srt.managers.router.model_runner import GPUConfig
 from enum import Enum, auto
-from benchmarks.benchmark_workload_gen import DataLoader
 from benchmarks.benchmark_utils import WorkloadConfig, ExperimentType, RequestGroup
 from collections import deque
 import numpy as np
@@ -143,11 +142,12 @@ class DefaultWorkload(Workload):
     def workload_params_str(self) -> str:
         workload_args_dict = self.dataloader.workload_specific_args()
         workload_args_dict["rps"] = self.request_rate
-        workload_args_dict["policy"] = self.policy
         workload_args_dict["num_requests"] = self.num_requests
         workload_args_dict["policy"] = self.policy.name
         if self.custom_policy:
             workload_args_dict["custom_policy"] = self.custom_policy.name
+        else:
+            workload_args_dict["custom_policy"] = "None"
         workload_args_dict["custom_policy_msg"] = self.custom_policy_msg
 
         workload_params = ",".join([f"{key}={value}" for key, value in workload_args_dict.items()])
