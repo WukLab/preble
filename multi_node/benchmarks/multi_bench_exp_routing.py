@@ -69,6 +69,7 @@ def register_selector(
         CustomPolicyType.TBORACLE: TBOracle,
         CustomPolicyType.TBORACLE_B: TBOracleB,
         CustomPolicyType.LOOGLE_ORACLE: LoogleOracle,
+        CustomPolicyType.VIDEO_ORACLE: VideoOracle,
         CustomPolicyType.TB_DOMAIN_ORACLE: TBMultiDomainOracle,
     }
 

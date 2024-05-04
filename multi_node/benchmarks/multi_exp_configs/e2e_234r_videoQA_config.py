@@ -114,19 +114,20 @@ for i in [2, 4]:
         scale_to_gpu([150, 600, 2], i / 2),
         scale_to_gpu([150, 900, 3], i / 2),
         scale_to_gpu([150, 1200, 4], i / 2),
-        scale_to_gpu([150, 1800, 6], i / 2),
+        scale_to_gpu([150, 1200, 5], i / 2),
+        # scale_to_gpu([150, 1800, 6], i / 2),
         # scale_to_gpu([150, 2100, 7], i / 2),
         # scale_to_gpu([150, 3000, 10], i / 2),
     ]
     policies_to_test = [
         (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
     workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"real_ckpt_all_in_one/{i}r_videoQA_s2/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/{i}r_videoQA_s2/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/{i}r_videoQA_proportional_to_video_length/exp.log",
+        csv_log_path=f"real_ckpt_all_in_one/{i}r_videoQA_proportional_to_video_length/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
         simulate=False,

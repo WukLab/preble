@@ -124,11 +124,11 @@ for i in [2]:
     ]
     workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"real_ckpt_all_in_one/{i}r_loogle/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/{i}r_loogle/exp.csv",
+        log_file_path=f"ckpt_all_in_one/{i}r_loogle_test/exp.log",
+        csv_log_path=f"ckpt_all_in_one/{i}r_loogle_test/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=False,
+        simulate=True,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,

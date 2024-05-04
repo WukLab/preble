@@ -2,7 +2,7 @@ name_sys = 'Name'
 name_new_sys = 'WithEvictionCost'
 name_sglang = 'SGLang'
 name_vllm = 'vLLM'
-name_oracle = 'Consisteny Hashing'
+name_oracle = 'Consistent Hashing'
 
 MARKER_SIZE = 3
 
@@ -18,7 +18,7 @@ policy_mapping = {
     'CUSTOM:GlobalSchedulerTime': line_sys,
     'CUSTOM:GlobalSchedulerWithoutMissRate': line_sys,
     'CUSTOM:GlobalSchedulerTimeWithEviction': line_new_sys,
-    'CUSTOM:LOOGLE_ORACLE': line_oracle,
+    'CUSTOM:ORACLE': line_oracle,
 }
 
 import matplotlib
