@@ -52,7 +52,7 @@ class LPTreeNode:
         self.evicted_gpus = set()
         self.cached_gpus = set()
         self.is_leaf = False
-        self.decode_length = 0
+        self.decode_length = []
         self.context_length = 0
         self.decoding_tree_node: LPTreeNode = None
 
@@ -348,6 +348,7 @@ class LPRadixCache:
         new_node.parent = child.parent
         new_node.ref_counter = copy.deepcopy(child.ref_counter)
         new_node.load = child.load
+        new_node.decode_length = copy.deepcopy(child.decode_length)
 
         new_node.context_length = child.parent.context_length + split_len
 

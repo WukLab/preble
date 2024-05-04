@@ -169,6 +169,7 @@ class BenchmarkMetrics:
     gpu_counts: Dict[int, int]
     avg_scheduling_overhead: float
     max_scheduling_overhead: float
+    mean_norm_latency: float
 
     def gen_benchmark_metrics(
         tokenizer,
@@ -233,7 +234,8 @@ class BenchmarkMetrics:
         max_scheduling_overhead = np.max([result.scheduling_overhead for result in req_func_outputs])
         p50_ttft, pt90_ttft, p99_ttft = np.percentile(ttfts, 50), np.percentile(ttfts, 90), np.percentile(ttfts, 99)
         p50_norm_latency, p90_norm_latency, p99_norm_latency = np.percentile(norm_request_latencies, [50, 90, 99])
-        avg_norm_latency = np.mean(norm_request_latencies)
+        mean_norm_latency = np.mean(norm_request_latencies)
+
 
         return BenchmarkMetrics(
             num_finished_requests=num_finished_requests,
@@ -269,7 +271,8 @@ class BenchmarkMetrics:
             requests_per_sec=requests_per_sec,
             gpu_counts=gpu_counts,
             avg_scheduling_overhead=avg_scheduling_overhead,
-            max_scheduling_overhead=max_scheduling_overhead
+            max_scheduling_overhead=max_scheduling_overhead,
+            mean_norm_latency=mean_norm_latency
         )
 
     @property
@@ -303,7 +306,7 @@ class BenchmarkMetrics:
             f"Params=({exp_params}) Overall Throughput: {self.requests_per_sec}"
         )
         logging.info(
-            f"Params=({exp_params}) Overall Request Latency: {self.average_request_latency}, STD: {self.std_request_latency}, P90: {self.average_p90}"
+            f"Params=({exp_params}) Overall Request Latency: {self.average_request_latency}, STD: {self.std_request_latency}, P90: {self.average_p90} Norm: {self.mean_norm_latency}"
         )
         logging.info(
             f"Params=({exp_params}) Average TTFT: {self.average_ttft}, Average TOPT: {self.average_topt}, Throughput ToksPerSec: {self.throughput_tok_sec}"
@@ -348,7 +351,7 @@ class BenchmarkMetrics:
             "policy", "custom_policy", "custom_policy_msg", "rps",  "num_finished_requests", "average_finished_topt", "p50_tpot", "p90_tpot", "p99_tpot",
             "p50_ttft", "p90_ttft", "p99_ttft", "p50_norm_latency", "p90_norm_latency", "p99_norm_latency", "avg_norm_latency", "average_request_latency", "std_request_latency", "average_p90",
             "max_latency", "p50_latency", "p90_latency", "p99_latency", "average_ttft", "average_topt",
-            "throughput_tok_sec", "requests_per_sec", "avg_scheduling_overhead", "max_scheduling_overhead"
+            "throughput_tok_sec", "requests_per_sec", "avg_scheduling_overhead", "max_scheduling_overhead", "avg_norm_latency"
         ]
         parsed_params = parse_exp_params(exp_params)
         policy = parsed_params.get("policy", "")
@@ -370,7 +373,7 @@ class BenchmarkMetrics:
                 self.p99_tpot, self.p50_ttft, self.p90_ttft, self.p99_ttft, self.p50_norm_latency, self.p90_norm_latency, self.p99_norm_latency, self.avg_norm_latency, self.average_request_latency,
                 self.std_request_latency, self.average_p90, self.max_latency, self.p50_latency, self.p90_latency,
                 self.p99_latency, self.average_ttft, self.average_topt, self.throughput_tok_sec,
-                self.requests_per_sec, self.avg_scheduling_overhead, self.max_scheduling_overhead
+                self.requests_per_sec, self.avg_scheduling_overhead, self.max_scheduling_overhead, self.mean_norm_latency
             ]
 
             # Write data

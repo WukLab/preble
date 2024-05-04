@@ -26,15 +26,14 @@ sglang_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
-    # 'enable_partial_eviction': True,
     # "chunk_prefill_budget": 512,
 }
 # GPU Configuration
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    #GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    #GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -49,46 +48,60 @@ ours_server_args = {
     'mem_fraction_static': 0.8,
     'context_length': 32768,
     "enable_flashinfer": True,
-    'schedule_heuristic': 'fcfs-mpq',
+    'schedule_heuristic': 'fcfs-mfq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True,
-    'enable_iterative_eviction': False,
-    'enable_partial_eviction': True,
+    'report_hit_ratio': True ,
+    'enable_iterative_eviction': True,
 }
+
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
+ours_server_args_lpm = {
+    'log_prefix_hit': True,
+    'mem_fraction_static': 0.8,
+    'context_length': 32768,
+    "enable_flashinfer": True,
+    'schedule_heuristic': 'lpm',
+    "chunk_prefill_budget": 512,
+    'report_hit_ratio': True ,
+    'enable_iterative_eviction': True,
+}
+# GPU Configuration
+ours_gpu_configs_lpm = [
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args_lpm),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args_lpm),
+]
+add_simulation_to_gpu_config(ours_gpu_configs_lpm)
+
 exp_time = float('inf')
 configuration_to_test = [
-    # scale_to_gpu([24, 168, 0.3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 281, 0.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 393, 0.7], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([24, 561, 1.0], len(ours_gpu_configs) // 2),
-    scale_to_gpu([24, 673, 6], len(ours_gpu_configs) // 2),
-]
-policies_to_test = [
-    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
-#     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'time_1_6_fresh'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs, 'consistent_hashing'),
+    # scale_to_gpu([100, 2500, 1], len(ours_gpu_configs) // 2), # 50% sharing
+    # scale_to_gpu([100, 2500, 2], len(ours_gpu_configs) // 2), # 50% sharing
+    scale_to_gpu([100, 2500, 3], len(ours_gpu_configs) // 2), # 50% sharing
+    scale_to_gpu([100, 2500, 5], len(ours_gpu_configs) // 2), # 50% sharing
 ]
 
-def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
+updated_configs_to_test = []
+for ratio in [0, 750, 1500]: # represent 80%, 50%, 25%, 0%
+    for item in configuration_to_test:
+        updated_configs_to_test.append(item + [ratio])
+
+
+policies_to_test = [
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
+]
+
+def gen_workloads_for_programming(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
-        num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_loogle_dataset(
+        num_prefix_patters, num_requests, request_rate, _ = configuration
+        dataloader, requests, send_out_times = create_programming_dataset_micro(
             configuration,
             model_name, 
             exp_time, 
@@ -113,24 +126,17 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
                     server_configs=server_configs,
                 )
 
-workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
+workloads = gen_workloads_for_programming(updated_configs_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-# <<<<<<< feature/initial_worst_case_benchmarks
-    log_file_path="e2e/8r_loogle_rich/exp_8.log",
-    csv_log_path="e2e/8r_loogle_rich/exp_8.csv",
+    log_file_path="programming_logs/percent_shared_experiments.log",
+    csv_log_path="programming_logs/percent_shared_experiments.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
-# =======
-#     log_file_path="ckpt_all_in_one_partial_comparison/4r_loogle_k=10/exp.log",
-#     csv_log_path="ckpt_all_in_one_partial_comparison/4r_loogle_k=10/exp.csv",
-#     # log_file_path="debug/loogle_partial_eviction/exp.log",
-#     # csv_log_path="debug/loogle_partial_eviction/exp.csv",
-# >>>>>>> mulit_modal_main
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,
-    experiment_name="loogle_e2e"
+    experiment_name="programming"
 )
 
 exp_args = AllExperiments(

@@ -107,8 +107,9 @@ class SlidingWindowHistogram:
         prefill_cost = self.prev_mis_rates[node] * self.node_to_count[node] * prefill_time(node.num_tokens, node.context_length) / len(self.gpu_allocations.get(node)) # potentionally divide by length of node.cached_gpus here
         
         topt = np.median(self.avg_topt_per_gpu[gpu])
-
         output_len = self.decoding_size[node]
+        if node.decode_length:
+            output_len = np.median(node.decode_length)
         active_requests = node.ref_counter[gpu]
         decode_cost = active_requests * output_len * topt
         return prefill_cost + decode_cost
@@ -369,7 +370,27 @@ class GlobalSchedulerWithTime:
 
             runtime_idx = list(gpu_selected)[0]
             if len(gpu_selected) > 1:
-                runtime_idx = int(np.random.choice(list(gpu_selected)))
+                # find the index that's lower
+                recom_costs = []
+                for gpu_id in range(self.num_gpus):
+                    recomputation_cost = 0
+                    recom_costs.append(recomputation_cost)
+                histogram_mem_cost = self.histogram.current_allocation_per_gpu()
+                if self.enable_eviction:
+                    costs = [
+                        recom_costs[gpu_id] + \
+                        histogram_mem_cost[gpu_id] + \
+                        self.virtual_evict_for_routing(leaf_node, gpu_id)
+                        for gpu_id in gpu_selected
+                    ]
+                else:
+                    costs = [
+                        recom_costs[gpu_id] + \
+                        histogram_mem_cost[gpu_id]
+                        for gpu_id in gpu_selected
+                    ]
+                runtime_idx = int(np.argmin(costs))
+                # runtime_idx = int(np.random.choice(list(gpu_selected)))
             self.counter += 1
             self.histogram.update(datetime.now(), important_node, leaf_node, runtime_idx, decoding_length=decoding_length)
             self.update_gpu_allocation_for_parent(leaf_node, gpu_selected)
@@ -399,7 +420,12 @@ class GlobalSchedulerWithTime:
     ):
         with self.lock:
             runtime_id = func_output.runtime_selected
-            # self.update_overload_detector(input_ids, runtime_id, func_output)
+            self.update_overload_detector(input_ids, runtime_id, func_output)
+            important_node = self.get_important_node(self.cache.find_node(input_ids))
+            
+            if func_output.output_len != 1:
+                important_node.decode_length.append(func_output.output_len)
+
             self.cache.remove_completed_input_ids(input_ids, runtime_id)
             if func_output.tpot != 0 and func_output.output_len != 1:
                 self.avg_topt_per_gpu[runtime_id].append(func_output.tpot)
