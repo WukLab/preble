@@ -1,7 +1,8 @@
 import requests
 import zmq.asyncio
 from data_parallel_request_cache import (
-    DataParallelRuntimeSelectionPolicy
+    DataParallelRuntimeSelectionPolicy,
+    CustomPolicyType,
 )
 from data_parallel_request_cache import DataParallelRequestRouter
 import aiohttp
@@ -29,7 +30,7 @@ from sglang.srt.managers.io_struct import BatchStrOut
 import torch
 import logging
 from benchmarks.benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig, ExperimentType
-from benchmarks.multi_experiment_benchmark_utils import RequestRateManager
+from benchmarks.multi_experiment_benchmark_utils import RequestRateManager, Workload
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +240,7 @@ class ModelDetails:
     
     def get_experiment_results_for_experiment_type(
         self,
-        workload_config: WorkloadConfig,
+        workload_config: Workload,
         experiment_type: ExperimentType
     ):
         if experiment_type == ExperimentType.default: # Should work like the default code
@@ -249,7 +250,7 @@ class ModelDetails:
 
     def get_experiment_results(
         self,
-        workload_config: WorkloadConfig,
+        workload_config: Workload,
     ):
         if self.simulate:
             simulator = Simulation(self.runtimes, self.request_router)
@@ -266,6 +267,7 @@ class ModelDetails:
         else:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            # Add hit_ratio update background loop
             for i in range(len(self.runtimes)):
                 loop.create_task(self.loop_for_hit_ratio_update(i))
                 time.sleep(1/len(self.runtimes))
@@ -304,12 +306,15 @@ class ModelDetails:
 
     async def async_generate_batch_request_per_sec(
         self,
-        workload_config: WorkloadConfig,
+        workload_config: Workload,
     ):
         request_manager = RequestRateManager(workload_config.request_groups)
         self.current_experiment_state_time = time.time()
+        # Add cache update loop
         loop = asyncio.get_event_loop()
-        loop.create_task(self.request_router.custom_selector.cache.update_loop())
+        if workload_config.policy is DataParallelRuntimeSelectionPolicy.CUSTOM and workload_config.custom_policy is CustomPolicyType.GlobalSchedulerTimeWithEviction:
+            if workload_config.server_configs[0].runtime_args.get("enable_iterative_eviction", False):
+                loop.create_task(self.request_router.custom_selector.cache.update_loop())
         if self.start_time is None:
             self.start_time = time.time()
         tasks: List[asyncio.Task] = []

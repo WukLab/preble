@@ -26,7 +26,10 @@ ssh_config_08 = {
 # -----------------------------------------------------------------------------
 
 def scale_to_gpu(workload, gpus):
-    return [w * gpus for w in workload]
+    new_workload = [w * gpus for w in workload]
+    for i in range(2):
+        new_workload[i] = int(new_workload[i])
+    return new_workload
 
 def pipeline_parallelism(pp: int, forward_equation):
     def pp_forward_time(*args):
@@ -67,7 +70,7 @@ def create_loogle_dataset(config, model_name, exp_time, max_tokens_override=45) 
         loogle_dataset_type=LooGLEDatasetType.SHORT_QA,
         max_tokens_override=max_tokens_override
     )
-    requests = dataloader.generate_workload(max_length=32768)
+    requests = dataloader.generate_workload(max_length=32768 - max_tokens_override)
     random.shuffle(requests)
     requests = requests[:num_requests]
     print(f"Generated {len(requests)} requests")
@@ -92,7 +95,13 @@ def create_toolbench_dataset(config, model_name, exp_time, data_path, load_dist)
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times
 
-def create_videoQA_dataset(config, model_name, exp_time, data_path, max_prompt_length) -> Iterator[WorkloadConfig]:
+def create_videoQA_dataset(
+    config, 
+    model_name, 
+    exp_time, 
+    data_path,
+    max_shared_prompt_length
+) -> Iterator[WorkloadConfig]:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     num_workloads, num_requests, request_rate = config
     if exp_time != float("inf"):
@@ -101,7 +110,7 @@ def create_videoQA_dataset(config, model_name, exp_time, data_path, max_prompt_l
     dataloader = VideoDataLoader(
         data_path=data_path,
         total_num_requests=num_requests,
-        max_prompt_token_length=max_prompt_length,
+        max_shared_prompt_token_length=max_shared_prompt_length,
         num_patterns=num_workloads,
         tokenizer=tokenizer,
     )

@@ -157,7 +157,7 @@ async def make_openai_style_logprobs(token_logprobs):
 @app.post("/generate")
 async def generate_request(obj: GenerateReqInput):
     obj.post_init()
-    # logger.debug(f"{datetime.datetime.utcnow()} {obj.text[:20]} ...")
+    logger.debug(f"{obj.text[:20]} ...")
     if obj.stream:
 
         async def stream_results():
@@ -681,6 +681,7 @@ class Runtime:
         hit_trace_window_size: int = 30,
         report_hit_ratio: bool = True,
         enable_iterative_eviction: bool = False,
+        enable_partial_eviction: bool = False,
         **kwargs,   # additional args not specific to sglang
     ):
         logger.info(f'mem_fraction_static: {mem_fraction_static}')
@@ -717,6 +718,7 @@ class Runtime:
             hit_trace_window_size=hit_trace_window_size,
             report_hit_ratio=report_hit_ratio,
             enable_iterative_eviction=enable_iterative_eviction,
+            enable_partial_eviction=enable_partial_eviction
         )
 
         self.url = self.server_args.url()

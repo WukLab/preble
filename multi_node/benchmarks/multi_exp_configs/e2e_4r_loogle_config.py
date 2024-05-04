@@ -52,6 +52,7 @@ ours_server_args = {
     "chunk_prefill_budget": 512,
     'report_hit_ratio': True ,
     'enable_iterative_eviction': True,
+    'enable_partial_eviction': True
 }
 # GPU Configuration
 ours_gpu_configs = [

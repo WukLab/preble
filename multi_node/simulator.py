@@ -88,6 +88,7 @@ class ServerRuntimeSimulator:
         hit_trace_window_size: int = 30, # seconds
         report_hit_ratio: bool = True,
         enable_iterative_eviction: bool = False,
+        enable_partial_eviction: bool = False,
     ):
         host = "0.0.0.0"
         port, additional_ports = 0, [0] * 100
@@ -122,6 +123,7 @@ class ServerRuntimeSimulator:
             hit_trace_window_size=hit_trace_window_size,
             report_hit_ratio=report_hit_ratio,
             enable_iterative_eviction=enable_iterative_eviction,
+            enable_partial_eviction=enable_partial_eviction,
         )
         self.server_args = server_args
         self.url = random_uuid_string()

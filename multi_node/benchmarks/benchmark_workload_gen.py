@@ -2,6 +2,7 @@ import random
 import json
 import string
 import uuid
+import math
 
 import numpy as np
 import random
@@ -191,6 +192,10 @@ class DataLoader:
     def get_token_ids(self, request, tokenizer):
         input_ids = tokenizer(request["text"]).input_ids
         request["input_ids"] = input_ids
+    
+    def get_text(self, request, tokenizer):
+        text = tokenizer.decode(request["input_ids"])
+        request["text"] = text
 
     def add_input_token_ids_to_workload(self, workload):
         with ThreadPoolExecutor(64) as executor:
@@ -199,6 +204,16 @@ class DataLoader:
                 futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
             for future in futures:
                 future.result()
+    
+    def add_text_from_token_ids_to_workload(self, workload):
+        with ThreadPoolExecutor(64) as executor:
+            futures = []
+            results = list(tqdm(executor.map(self.get_text, workload, [self.tokenizer]*len(workload)), total=len(workload)))
+            # for request in workload:
+            #     futures.append(executor.submit(self.get_text, request, self.tokenizer))
+            # for future in futures:
+            #     future.result()
+                
     def workload_specific_args(self):
         return {
             "num_patterns": self.num_patterns,
@@ -469,7 +484,7 @@ class VideoDataLoader(DataLoader):
         self,
         data_path: str,
         total_num_requests: int,
-        max_prompt_token_length: int,
+        max_shared_prompt_token_length: int,
         num_patterns: int,
         tokenizer,
     ):
@@ -480,10 +495,10 @@ class VideoDataLoader(DataLoader):
                        load_dist = None)
         
         self.sysprompt = "Please answer the questions based on the following information before the question."
-        self.max_prompt_token_length = max_prompt_token_length
+        self.max_shared_prompt_token_length = max_shared_prompt_token_length
         self.num_patterns = num_patterns
-        self.data = self.read_data()
         self.sysprompt_tokens = self.tokenizer.encode(self.sysprompt)
+        self.data = self.read_data()
         return
     
     def read_data(
@@ -499,10 +514,7 @@ class VideoDataLoader(DataLoader):
         data = []
         for i in range(len(frame_counts)):
             frame_count = frame_counts[i]
-            num_tokens = int(frame_count * 32) + len()
-            # the video is too long
-            if num_tokens > self.max_prompt_token_length:
-                continue
+            num_tokens = int(frame_count / 30 * 256)
             question = questions[i]
             answer = df["a" + str(selected_answers[i])][i]
             vid = vids[i]
@@ -512,10 +524,9 @@ class VideoDataLoader(DataLoader):
                 vid_to_token[vid] = video_token
                 token = video_token
                 video_token += 1
-            prompt_tokens = self.sysprompt_tokens + [token] * num_tokens
-            prompt_tokens += self.tokenizer.encode(question)
-            prompt_tokens = prompt_tokens[:self.max_prompt_token_length]
-            data.append([prompt_tokens, answer])
+            cropped_video_len = min(self.max_shared_prompt_token_length - len(self.sysprompt_tokens), num_tokens)
+            prompt_tokens = self.sysprompt_tokens + [token] * cropped_video_len
+            data.append([prompt_tokens, question, answer])
         if len(data) < self.num_patterns:
             logger.info("Asking for too many prefixes patterns")
         return data
@@ -523,21 +534,33 @@ class VideoDataLoader(DataLoader):
     def generate_workload(self):
         workload = []
         selected_video_qa = np.random.choice(
-            self.data, self.num_patterns, replace=False
+            np.arange(len(self.data)), self.num_patterns, replace=False
         )
-        for prompt_tokens, answer in selected_video_qa:
+        qa_per_video = math.ceil(self.total_num_requests / self.num_patterns)
+        cnt = 0
+        total_prefix_length = 0
+        for i, idx in enumerate(selected_video_qa):
+            prompt_tokens, question, answer = self.data[idx]
             max_new_tokens = len(self.tokenizer(answer).input_ids)
-            workload.append(
-                {
-                    "text": self.tokenizer.decode(prompt_tokens),
-                    "input_ids" : prompt_tokens,
-                    "sampling_params": {
-                        "temperature": 0,
-                        "max_new_tokens" : max_new_tokens
-                    },
-                }
-            )
+            print(len(prompt_tokens))
+            total_prefix_length += len(prompt_tokens)
+            for _ in range(qa_per_video):
+                question_tokens = self.tokenizer.encode(str(cnt) + " " + question)
+                workload.append(
+                    {
+                        # "text": self.tokenizer.decode(prompt_tokens + question_tokens),
+                        "input_ids" : prompt_tokens + question_tokens,
+                        "sampling_params": {
+                            "temperature": 0,
+                            "max_new_tokens" : max_new_tokens
+                        },
+                    }
+                )
+                cnt += 1
             # request["sampling_params"]["max_new_tokens"] = max_new_tokens
+        
+        logger.info(f'total prefix: {total_prefix_length}, start decoding for prompt text')
+        self.add_text_from_token_ids_to_workload(workload)
         return workload
 
 @dataclass
@@ -733,6 +756,7 @@ class LooGLEDataset(DataLoader):
                 new_tokenized_prompt = self.tokenizer.encode(new_prompt)
                 request["text"] = new_prompt
                 request["input_ids"] = new_tokenized_prompt
+                print(f'prompt length: {len(new_tokenized_prompt)}')
             return request
 
         with ThreadPoolExecutor(64) as executor:
@@ -756,7 +780,7 @@ class LoogleOracle(CustomRuntimeSelector):
         self.tbl = {}
         self.counter = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
         match = re.search(r"(.*)Question:", text, re.DOTALL)
         if match:
             tool = match.group(1)

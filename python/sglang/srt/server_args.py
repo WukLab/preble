@@ -41,6 +41,7 @@ class ServerArgs:
     hit_trace_window_size: int = 30 # seconds
     report_hit_ratio: bool = True
     enable_iterative_eviction: bool = False
+    enable_partial_eviction: bool = False
 
     def __post_init__(self):
         if self.tokenizer_path is None:
@@ -258,6 +259,11 @@ class ServerArgs:
             '--enable-iterative-eviction',
             action='store_true',
             help='Enable iterative eviction feedback.',
+        )
+        parser.add_argument(
+            '--enable-partial-eviction',
+            action='store_true',
+            help='Enable partial eviction feedback.',
         )
 
     @classmethod

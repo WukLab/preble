@@ -4,6 +4,10 @@ import random
 import numpy as np
 import uuid
 import torch
+import asyncio
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
 
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import handle_port_init
@@ -19,10 +23,10 @@ def get_sampling_params(max_new_tokens, tokenizer):
         sampling_params.verify()
     return sampling_params
 
-def profile_prefill(model_client: ModelRpcClient, num_mul, num_prompt, ctx_len, token_id_start, num_prefix):
-    model_server = model_client.model_server
-    sampling_params = get_sampling_params(1, model_server.tokenizer)
+async def profile_prefill(model_client: ModelRpcClient, num_mul, num_prompt, ctx_len, token_id_start, num_prefix, tp_size):
+    sampling_params = get_sampling_params(1, model_client.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
+    reqs = []
     for i in range(num_mul + num_prompt):
         if i < num_mul:
             input_ids = [token_id_start + i % num_prefix] * ctx_len
@@ -41,24 +45,18 @@ def profile_prefill(model_client: ModelRpcClient, num_mul, num_prompt, ctx_len, 
             stream=False,
             arrival_time=0.0,
         )
-        model_server.handle_generate_request(tokenized_obj)
-    forward_time_events = model_server.forward_step()
-    
-    num_finished_reqs = sum(len(output.rids) for output in model_server.out_pyobjs)
+        reqs.append(tokenized_obj)
+        
+    # forward_time_events = model_server.forward_step()
+    out_pyobjs = await model_client.step(reqs)
+    num_finished_reqs = sum(len(output.rids) for output in out_pyobjs)
     assert num_finished_reqs == num_seqs, f"Expected {num_seqs} outputs, got {num_finished_reqs}"
-    model_server.out_pyobjs = []
-    
-    forward_time = 0
-    for start, end in forward_time_events:
-        end.synchronize()
-        forward_time += start.elapsed_time(end)
-    return forward_time
 
-def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start, max_new_tokens, num_prefix):
-    model_server = model_client.model_server
-    sampling_params = get_sampling_params(max_new_tokens, model_server.tokenizer)
+async def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start, max_new_tokens, num_prefix, tp_size):
+    sampling_params = get_sampling_params(max_new_tokens, model_client.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
     inflight = set()
+    reqs = []
     for i in range(num_seqs):
         input_ids = [token_id_start + i % num_prefix] * ctx_len
         tokenized_obj = TokenizedGenerateReqInput(
@@ -75,14 +73,20 @@ def run_to_complete(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_st
             arrival_time=0.0,
         )
         inflight.add(tokenized_obj.rid)
-        model_server.handle_generate_request(tokenized_obj)
+        reqs.append(tokenized_obj)
+        # for s in model_client.model_servers:
+        #     s.handle_generate_request(tokenized_obj)
+        # await model_client.push_req_step(tokenized_obj)
+        # model_server.handle_generate_request(tokenized_obj)
         
+    # while inflight:
+    # await model_client.push_req_step(reqs)
+    out_pyobjs = await model_client.step(reqs)
     while inflight:
-        model_server.forward_step()
-        for output in model_server.out_pyobjs:
+        for output in out_pyobjs:
             for rid in output.rids:
                 inflight.remove(rid)
-        model_server.out_pyobjs = []
+        out_pyobjs = await model_client.step([])
 
 def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, token_id_start, num_prefix):
     model_server = model_client.model_server
@@ -115,22 +119,31 @@ def run_to_scheduled(model_client: ModelRpcClient, num_seqs, starting_ctx_len, t
             break
         model_server.out_pyobjs = []
 
-def profile_multi_query(model_client: ModelRpcClient, num_prompt, num_mul, ctx_len, num_qs, token_id_start, num_prefix):
+async def profile_multi_query(model_client: ModelRpcClient, num_prompt, num_mul, ctx_len, num_qs, token_id_start, num_prefix, tp_size):
     if not num_prefix:
         num_prefix = num_mul
     if num_mul > 0:
         cached_ctx_len = ctx_len - num_qs
-        run_to_complete(model_client, num_mul, cached_ctx_len, token_id_start, 1, num_prefix)
+        await run_to_complete(model_client, num_mul, cached_ctx_len, token_id_start, 1, num_prefix, tp_size)
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
     torch.cuda.cudart().cudaProfilerStart()
-    forward_time = profile_prefill(model_client, num_mul, num_prompt, ctx_len, token_id_start, num_prefix)
+    start_event.record()
+    await profile_prefill(model_client, num_mul, num_prompt, ctx_len, token_id_start, num_prefix, tp_size)
+    end_event.record()
     torch.cuda.cudart().cudaProfilerStop()
+    end_event.synchronize()
+    forward_time = start_event.elapsed_time(end_event)
     return forward_time
 
-def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start, num_prefix):
-    model_server = model_client.model_server
+async def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_start, num_prefix, tp_size):
+    if tp_size == 1:
+        model_server = model_client.model_server
+    else:
+        model_server = next(model_client.model_servers)
     if not num_prefix:
         num_prefix = num_seqs
-    run_to_complete(model_client, num_seqs, ctx_len, token_id_start, 1, num_prefix)
+    await run_to_complete(model_client, num_seqs, ctx_len, token_id_start, 1, num_prefix, tp_size)
     
     sampling_params = get_sampling_params(2, model_server.tokenizer)
     pixel_values, image_hash, image_size = None, None, None
@@ -149,15 +162,18 @@ def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, token_id_s
             stream=True,
             arrival_time=0.0
         )
-        model_server.handle_generate_request(tokenized_obj)
+        await model_client.push_req_step(tokenized_obj)
+        # model_server.handle_generate_request(tokenized_obj)
     
-    model_server.forward_step()
+    await model_client.setp()
+    # model_server.forward_step()
     num_stepped = sum(len(output.rids) for output in model_server.out_pyobjs)
     assert num_stepped == num_seqs, f"Expected {num_seqs} outputs, got {num_stepped}"
     model_server.out_pyobjs = []
 
     torch.cuda.cudart().cudaProfilerStart() 
-    forward_time_events = model_server.forward_step()
+    forward_time_events = await model_client.setp()
+    # forward_time_events = model_server.forward_step()
     torch.cuda.cudart().cudaProfilerStop()
     num_stepped = sum(len(output.rids) for output in model_server.out_pyobjs)
     assert num_stepped == num_seqs, f"Expected {num_seqs} outputs, got {num_stepped}"
@@ -187,14 +203,14 @@ def main(args):
     
     # Warm up
     warm_up_prompts = 16
-    run_to_complete(model_client, warm_up_prompts, 2048, 0, 64, warm_up_prompts)
+    asyncio.run(run_to_complete(model_client, warm_up_prompts, 2048, 0, 64, warm_up_prompts, server_args.tp_size)) 
     torch.cuda.synchronize()
     if args.num_gen > 0:
-        forward_time = profile_decoding(model_client, args.num_gen, args.ctx_len, warm_up_prompts, args.num_prefix)
+        forward_time = asyncio.run(profile_decoding(model_client, args.num_gen, args.ctx_len, warm_up_prompts, args.num_prefix, server_args.tp_size))
         logging.info(f"Normal Decoding: {args.num_gen} x 1: {forward_time:.2f} ms")
         warm_up_prompts += args.num_gen
     if args.num_prompt + args.num_mul > 0:
-        forward_time = profile_multi_query(model_client, args.num_prompt, args.num_mul, args.ctx_len, args.mul_qs, warm_up_prompts, args.num_prefix)
+        forward_time = asyncio.run(profile_multi_query(model_client, args.num_prompt, args.num_mul, args.ctx_len, args.mul_qs, warm_up_prompts, args.num_prefix, server_args.tp_size))
         logging.info(f"Multi Query Decoding: {args.num_prompt} x {args.ctx_len} + {args.num_mul} x {args.mul_qs}: {forward_time:.2f} ms")
         warm_up_prompts += args.num_mul + args.num_prompt
     
@@ -203,7 +219,7 @@ if __name__ == "__main__":
     random.seed(10)
     np.random.seed(10)
     
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     ServerArgs.add_cli_args(parser)
     parser.add_argument("--num-prompt", type=int, default=0,
