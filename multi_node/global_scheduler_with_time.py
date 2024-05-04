@@ -399,8 +399,8 @@ class GlobalSchedulerWithTime:
             self.cache.update_allocated_size(leaf_node, runtime_idx)
 
             # NOTE: eviction handled by iterative feedback
-            # if self.enable_eviction:
-            #     self.handle_eviction(runtime_idx)
+            if self.enable_eviction:
+                self.handle_eviction(runtime_idx)
             if self.enable_rebalancing:
                 self.handle_important_node_stealing(runtime_idx)
                 # self.work_steal_low_loaded_prefixes()
@@ -471,8 +471,8 @@ class GlobalSchedulerWithTime:
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node].add(smaller_device)
                 self.overload_detector.delete_after_allocation(node, larger_device)
-                
         else:
+            steal_n = 0
             while node_cost_for_gpu:
                 node: LPTreeNode
                 cost, node = heapq.heappop(node_cost_for_gpu)
@@ -488,10 +488,11 @@ class GlobalSchedulerWithTime:
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node] = {smaller_device}
                 self.update_children(node, smaller_device)
-        
+                steal_n += 1
                 # if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
                 #     return
             # Upstead the sorted allocation based on the new smallest allocation
+            logger.info(f"Steal {steal_n} nodes from {larger_device} to {smaller_device}")
         allocation_cost_with_devices[0] = (larger_device, larger_allocation_cost)
         allocation_cost_with_devices[-1] = (smaller_device, smaller_device_allocation_cost)
         self.handle_important_node_stealing_recursive(allocation_cost_with_devices[1:])

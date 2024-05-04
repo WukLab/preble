@@ -152,10 +152,10 @@ class LPRadixCache:
         self.reset()
         self.disable = disable
         self.histogram: SlidingWindowHistogram = histogram
-        
-        context = zmq.asyncio.Context(1)
-        self.recv_from_detokenizer = context.socket(zmq.PULL)
-        self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
+
+        # context = zmq.asyncio.Context(1)
+        # self.recv_from_detokenizer = context.socket(zmq.PULL)
+        # self.recv_from_detokenizer.bind(f"tcp://127.0.0.1:10340")
 
         self.num_iters = 0
         self.lock = lock
@@ -196,7 +196,7 @@ class LPRadixCache:
                 if child.cached_gpus:
                     current_gpu_selection = child.cached_gpus
                 if prefix_len < len(c_key):
-                    print(prefix_len, len(c_key))
+                    # print(prefix_len, len(c_key))
                     # assert False
                     return {}, None
                     new_node = self._split_node(
@@ -247,13 +247,13 @@ class LPRadixCache:
             split_nodes=split_nodes,
         )
 
-        if len(created_node.parent.children) == 1 and created_node.parent != self.root_node:
-            parent = created_node.parent
-            parent.value += created_node.value
-            self._delete_leaf(created_node)
-            parent.children = {}
-            parent.is_leaf = True
-            created_node = parent
+        # if len(created_node.parent.children) == 1 and created_node.parent != self.root_node:
+        #     parent = created_node.parent
+        #     parent.value += created_node.value
+        #     self._delete_leaf(created_node)
+        #     parent.children = {}
+        #     parent.is_leaf = True
+        #     created_node = parent
         return created_node
 
     def _delete_leaf(self, node):
@@ -579,24 +579,31 @@ class LPRadixCache:
     #     for gpu_id, eviction_list in latest_updates.items():
     #         for obj in eviction_list:
     #             self._evict_by_node(obj.input_ids, obj.evicted_ids, gpu_id)
-
+    
     def _evict_by_node(self, input_ids, evicted_ids, gpu_id):
         # pseudocode:
         # 1. find the path
         # 2. loop until the tree node token ids > remaining evicted ids
             # evict the leaf node from the given gpu
             # walk to its parent
+        
+        def match_from_leaf(global_key, local_eviction) -> int:
+            idx = 0
+            for i in range(min(len(global_key), len(local_eviction))):
+                idx = i + 1
+                if global_key[-idx] != local_eviction[-idx]:
+                    break
+            return idx - 1
 
         node = self.find_node(input_ids)
-        while node != self.root_node:
+        while node and node != self.root_node:
             for k, v in node.parent.children.items():
                 if v == node:
-                    num_tokens = len(k)
-                    if list(k) == evicted_ids[-num_tokens:]:
-                        if gpu_id in node.cached_gpus:
-                            node.cached_gpus.remove(gpu_id)
-                            node.evicted_gpus.add(gpu_id)
-                            evicted_ids = evicted_ids[:-num_tokens]
+                    num_eviction = match_from_leaf(k, evicted_ids)
+                    if num_eviction and gpu_id in node.cached_gpus:
+                        node.cached_gpus.remove(gpu_id)
+                        node.evicted_gpus.add(gpu_id)
+                        evicted_ids = evicted_ids[:-num_eviction]
                     break
             if not evicted_ids:
                 break

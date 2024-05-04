@@ -26,6 +26,7 @@ sglang_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
+    # 'enable_partial_eviction': True,
     # "chunk_prefill_budget": 512,
 }
 # GPU Configuration
@@ -50,8 +51,9 @@ ours_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
-    'report_hit_ratio': True ,
-    'enable_iterative_eviction': True,
+    'report_hit_ratio': True,
+    'enable_iterative_eviction': False,
+    'enable_partial_eviction': True,
 }
 # GPU Configuration
 ours_gpu_configs = [
@@ -75,10 +77,12 @@ configuration_to_test = [
     scale_to_gpu([24, 673, 6], len(ours_gpu_configs) // 2),
 ]
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
+#     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'time_1_6_fresh'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs, 'consistent_hashing'),
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
@@ -111,10 +115,17 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="ckpt_all_in_one/4r_loogle_limited/exp.log",
-    csv_log_path="ckpt_all_in_one/4r_loogle_limited/exp.csv",
+# <<<<<<< feature/initial_worst_case_benchmarks
+    log_file_path="e2e/8r_loogle_rich/exp_8.log",
+    csv_log_path="e2e/8r_loogle_rich/exp_8.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
+# =======
+#     log_file_path="ckpt_all_in_one_partial_comparison/4r_loogle_k=10/exp.log",
+#     csv_log_path="ckpt_all_in_one_partial_comparison/4r_loogle_k=10/exp.csv",
+#     # log_file_path="debug/loogle_partial_eviction/exp.log",
+#     # csv_log_path="debug/loogle_partial_eviction/exp.csv",
+# >>>>>>> mulit_modal_main
     simulate=True,
     model_path=model_name,
     workload_configs=workloads,

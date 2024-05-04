@@ -44,6 +44,7 @@ class CustomPolicyType(Enum):
     GLPM = auto()
 
     LOOGLE_ORACLE = auto()
+    VIDEO_ORACLE = auto()
 
     GREEDY_LP = auto()
     GREEDY_LP_OLD = auto()
