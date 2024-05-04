@@ -48,7 +48,7 @@ ours_server_args = {
     'mem_fraction_static': 0.8,
     'context_length': 32768,
     "enable_flashinfer": True,
-    'schedule_heuristic': 'fcfs-mfq',
+    'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 512,
     'report_hit_ratio': True ,
     'enable_iterative_eviction': True,
@@ -82,25 +82,30 @@ exp_time = float('inf')
 configuration_to_test = [
     # scale_to_gpu([100, 2000, 2], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 2500, 0.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 2500, 1], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 2500, 2], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 2500, 2.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 2500, 3], len(ours_gpu_configs) // 2),
-    scale_to_gpu([100, 2500, 4], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([100, 312, 0.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([100, 625, 1], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([100, 1250, 2], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([100, 1875, 3], len(ours_gpu_configs) // 2),
+
+    scale_to_gpu([100, 1562, 2.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([100, 2187, 3.5], len(ours_gpu_configs) // 2),
+
+    # scale_to_gpu([100, 2500, 4], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([100, 3125, 5], len(ours_gpu_configs) // 2),
 ]
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs_lpm, 'ours_with_lpm'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
 ]
 
 def gen_workloads_for_programming(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_programming_dataset(
+        dataloader, requests, send_out_times = create_programming_dataset_micro(
             configuration,
             model_name, 
             exp_time, 
@@ -127,8 +132,8 @@ def gen_workloads_for_programming(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_programming(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="programming_logs/programming_8.log",
-    csv_log_path="programming_logs/programming_8.csv",
+    log_file_path="programming_logs/programming_12_version2.log",
+    csv_log_path="programming_logs/programming_12_version2.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
     simulate=True,

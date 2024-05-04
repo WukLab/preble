@@ -130,7 +130,7 @@ def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist
         send_out_times_list.append(send_out_times)
     return dataloader, request_groups, send_out_times_list
 
-def create_programming_dataset(config, model_name, exp_time, max_tokens_override=512) -> Iterator[WorkloadConfig]:
+def create_programming_dataset_default(config, model_name, exp_time, max_tokens_override=512) -> Iterator[WorkloadConfig]:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     num_workloads, num_requests, request_rate = config
     if exp_time != float("inf"):
@@ -140,7 +140,26 @@ def create_programming_dataset(config, model_name, exp_time, max_tokens_override
         num_patterns=num_workloads,
         total_num_requests=num_requests,
         tokenizer=tokenizer,
-        max_tokens_override=max_tokens_override
+        max_tokens_override=max_tokens_override,
+    )
+    requests = dataloader.generate_workload(32768)
+    random.shuffle(requests)
+
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, requests, send_out_times
+
+def create_programming_dataset_micro(config, model_name, exp_time, max_tokens_override=512) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize programing dataset')
+    dataloader = ProgrammingDataset(
+        num_patterns=num_workloads,
+        total_num_requests=num_requests,
+        tokenizer=tokenizer,
+        max_tokens_override=max_tokens_override,
+        shared_length=2400
     )
     requests = dataloader.generate_workload(32768)
     random.shuffle(requests)

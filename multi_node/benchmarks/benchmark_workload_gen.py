@@ -1271,6 +1271,7 @@ class ProgrammingDataset(DataLoader):
         tokenizer,
         crop_max_decode=True,
         max_tokens_override=None,
+        shared_length=2400
     ):
         super().__init__(
             "programming",
@@ -1281,6 +1282,7 @@ class ProgrammingDataset(DataLoader):
         self.data = self.read_data()
         self.max_tokens_override = max_tokens_override
         self.p_90_sample_lengths_of_dataset = 12979
+        self.shared_length = shared_length
 
         # Short QA has about
 
@@ -1309,7 +1311,6 @@ class ProgrammingDataset(DataLoader):
         i = 0
         while len(new_sampled_dataset) != self.num_patterns:
             item = sampled_dataset[i]
-
             try:
                 solution = json.loads(item["solutions"])
                 num_raw_requests += len(solution)
@@ -1321,7 +1322,7 @@ class ProgrammingDataset(DataLoader):
             i += 1
         scale_factor = self.total_num_requests / num_raw_requests
 
-        shared_prompt = self.tokenizer.decode([1 for _ in range(2400)])
+        shared_prompt = self.tokenizer.decode([1 for _ in range(self.shared_length)])
         logging.info(f"Length of new sampled dataset actually has {len(new_sampled_dataset)} patterns")
 
         workload = []
@@ -1387,4 +1388,5 @@ class ProgrammingDataset(DataLoader):
         return {
             "num_patterns": self.num_patterns,
             "total_num_requests": self.total_num_requests,
+            "shared_length": self.shared_length
         }

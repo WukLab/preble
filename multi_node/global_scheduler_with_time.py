@@ -370,7 +370,27 @@ class GlobalSchedulerWithTime:
 
             runtime_idx = list(gpu_selected)[0]
             if len(gpu_selected) > 1:
-                runtime_idx = int(np.random.choice(list(gpu_selected)))
+                # find the index that's lower
+                recom_costs = []
+                for gpu_id in range(self.num_gpus):
+                    recomputation_cost = 0
+                    recom_costs.append(recomputation_cost)
+                histogram_mem_cost = self.histogram.current_allocation_per_gpu()
+                if self.enable_eviction:
+                    costs = [
+                        recom_costs[gpu_id] + \
+                        histogram_mem_cost[gpu_id] + \
+                        self.virtual_evict_for_routing(leaf_node, gpu_id)
+                        for gpu_id in gpu_selected
+                    ]
+                else:
+                    costs = [
+                        recom_costs[gpu_id] + \
+                        histogram_mem_cost[gpu_id]
+                        for gpu_id in gpu_selected
+                    ]
+                runtime_idx = int(np.argmin(costs))
+                # runtime_idx = int(np.random.choice(list(gpu_selected)))
             self.counter += 1
             self.histogram.update(datetime.now(), important_node, leaf_node, runtime_idx, decoding_length=decoding_length)
             self.update_gpu_allocation_for_parent(leaf_node, gpu_selected)
