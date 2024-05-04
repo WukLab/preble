@@ -251,7 +251,7 @@ class BenchmarkMetrics:
             p50_norm_latency=p50_norm_latency,
             p90_norm_latency=p90_norm_latency,
             p99_norm_latency=p99_norm_latency,
-            avg_norm_latency=avg_norm_latency,
+            avg_norm_latency=mean_norm_latency,
 
             ttfts=ttfts,
             tpots=tpots,
