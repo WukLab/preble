@@ -107,13 +107,13 @@ exp_time = float('inf')
 exp_list = []
 for i in [4]:
     configuration_to_test = [
-        scale_to_gpu([24, 168, 0.1], i / 2),
-        scale_to_gpu([24, 168, 0.2], i / 2),
-        scale_to_gpu([24, 168, 0.3], i / 2),
+        # scale_to_gpu([24, 168, 0.1], i / 2),
+        # scale_to_gpu([24, 168, 0.2], i / 2),
+        # scale_to_gpu([24, 168, 0.3], i / 2),
         scale_to_gpu([24, 281, 0.5], i / 2),
         scale_to_gpu([24, 393, 0.7], i / 2),
-        # scale_to_gpu([24, 449, 0.8], i / 2),
-        # scale_to_gpu([24, 505, 0.9], i / 2),
+        scale_to_gpu([24, 449, 0.8], i / 2),
+        scale_to_gpu([24, 505, 0.9], i / 2),
         # scale_to_gpu([24, 561, 1.0], i / 2),
         # scale_to_gpu([24, 673, 1.2], i / 2),
     ]
