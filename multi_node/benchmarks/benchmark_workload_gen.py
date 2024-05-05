@@ -828,6 +828,8 @@ class LooGLEDataset(DataLoader):
         request_pre_prefix = [0] * len(sampled_dataset)
         for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
+            if i == 0:
+                print(raw_inputs)
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):
                 request_pre_prefix[i] += 1
@@ -1418,18 +1420,14 @@ class VirtualEnvLoader(DataLoader):
         if self.num_patterns > len(self.data):
             print(f'Not enough patterns in the dataset. Only {len(self.data)} patterns available.')
             num_patterns = len(self.data)
-        examples_per_pattern = np.ceil(k / num_patterns)
-        data = [examples for examples in self.data if len(examples) >= examples_per_pattern]
-        if len(data) < num_patterns:
-            print(f'Not enough patterns in the dataset with {examples_per_pattern} examples. Only {len(data)} patterns available.')
         requests = []
-        for i, sample in enumerate(data[:num_patterns]):
+        for i in range(self.num_patterns):
+            env_id = f"Environment ID {i} "
+            sample = self.data[i % len(self.data)]
             req_group = []
             for j, turn in enumerate(sample):
-                if j == examples_per_pattern:
-                    break
                 req_group.append({
-                    'text': turn['prompt'],
+                    'text': env_id + turn['prompt'],
                     'sampling_params': {
                         'temperature': 0.0,
                         'max_new_tokens': 26,
@@ -1437,10 +1435,9 @@ class VirtualEnvLoader(DataLoader):
                 })
             self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
-            total_requests += len(req_group)
-        
+        random.shuffle(requests)
         return requests
-    
+
 
 class ProgrammingDataset(DataLoader):
     def __init__(
