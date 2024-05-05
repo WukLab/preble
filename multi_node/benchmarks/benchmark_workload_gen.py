@@ -1420,7 +1420,7 @@ class VirtualEnvLoader(DataLoader):
             print(f'Not enough patterns in the dataset. Only {len(self.data)} patterns available.')
             num_patterns = len(self.data)
         requests = []
-        for i in range(len(self.num_patterns)):
+        for i in range(self.num_patterns):
             env_id = f"Environment ID {i} "
             sample = self.data[i % len(self.data)]
             req_group = []
