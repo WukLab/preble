@@ -107,22 +107,22 @@ def gen_workloads_for_videoQA(configuration_to_test, policies_to_test):
 exp_time = float('inf')
 
 exp_list = []
-for i in [2, 4]:
+for i in [2]:
     configuration_to_test = [
-        scale_to_gpu([150, 150, 0.5], i / 2),
-        scale_to_gpu([150, 300, 1], i / 2),
-        scale_to_gpu([150, 600, 2], i / 2),
-        scale_to_gpu([150, 900, 3], i / 2),
-        scale_to_gpu([150, 1200, 4], i / 2),
-        scale_to_gpu([150, 1200, 5], i / 2),
-        # scale_to_gpu([150, 1800, 6], i / 2),
-        # scale_to_gpu([150, 2100, 7], i / 2),
+        # scale_to_gpu([150, 150, 0.5], i / 2),
+        # scale_to_gpu([150, 300, 1], i / 2),
+        # scale_to_gpu([150, 600, 2], i / 2),
+        # scale_to_gpu([150, 900, 3], i / 2),
+        # scale_to_gpu([150, 1200, 4], i / 2),
+        # scale_to_gpu([150, 1200, 5], i / 2),
+        scale_to_gpu([150, 1800, 6], i / 2),
+        scale_to_gpu([150, 2100, 7], i / 2),
         # scale_to_gpu([150, 3000, 10], i / 2),
     ]
     policies_to_test = [
         (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
     workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(

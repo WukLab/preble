@@ -867,7 +867,8 @@ class LooGLEDataset(DataLoader):
         if LooGLE_dataset_type == LooGLEDatasetType.LONG_QA:
             data = load_dataset("bigainlco/LooGLE", "longdep_qa", split="test")
         elif LooGLE_dataset_type == LooGLEDatasetType.SHORT_QA:
-            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test", revision="")
+            # data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test", download_mode='force_redownload')
+            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test")
         self.data = data
         self.prompt_format = self.prompt_format[LooGLE_dataset_type]
         return data
