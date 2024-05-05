@@ -225,6 +225,67 @@ class DataLoader:
 
     def get_tokenizer(self):
         return self.tokenizer
+    
+class PercentCommonSharedDataLoader(DataLoader):
+    def __init__(
+        self,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
+        distribution_of_non_shared: float = 0.0,
+        percent_of_common_shared: float = 1.0,
+        output_len: int = 1,
+        context_len: int = None, # if this is not none, ignore num_in_context_exampels
+    ):
+        super().__init__(
+            "random", num_patterns, total_num_requests, tokenizer, load_dist
+        )
+        self.distribution_of_non_shared = distribution_of_non_shared
+        self.output_len = output_len
+        self.context_len = context_len
+        self.percent_of_common_shared = percent_of_common_shared
+    
+    def generate_workload(self):
+        num_prefixed_shared = int(
+            self.total_num_requests * (1 - self.distribution_of_non_shared)
+        )
+        num_non_shared = int(self.total_num_requests * self.distribution_of_non_shared)
+        workload = []
+        sampling_params = {
+            "experiment_id": f"random_experiment_{self.num_patterns}_{self.distribution_of_non_shared}_{self.total_num_requests}",
+            "temperature": 0,
+            "max_new_tokens": self.output_len,
+            "ignore_eos": True, # For better micro-benchmark
+        }
+        
+        common_prompt_lengths = math.floor(self.context_len * self.percent_of_common_shared)
+        unique_sharing_length = self.context_len - common_prompt_lengths
+        for i in range(num_prefixed_shared):
+            workload_num = 1 + i % self.num_patterns
+            prompt_tokens = [0] * common_prompt_lengths + [workload_num] * unique_sharing_length
+            workload.append(
+                {
+                    "input_ids" : prompt_tokens,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
+                }
+            )
+        for i in range(num_non_shared):
+            prompt_tokens = [1 + i + self.num_patterns] * self.context_len
+            workload.append(
+                {
+                    "input_ids" : prompt_tokens,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
+                }
+            )
+        logger.info('Start decoding to text')
+        self.add_text_from_token_ids_to_workload(workload)
+        random.shuffle(workload)
+        return workload
+        
+        
 
 class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
@@ -239,6 +300,7 @@ class WorkloadPrefixDataLoader(DataLoader):
         random_workload_path=None,
         workload_start_from: int = 0,
         decoding_size=None,
+        context_len: int = None, # if this is not none, ignore num_in_context_exampels
     ):
         super().__init__(
             "random", num_patterns, total_num_requests, tokenizer, load_dist
@@ -249,6 +311,9 @@ class WorkloadPrefixDataLoader(DataLoader):
         self.random_workload_path=random_workload_path
         self.workload_start_from = workload_start_from
         self.decoding_size = decoding_size
+        self.context_len = context_len
+        if self.context_len:
+            self.num_in_context_examples = math.ceil(self.context_len / 475)
 
     def generate_workload(self, k):
         num_prefixed_shared = int(
@@ -292,11 +357,11 @@ class WorkloadPrefixDataLoader(DataLoader):
                 }
             )
         self.add_input_token_ids_to_workload(workload)
-        random.shuffle(workload)
 
-        prompt_lens = [len(p["input_ids"]) for p in workload]
-        plt.hist(prompt_lens)
-        plt.savefig(f"react_prompt_length.png")
+        random.shuffle(workload)
+        # prompt_lens = [len(p["input_ids"]) for p in workload]
+        # plt.hist(prompt_lens)
+        # plt.savefig(f"react_prompt_length.png")
         return workload
     
     @staticmethod

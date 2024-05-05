@@ -13,7 +13,8 @@ from benchmark_workload_gen import (
     LooGLEDataset, 
     LooGLEDatasetType, 
     MultiDomainToolBenchDataLoader,
-    ChameleonTabMWPLoader
+    ChameleonTabMWPLoader,
+    PercentCommonSharedDataLoader
 )
 from benchmark_workload_gen import *
 from typing import Iterator
@@ -187,3 +188,21 @@ def create_programming_dataset_micro(config, model_name, exp_time, max_tokens_ov
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times
 
+def create_agent_percent_share_micro(config, model_name, exp_time, seq_length) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, random_ratio, common_ratio, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    dataloader = PercentCommonSharedDataLoader(
+        num_workloads,
+        num_requests,
+        tokenizer,
+        output_len=26,
+        distribution_of_non_shared=random_ratio,
+        context_len=seq_length,
+        percent_of_common_shared=common_ratio
+    )
+    requests = dataloader.generate_workload()
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, requests, send_out_times
+    
