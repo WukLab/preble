@@ -341,7 +341,7 @@ class GlobalSchedulerWithTime:
             self.handle_split_node_histogram(split_nodes)
 
             important_node = self.get_important_node(leaf_node)
-            if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
+            if len(split_nodes) == 0 or leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
                 gpu_selected = self.get_parent_gpu_allocation(leaf_node)
             else:
                 if runtime_id_with_highest_hit_rate is None:
