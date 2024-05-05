@@ -1422,7 +1422,7 @@ class VirtualEnvLoader(DataLoader):
         requests = []
         for i in range(len(self.num_patterns)):
             env_id = f"Environment ID {i} "
-            sample = data[i % len(data)]
+            sample = self.data[i % len(self.data)]
             req_group = []
             for j, turn in enumerate(sample):
                 req_group.append({
