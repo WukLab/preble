@@ -226,7 +226,7 @@ if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
-    from multi_node.benchmarks.multi_exp_configs.e2e_234r_common_share_micro_config import exp_args
-    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_common_share_micro_config import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_tp_toolbench_config import exp_args
     
     run_all_experiments(exp_args)
