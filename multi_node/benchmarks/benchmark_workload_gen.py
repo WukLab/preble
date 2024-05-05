@@ -1434,7 +1434,6 @@ class VirtualEnvLoader(DataLoader):
                 })
             self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
-            total_requests += len(req_group)
         random.shuffle(requests)
         return requests
 
