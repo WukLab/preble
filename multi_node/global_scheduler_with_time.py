@@ -10,7 +10,8 @@ from collections import deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
 import logging
-from benchmarks.exp_configs.model_equations import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
+# from benchmarks.exp_configs.model_equations import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
+from benchmarks.exp_configs.model_equations import LP_Llama3_70B_H100_sglang_extend_flashinfer as prefill_time
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
@@ -216,7 +217,7 @@ class GlobalSchedulerWithTime:
         self.HIGH_LOAD_THRESHOLD = 1.5
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
-
+        self.enable_rebalancing = False
 
     
     # Consider Split nodes

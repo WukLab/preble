@@ -215,6 +215,9 @@ class ModelRpcServer:
         while self.hit_trace_buffer and timestamp - self.hit_trace_buffer[0][0] > self.hit_trace_window_size:
             self.hit_trace_buffer.popleft()
     
+    def exposed_get_hit_ratio(self):
+        return self.get_hit_ratio()
+    
     def get_hit_ratio(self):
         hit_tokens = sum(x[1] for x in self.hit_trace_buffer)
         total_prompt_len = sum(x[2] for x in self.hit_trace_buffer)
@@ -1415,6 +1418,7 @@ class ModelRpcClient:
             self.step = async_wrap(self.model_server.exposed_step)
             self.forward_once = async_wrap(self.model_server.forward_step)
             self.push_req_step = async_wrap(self.model_server.handle_generate_request)
+            self.get_hit_ratio = async_wrap(self.model_server.exposed_get_hit_ratio)
             self.get_migrate_candidates = async_wrap(self.model_server.exposed_get_migration_candidates)
             self.scheduler_metrics_request = async_wrap(
                 self.model_server.exposed_scheduler_metrics_request
@@ -1434,21 +1438,6 @@ class ModelRpcClient:
                     )
 
                 self.model_servers = executor.map(init_model, range(tp_size))
-            
-            # rets = []
-            # for i in range(tp_size):
-            #     rets.append(start_model_process(port_args.model_rpc_ports[i]))
-            # self.remote_services = [x[0] for x in rets]
-            # self.procs = [x[1] for x in rets]
-            
-            # # Init model
-            # def init_model(i):
-            #     return self.remote_services[i].ModelRpcServer(
-            #         i, server_args, port_args
-            #     )
-            # self.model_servers = []
-            # for i in range(tp_size):
-            #     self.model_servers.append(init_model(i))
                 
             # Wrap functions
             def async_wrap(func_name):
@@ -1460,12 +1449,13 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap("step")
-            self.forward_once = async_wrap("forward_step")
             # TODO: test push_req_step in TP mode
             self.push_req_step = async_wrap("handle_generate_request")
+            self.get_hit_ratio = async_wrap("get_hit_ratio")
             self.scheduler_metrics_request = async_wrap(
                 'exposed_scheduler_metrics_request'
             ) # TODO test metric collection in TP mode
+    
 
 def _init_service(port):
     t = ThreadedServer(

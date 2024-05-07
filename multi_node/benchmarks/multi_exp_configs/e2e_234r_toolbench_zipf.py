@@ -28,22 +28,21 @@ ssh_config_06 = {
 """sgalng baseline server runtime config
 """
 sglang_server_args = {
-    'log_prefix_hit': True,
+    'log_prefix_hit': False,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
     # "chunk_prefill_budget": 512,
-    'tp_sze': 4,
-    'load_format': 'dummy'
+    'load_format': 'dummy',
 }
 
 # GPU Configuration
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -52,22 +51,21 @@ add_simulation_to_gpu_config(baseline_gpu_configs)
 ours_server_args = {
     'log_prefix_hit': True,
     'mem_fraction_static': 0.8,
-    'context_length': 32768,
+    'context_length': 4096,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
     "chunk_prefill_budget": 1024,
-    'report_hit_ratio': True ,
+    'report_hit_ratio': False,
     'enable_iterative_eviction': False,
     'enable_partial_eviction': True,
-    'tp_sze': 4,
-    'load_format': 'dummy'
+    'load_format': 'dummy',
 }
 # GPU Configuration
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -77,18 +75,17 @@ ours_gpu_configs = [
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
-def gen_workloads_for_videoQA(configuration_to_test, policies_to_test):
+def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
-        num_prefix_patters, num_requests, request_rate = configuration
-        dataloader, requests, send_out_times = create_videoQA_dataset(
+        num_prefix_patters, num_requests, request_rate, _  = configuration
+        dataloader, requests, send_out_times = create_toolbench_dataset_zipf(
             configuration,
             model_name, 
             exp_time, 
-            data_path="datasets/VideoQA.csv",
-            max_shared_prompt_length=8192,
+            data_path="datasets/G1_workload_updated_input_output_lengths_4096.json",
+            load_dist=LoadDistribution.ZIPF,
         )
-        for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: # assuming each policy has the exact same settings
-            # print(server_configs)
+        for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: 
             yield DefaultWorkload(
                     dataloader=dataloader,
                     policy=policy,
@@ -113,34 +110,38 @@ exp_time = float('inf')
 exp_list = []
 for i in [2]:
     configuration_to_test = [
-        scale_to_gpu([240, 150, 0.5], i / 2),
-        scale_to_gpu([240, 300, 1], i / 2),
-        scale_to_gpu([240, 600, 2], i / 2),
-        scale_to_gpu([240, 900, 3], i / 2),
-        scale_to_gpu([240, 1200, 4], i / 2),
-        scale_to_gpu([240, 1500, 5], i / 2),
-        
-        # scale_to_gpu([240, 1800, 6], i / 2),
-        # scale_to_gpu([240, 2100, 7], i / 2),
-        # scale_to_gpu([150, 3000, 10], i / 2),
-        # scale_to_gpu([1, 2, 10], i / 2),
+        # scale_to_gpu([200, 900, 3], i / 2),
+        # scale_to_gpu([200, 1800, 6], i / 2),
+        # scale_to_gpu([200, 2700, 9], i / 2),
+        # scale_to_gpu([200, 3600, 12], i / 2),
+        # scale_to_gpu([200, 4500, 15], i / 2),
+        scale_to_gpu([320, 5400, 18], i / 2),
     ]
+    all_configs = []
+    for k in [1.1]:
+        for item in configuration_to_test:
+            new_configuration_to_test = list(tuple(item + [k]))
+            all_configs.append(new_configuration_to_test)
+    
     policies_to_test = [
-        # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs[:i], 'oracle'),  
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], 'ours'),
     ]
-    workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
+
+    workloads = gen_workloads_for_toolbench(all_configs, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"real_ckpt_all_in_one/{i}r_videoQA_H100/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/{i}r_videoQA_H100/exp.csv",
+        # log_file_path=f"ablation/toolbench_{k}/{i}r_toolbench/exp.log",
+        # csv_log_path=f"ablation/toolbench_{k}/{i}r_toolbench/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/toolbench_{k}/{i}r_toolbench/exp.log",
+        csv_log_path=f"real_ckpt_all_in_one/toolbench_{k}/{i}r_toolbench/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
         simulate=False,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,
-        experiment_name="videoQA_e2e"
+        experiment_name="toolbench_e2e"
     )
     exp_list.append(loogle_experiment)
 

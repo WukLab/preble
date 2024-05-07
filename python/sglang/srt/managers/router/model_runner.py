@@ -260,7 +260,7 @@ def initialize_dummy_weights(
             param.data.uniform_(low, high)
 
 class GPUConfig:
-    def __init__(self, gpu_id, runtime_args, url=None, use_ssh=False, ssh_config={}, vllm_config=None) -> None:
+    def __init__(self, gpu_id, runtime_args, url=None, use_ssh=False, ssh_config={}, vllm_config=None, cuda_devices=None) -> None:
         self.gpu_id = gpu_id
         self.url = url
         self.use_ssh = use_ssh
@@ -270,6 +270,8 @@ class GPUConfig:
         self.vllm_config = vllm_config
         self.lp_forward_simulation = None
         self.runtime_args = runtime_args
+        if not cuda_devices:
+            self.cuda_devices = [self.gpu_id]
 
     def regist_simulator_config(self, forward_simulation, kv_cache_memory, lp_forward_simulation):
         self.forward_simulation = forward_simulation

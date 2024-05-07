@@ -20,8 +20,8 @@ class Scheduler:
     def get_priority_queue(self, forward_queue):
         if self.schedule_heuristic == "lpm":
             # longest prefix match
-            # forward_queue.sort(key=lambda x: -len(x.prefix_indices))
-            forward_queue.sort(key=lambda x: (-len(x.prefix_indices), x.arrival_time))
+            forward_queue.sort(key=lambda x: -len(x.prefix_indices))
+            # forward_queue.sort(key=lambda x: (-len(x.prefix_indices), x.arrival_time))
             return forward_queue
         elif self.schedule_heuristic == "random":
             random.shuffle(forward_queue)

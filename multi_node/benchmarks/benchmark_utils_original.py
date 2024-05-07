@@ -24,7 +24,6 @@ from benchmarks.benchmark_workload_gen import DataLoader
 
 class ExperimentType(Enum):
     sequential = auto()  # can send the next request only after the previous one is complete
-    advanced_sequential = auto()
     concurrent_grouped = auto()
     increasing_rps = auto()
     default = auto() # send each one at a fixed rps

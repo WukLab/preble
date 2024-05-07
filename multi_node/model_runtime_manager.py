@@ -201,7 +201,6 @@ class ModelDetails:
             else:
                 runtime = ExtendedSGLangRuntime(
                     model_path=model_path,
-                    cuda_devices=gpu_id,
                     gpu=gpu_id,
                     gpu_config=config,
                     **config.runtime_args,

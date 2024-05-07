@@ -809,7 +809,7 @@ class TBOracleB(CustomRuntimeSelector):
     tbl = {}
     counter: int = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kargs):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -1467,9 +1467,11 @@ class VirtualEnvLoader(DataLoader):
     """DataLoader for VirtualEnv dataset."""
 
     def __init__(self, data_path: str, num_patterns: int,
-                 tokenizer: PreTrainedTokenizer):
+                 tokenizer: PreTrainedTokenizer,total_num_requests=None):
         super().__init__(data_path, num_patterns, None, tokenizer)
         self.data = self.read_data(data_path)
+        self.total_num_requests = total_num_requests
+        self.tokenizer = tokenizer
 
     def read_data(self, data_path: str):
         with open(data_path, 'r') as f:
@@ -1485,12 +1487,25 @@ class VirtualEnvLoader(DataLoader):
         if self.num_patterns > len(self.data):
             print(f'Not enough patterns in the dataset. Only {len(self.data)} patterns available.')
             num_patterns = len(self.data)
+        num_raw_questions = sum(len(self.data[i % len(self.data)]) for i in range(self.num_patterns))
+        scale_factor = self.total_num_requests / num_raw_questions
+        
+        sample_response = self.tokenizer.decode([1 for _ in range(14)])
+        
         requests = []
         for i in range(self.num_patterns):
             env_id = f"Environment ID {i} "
             sample = self.data[i % len(self.data)]
             req_group = []
-            for j, turn in enumerate(sample):
+            last_turn = None
+            for j in range(math.ceil(len(sample) * scale_factor)):
+                # if j > 50:
+                #     continue
+                if j >= len(sample):
+                    turn = {"prompt": last_turn["prompt"] + sample_response}
+                else:
+                    turn = sample[j]
+                last_turn = turn
                 req_group.append({
                     'text': env_id + turn['prompt'],
                     'sampling_params': {
@@ -1498,8 +1513,10 @@ class VirtualEnvLoader(DataLoader):
                         'max_new_tokens': 26,
                     },
                 })
-            self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
+
+        for req_group in requests:
+            self.add_input_token_ids_to_workload(req_group)
         random.shuffle(requests)
         return requests
 
