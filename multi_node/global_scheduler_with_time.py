@@ -218,7 +218,7 @@ class GlobalSchedulerWithTime:
         )
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
-        self.HIGH_LOAD_THRESHOLD = 1.5
+        self.HIGH_LOAD_THRESHOLD = 15
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
 
@@ -403,8 +403,8 @@ class GlobalSchedulerWithTime:
             if self.enable_eviction:
                 self.handle_eviction(runtime_idx)
 
-            if self.enable_rebalancing:
-                self.handle_important_node_stealing(runtime_idx)
+            # if self.enable_rebalancing:
+            #     self.handle_important_node_stealing(runtime_idx)
 
                 # self.work_steal_low_loaded_prefixes()
 
@@ -438,7 +438,6 @@ class GlobalSchedulerWithTime:
             return
         allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu_with_atleast_min_load(2)
         allocations_with_indices = [(gpu_id, allocation_cost_per_gpu[gpu_id]) for gpu_id in range(len(allocation_cost_per_gpu))]
-        # logger.info(allocations_with_indices)
         allocations_with_indices = list(sorted(allocations_with_indices, key=lambda x: -x[1]))
 
         self.handle_important_node_stealing_recursive(allocations_with_indices)
@@ -490,17 +489,16 @@ class GlobalSchedulerWithTime:
                 # if smaller_device in self.gpu_allocations[node]:
                 #     continue
 
-                if larger_allocation_cost - cost < smaller_device_allocation_cost + cost:
+                if larger_allocation_cost < smaller_device_allocation_cost + cost:
                     break
                 larger_allocation_cost -= cost
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node] = {smaller_device}
                 self.update_children(node, smaller_device)
                 steal_n += 1
-                # if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
-                #     return
-            # Upstead the sorted allocation based on the new smallest allocation
-            logger.info(f"Steal {steal_n} nodes from {larger_device} to {smaller_device}")
+
+            if steal_n != 0:
+                logger.info(f"Steal {steal_n} nodes from {larger_device} to {smaller_device}")
         allocation_cost_with_devices[0] = (larger_device, larger_allocation_cost)
         allocation_cost_with_devices[-1] = (smaller_device, smaller_device_allocation_cost)
         self.handle_important_node_stealing_recursive(allocation_cost_with_devices[1:])

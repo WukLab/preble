@@ -72,6 +72,8 @@ class CustomPolicyType(Enum):
     ABALATION_WITH_REBALANCE_HOT_COLD = auto()
     ABALTION_ALL_AND_WITH_WAIT_QUEUE = auto()
 
+    TraceOracle = auto()
+
 
 class DataParallelRequestRouter:
     def __init__(

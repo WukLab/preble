@@ -105,7 +105,6 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 
 exp_time = float('inf')
-
 exp_list = []
 for i in [3]:
     configuration_to_test = [

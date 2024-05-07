@@ -84,19 +84,18 @@ configuration_to_test = [
 ]
 
 policies_to_test = [
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'latest_global_scheduler'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
+(DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs, 'oracle'),  
+    
 ]
 
 def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
     configuration_to_test = [
-        
+        [400, 5400]
     ]
     for configuration in configuration_to_test:
-        num_prefix_patters, num_requests, request_rate = configuration
+        num_prefix_patters, num_requests = configuration
         dataloader, requests, send_out_times = create_toolbench_dataset_trace(
             configuration,
             model_name, 
@@ -112,14 +111,14 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
                     custom_policy=custom_policy,
                     custom_policy_msg = custom_policy_msg,
                     request_groups=[RequestGroup(requests=requests,
-                                                 request_rate=request_rate,
+                                                 request_rate=None,
                                                  send_out_times=send_out_times,
                                                  request_type=ExperimentType.default)],
                     # send_out_times=send_out_times,
                     num_prefix_patterns=num_prefix_patters,
                     random_ratio=0.0,
                     exp_time=exp_time,
-                    request_rate=request_rate,
+                    request_rate=None,
                     num_requests=num_requests,
                     server_configs=server_configs,
                 )
@@ -128,13 +127,13 @@ workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
 toolbench_experiment = ConfigurableMajorExperimentArgs(
     # log_file_path="e2e/8r_test_toolbench_multi_exp/exp.log",
     # csv_log_path="e2e/8r_test_toolbench_multi_exp/exp.csv",
-    log_file_path="ckpt_all_in_one/toolbench_azure_trace/exp.log",
-    csv_log_path="ckpt_all_in_one/toolbench_azure_trace/exp.csv",
-    simulate=True,
+    log_file_path="trace_toolbench/toolbench_azure_trace_v2/exp.log",
+    csv_log_path="trace_toolbench/toolbench_azure_trace_v2/exp.csv",
+    simulate=False,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,
-    experiment_name="toolbench_test"
+    experiment_name="toolbench_trace"
 )
 
 exp_args = AllExperiments(

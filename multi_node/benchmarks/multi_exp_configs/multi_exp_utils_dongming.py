@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from transformers import AutoTokenizer
 import random
 from benchmark_utils import WorkloadConfig
-from benchmark_workload_gen import (
+from benchmark_workload_gen_dongming import (
     VirtualEnvLoader, 
     WorkloadPrefixDataLoader, 
     ToolBenchDataLoader, 
@@ -15,9 +15,9 @@ from benchmark_workload_gen import (
     MultiDomainToolBenchDataLoader,
     ChameleonTabMWPLoader
 )
-from benchmark_workload_gen import *
+from benchmark_workload_gen_dongming import *
 from typing import Iterator
-from benchmark_workload_gen import LoadDistribution
+from benchmark_workload_gen_dongming import LoadDistribution
 import numpy as np
 import uuid
 from benchmarks.exp_configs.model_equations import mistral_7b_A6000_sglang_extend_flashinfer, mistrial_7b_A6000_sglang_decode_flashinfer
@@ -118,9 +118,11 @@ def create_toolbench_dataset_trace(config, model_name, exp_time, data_path, load
     requests = dataloader.generate_workload(k=None)
     random.shuffle(requests)
     send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Coding")
-    send_out_times = send_out_times[200:200+len(requests)]
-    send_out_times = [item * 0.7 for item in send_out_times]
+    breakpoint()
+    send_out_times = [item * 0.25 for item in send_out_times]
+    send_out_times = send_out_times[1000:1000+len(requests)]
     print(f"Final send out time is {max(send_out_times)}")
+    print(f"average rps: {(send_out_times[-1] - send_out_times[0]) / len(send_out_times)}")
     return dataloader, requests, send_out_times
 
 
@@ -187,11 +189,14 @@ def create_videoQA_dataset_trace(
     random.shuffle(requests)
     send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Conversation")
     send_out_times = send_out_times[200:200+len(requests)]
-    send_out_times = [item * 0.7 for item in send_out_times]
+    send_out_times = [item * 0.1 for item in send_out_times]
 
     import numpy as np
-    print(f"RPS: {1/np.diff(send_out_times).mean()}")
+    print(f"RPS: {1/np.diff(send_out_times)}")
+    
+    breakpoint()
     print(f"Final send out time is {max(send_out_times)}")
+    print(f"average rps: {(send_out_times[-1] - send_out_times[0]) / len(send_out_times)}")
     return dataloader, requests, send_out_times
 # 
 
@@ -216,7 +221,7 @@ def create_loogle_dataset_trace(
     random.shuffle(requests)
     send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Conversation")
     send_out_times = send_out_times[200:200+len(requests)]
-    send_out_times = [item for item in send_out_times]
+    send_out_times = [item * 0.1 for item in send_out_times]
     print(f"Final send out time is {max(send_out_times)}")
     return dataloader, requests, send_out_times
 

@@ -22,7 +22,7 @@ from data_parallel_request_cache import (
     CustomRuntimeSelector,
 )
 import matplotlib.pyplot as plt
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor, wait, ProcessPoolExecutor
 from dataclasses import dataclass
 import logging
 from datasets import load_dataset
@@ -197,6 +197,7 @@ class DataLoader:
     def get_text(self, request, tokenizer):
         text = tokenizer.decode(request["input_ids"])
         request["text"] = text
+        return request
 
     def add_input_token_ids_to_workload(self, workload, disable_progress_bar=False):
         # with ThreadPoolExecutor(64) as executor:
@@ -217,9 +218,10 @@ class DataLoader:
                 future.result()
 
     def add_text_from_token_ids_to_workload(self, workload):
-        with ThreadPoolExecutor(64) as executor:
+        with ProcessPoolExecutor(64) as executor:
             futures = []
             results = list(tqdm(executor.map(self.get_text, workload, [self.tokenizer]*len(workload)), total=len(workload)))
+            return results
             # for request in workload:
             #     futures.append(executor.submit(self.get_text, request, self.tokenizer))
             # for future in futures:
@@ -595,9 +597,8 @@ class VideoOracle(CustomRuntimeSelector):
 
 class TraceOracle(CustomRuntimeSelector):
     trace = {}
+    counter = {}
     rr = 0
-    counter = 0
-    tbl = {}
 
     def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
@@ -610,10 +611,9 @@ class TraceOracle(CustomRuntimeSelector):
         else:
             # First check for 
             video = input_ids[30]
-            if video not in self.tbl:
-                self.tbl[video] = self.counter % self.num_nodes
-                self.counter += 1
-            return self.tbl[video]
+            self.counter[video] = self.counter.get(video, 0) + 1
+            num_nodes = self.num_nodes
+            return video % num_nodes
     
 class VideoDataLoader(DataLoader):
     def __init__(
@@ -700,15 +700,7 @@ class VideoDataLoader(DataLoader):
             # request["sampling_params"]["max_new_tokens"] = max_new_tokens
         
         logger.info(f'total prefix: {total_prefix_length}, start decoding for prompt text')
-        if not os.path.exists("video_workload.json"):        
-            self.add_text_from_token_ids_to_workload(workload)
-            # Save current workload to json
-            with open("video_workload.json", "w") as f:
-                json.dump(workload, f)
-        else:
-            with open("video_workload.json", "r") as f:
-                workload = json.load(f)
-            # load from json
+        workload = self.add_text_from_token_ids_to_workload(workload)
         return workload
 
 @dataclass

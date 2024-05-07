@@ -42,6 +42,7 @@ class RequestRateManager:
             for i, workload in enumerate(self.workloads):
                 task = asyncio.create_task(self.run_req_loop(i, workload))
                 self.workload_loops.append(task)
+            print(f"Launched N workloads: {len(self.workloads)}")
         else:
             task = asyncio.create_task(self.run_advanced_req_loop(self.workloads))
             self.workload_loops.append(task)
@@ -152,6 +153,7 @@ class RequestRateManager:
                 interval = send_times[i + 1] - send_times[i] if i + 1 < len(send_times) else 0
             else:
                 interval = np.random.exponential(1.0 / request_rate)
+            
             await asyncio.sleep(interval)
             await self.current_req_done_events[workload_id].wait()
             self.current_req_done_events[workload_id].clear()

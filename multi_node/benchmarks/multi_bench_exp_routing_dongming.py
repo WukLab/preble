@@ -18,7 +18,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 from multi_node_loader import MultiNodeLoader
 from model_runtime_manager import RequestFuncOutput, ModelDetails
 from benchmark_utils import BenchmarkMetrics, MajorExperimentArgs, WorkloadConfig
-from benchmark_workload_gen import *
+from benchmark_workload_gen_dongming import *
 from data_parallel_request_cache import (
     DataParallelRuntimeSelectionPolicy,
     CustomPolicyType,
@@ -36,7 +36,7 @@ from model_runtime_manager import ModelDetails, RequestFuncOutput
 from multi_node_loader import MultiNodeLoader
 
 from benchmark_utils import BenchmarkMetrics
-from benchmark_workload_gen import *
+from benchmark_workload_gen_dongming import *
 from basic_mem_scheduler import BasicMemSchedulerV2
 from multi_node.global_scheduler import GlobalScheduler
 from multi_node.global_scheduler_with_time import GlobalSchedulerWithTime
@@ -71,8 +71,7 @@ def register_selector(
         CustomPolicyType.LOOGLE_ORACLE: LoogleOracle,
         CustomPolicyType.VIDEO_ORACLE: VideoOracle,
         CustomPolicyType.TB_DOMAIN_ORACLE: TBMultiDomainOracle,
-        CustomPolicyType.VirtualenvOracle: VirtualenvOracle,
-        CustomPolicyType.TraceOracle: TraceOracle
+        CustomPolicyType.VirtualenvOracle: VirtualenvOracle
     }
 
     def handle_oracle(oracle_type):
@@ -229,7 +228,7 @@ if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
-    from multi_node.benchmarks.multi_exp_configs.test_high_decode import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_mix_config_trace_dongming import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
     
     run_all_experiments(exp_args)

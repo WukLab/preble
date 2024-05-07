@@ -406,7 +406,6 @@ class ModelDetails:
     ) -> RequestFuncOutput: 
         start_time = time.time()
         st = time.perf_counter()
-        
         # self.request_router.custom_selector.cache.aggregate_eviction_updates()
         # end = time.perf_counter()
         # print(end-st)
