@@ -4,7 +4,6 @@ from typing import List, Optional
 from dataclasses import dataclass
 random.seed(10)
 import pandas as pd
-from sglang.srt.managers.router.model_runner import GPUConfig
 import threading
 import numpy as np
 
@@ -65,6 +64,14 @@ class CustomPolicyType(Enum):
 
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()
+
+    VirtualenvOracle = auto()
+
+    ABALATION_HEAVY_NODE_ONLY = auto()
+    ABALATION_LOAD_WITH_EVICTION = auto()
+    ABALATION_WITH_REBALANCE_HOT_COLD = auto()
+    ABALTION_ALL_AND_WITH_WAIT_QUEUE = auto()
+
 
 class DataParallelRequestRouter:
     def __init__(

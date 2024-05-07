@@ -8,12 +8,12 @@ import copy
 import threading
 import numpy as np
 import logging
-from benchmarks.benchmark_utils import RequestFuncOutput
 from datetime import datetime, timedelta
 from typing import List, Tuple
 import zmq
 import zmq.asyncio
 from sglang.srt.managers.router.radix_cache import EvictionData
+from collections import deque
 
 logging = logging.getLogger(__name__)
 DEBUG_COUNTER = 0
@@ -52,9 +52,10 @@ class LPTreeNode:
         self.evicted_gpus = set()
         self.cached_gpus = set()
         self.is_leaf = False
-        self.decode_length = []
+        self.decode_length = deque(maxlen=20)
         self.context_length = 0
         self.decoding_tree_node: LPTreeNode = None
+        self.last_leaf = None
 
     def has_cached_gpu(self, gpu):
         return gpu in self.cached_gpus and gpu not in self.evicted_gpus
@@ -92,7 +93,7 @@ class SlidingWindowHistogram:
         timestamp = datetime.now()
         self.timestamps.append((timestamp, node))
         self.histogram[node] += 1
-        self._remove_old_entries(timestamp)
+        # self._remove_old_entries(timestamp)
 
     def _remove_old_entries(self, current_timestamp):
         window_start = current_timestamp - self.window_duration
@@ -246,21 +247,41 @@ class LPRadixCache:
             current_depth=0,
             split_nodes=split_nodes,
         )
-
         # if len(created_node.parent.children) == 1 and created_node.parent != self.root_node:
         #     parent = created_node.parent
-        #     parent.value += created_node.value
-        #     self._delete_leaf(created_node)
-        #     parent.children = {}
-        #     parent.is_leaf = True
+        #     parents_parent = created_node.parent.parent
+        #     # breakpoint()
+        #     if created_node.num_tokens < created_node.context_length - created_node.num_tokens:
+        #         # In this case update the key to include it
+        #         if len(parent.value)+len(created_node.value) >= created_node.context_length - created_node.num_tokens:
+        #             return created_node
+
+        #         parent_key, node = self.get_node(parent, created_node)
+        #         assert parent_key is not None and node is not None
+                
+        #         parent = created_node.parent
+        #         parent.value += created_node.value
+        #         leaf_key = self._delete_leaf(created_node)
+        #         new_key = tuple(list(parent_key) + list(leaf_key))
+        #         parents_parent.children[new_key] = parent
+        #         parent.children = {}
+        #         parent.is_leaf = True
+
         #     created_node = parent
         return created_node
+
+    def get_node(self, parent, child_node):
+        for key,node in parent.children.items():
+            if node == child_node:
+                return key, node
+        return None, None
 
     def _delete_leaf(self, node):
         for k, v in node.parent.children.items():
             if v == node:
                 break
         del node.parent.children[k]
+        return k
 
     def pretty_print(self):
         self._print_helper(self.root_node, 0)
@@ -551,9 +572,10 @@ class LPRadixCache:
         return priority_queue
 
     async def update_loop(self):
-        while True:
-            gpu_id, recv_obj = await self.recv_from_detokenizer.recv_pyobj()
-            self._update_eviction_event(gpu_id, recv_obj)
+        pass
+        # while True:
+        #     gpu_id, recv_obj = await self.recv_from_detokenizer.recv_pyobj()
+        #     self._update_eviction_event(gpu_id, recv_obj)
     
     def _update_eviction_event(self, gpu_id, recv_obj: List[EvictionData]):
         for obj in recv_obj:

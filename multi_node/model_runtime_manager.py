@@ -332,7 +332,7 @@ class ModelDetails:
                 done, pending = await asyncio.wait(tasks)
             for task in pending:
                 task.cancel()
-            request_manager.cleanup()  # Cancel all running workload loops if not already done
+            await request_manager.cleanup()  # Cancel all running workload loops if not already done
             return [task.result() for task in done]
 
         except asyncio.CancelledError:

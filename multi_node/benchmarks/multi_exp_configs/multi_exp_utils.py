@@ -104,6 +104,44 @@ def create_toolbench_dataset(config, model_name, exp_time, data_path, load_dist)
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times
 
+def create_toolbench_dataset_trace(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize toolbench dataset with {num_workloads} workloads and {num_requests} requests')
+    dataloader = ToolBenchDataLoader(
+        num_patterns=num_workloads,
+        total_num_requests=num_requests,
+        tokenizer=tokenizer,
+        data_path=data_path,
+        load_dist=load_dist,
+        max_decode=13
+    )
+    requests = dataloader.generate_workload(k=1.1)
+    random.shuffle(requests)
+    send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Coding")
+    return dataloader, requests, send_out_times
+
+
+def create_toolbench_dataset_zipf(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate, zipf = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize toolbench dataset with {num_workloads} workloads and {num_requests} requests')
+    dataloader = ToolBenchDataLoader(
+        num_patterns=num_workloads,
+        total_num_requests=num_requests,
+        tokenizer=tokenizer,
+        data_path=data_path,
+        load_dist=load_dist,
+    )
+    requests = dataloader.generate_workload(k=zipf)
+    random.shuffle(requests)
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, requests, send_out_times
+
 def create_videoQA_dataset(
     config, 
     model_name, 
@@ -127,7 +165,31 @@ def create_videoQA_dataset(
     random.shuffle(requests)
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times
-        
+
+def create_videoQA_dataset_trace(
+    config, 
+    model_name, 
+    exp_time, 
+    data_path,
+    max_shared_prompt_length
+) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests = config
+    print(f'Initialize VideoQA dataset with {num_workloads} workloads and {num_requests} requests')
+    dataloader = VideoDataLoader(
+        data_path=data_path,
+        total_num_requests=num_requests,
+        max_shared_prompt_token_length=max_shared_prompt_length,
+        num_patterns=num_workloads,
+        tokenizer=tokenizer,
+    )
+    requests = dataloader.generate_workload()
+    random.shuffle(requests)
+    send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Conversation")
+    send_out_times = send_out_times[:len(requests)]
+    print(f"Final send out time is {send_out_times}")
+    return dataloader, requests, send_out_times
+
 def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     num_workloads, num_requests, request_rate = config
@@ -139,6 +201,7 @@ def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist
         tokenizer=tokenizer,
         num_patterns=num_workloads,
         data_path=data_path,
+        total_num_requests=num_requests
     )
     request_groups = dataloader.generate_workload(k=num_requests)
     random.shuffle(request_groups)
@@ -149,7 +212,28 @@ def create_virtualenv_dataset(config, model_name, exp_time, data_path, load_dist
         send_out_times_list.append(send_out_times)
     return dataloader, request_groups, send_out_times_list
 
- 
+def create_virtualenv_dataset_advanced_sequential(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    # FIXME: why config is not used
+    print(f'Initialize virtualenv dataset')
+    dataloader = VirtualEnvLoader(
+        tokenizer=tokenizer,
+        num_patterns=num_workloads,
+        data_path=data_path,
+        total_num_requests=num_requests
+    )
+    request_groups = dataloader.generate_workload(k=num_requests)
+        
+    random.shuffle(request_groups)
+    requests = []
+    for group in request_groups:
+        requests.extend(group)
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, request_groups, send_out_times
+
 def create_programming_dataset_default(config, model_name, exp_time, max_tokens_override=512) -> Iterator[WorkloadConfig]:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     num_workloads, num_requests, request_rate = config

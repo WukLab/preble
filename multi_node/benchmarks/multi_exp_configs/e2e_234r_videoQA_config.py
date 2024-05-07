@@ -17,13 +17,13 @@ import random
 from multi_exp_configs.multi_exp_utils import *
 
 model_name = "mistralai/Mistral-7B-v0.1"
-ssh_config_06 = {
-    "hostname": "192.168.1.16",
-    "username": "wuklab",
-    "port": 456,
-    "python_process": "/mnt/data/ssd/zijian_sglang_env/bin/python",
-    "node_name": "06",
-}
+# ssh_config_06 = {
+#     "hostname": "192.168.1.16",
+#     "username": "wuklab",
+#     "port": 456,
+#     "python_process": "/mnt/data/ssd/zijian_sglang_env/bin/python",
+#     "node_name": "06",
+# }
 
 """sgalng baseline server runtime config
 """
@@ -40,8 +40,8 @@ sglang_server_args = {
 baseline_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -62,8 +62,8 @@ ours_server_args = {
 ours_gpu_configs = [
     GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -107,7 +107,7 @@ def gen_workloads_for_videoQA(configuration_to_test, policies_to_test):
 exp_time = float('inf')
 
 exp_list = []
-for i in [2, 4]:
+for i in [4]:
     configuration_to_test = [
         scale_to_gpu([150, 150, 0.5], i / 2),
         scale_to_gpu([150, 300, 1], i / 2),
@@ -115,14 +115,11 @@ for i in [2, 4]:
         scale_to_gpu([150, 900, 3], i / 2),
         scale_to_gpu([150, 1200, 4], i / 2),
         scale_to_gpu([150, 1200, 5], i / 2),
-        # scale_to_gpu([150, 1800, 6], i / 2),
-        # scale_to_gpu([150, 2100, 7], i / 2),
-        # scale_to_gpu([150, 3000, 10], i / 2),
     ]
     policies_to_test = [
         (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VIDEO_ORACLE, baseline_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
     workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(

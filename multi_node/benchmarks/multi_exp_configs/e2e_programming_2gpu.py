@@ -64,21 +64,17 @@ configuration_to_test = [
     # scale_to_gpu([100, 2000, 2], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 2500, 0.5], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 312, 0.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 625, 1], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 1250, 2], len(ours_gpu_configs) // 2),
+    scale_to_gpu([100, 625, 1], len(ours_gpu_configs) // 2),
+    scale_to_gpu([100, 1250, 2], len(ours_gpu_configs) // 2),
     scale_to_gpu([100, 1875, 3], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 1562, 2.5], len(ours_gpu_configs) // 2),
-    
-    # scale_to_gpu([100, 2187, 3.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 2187, 3.5], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 2187, 3.5], len(ours_gpu_configs) // 2),
-    
-    # scale_to_gpu([100, 2500, 4], len(ours_gpu_configs) // 2),
+    scale_to_gpu([100, 1562, 2.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([100, 2187, 3.5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([100, 2500, 4], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 3125, 5], len(ours_gpu_configs) // 2),
 ]
 
 policies_to_test = [
-    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
+    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
 ]
 
@@ -112,8 +108,8 @@ def gen_workloads_for_programming(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_programming(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="real_ckpt_all_in_one/programming_re_run3/2_gpu.log",
-    csv_log_path="real_ckpt_all_in_one/programming_re_run3/2_gpu.csv",
+    log_file_path="real_ckpt_all_in_one/programming/2_gpu.log",
+    csv_log_path="real_ckpt_all_in_one/programming/2_gpu.csv",
     simulate=False,
     model_path=model_name,
     workload_configs=workloads,

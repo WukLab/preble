@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
-from greedy_lp import RequestFuncOutput
 from global_lru_cache import LPRadixCache, LPTreeNode
 import time
 import numpy as np
@@ -10,20 +9,20 @@ from collections import deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
 import logging
-from benchmarks.exp_configs.model_equations import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
+from benchmarks.exp_configs.model_equations_numpy import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 logger = logging.getLogger(__name__)
 
 class SlidingWindowHistogram:
-    def __init__(self, window_duration: timedelta, gpu_allocations, num_gpus=2, enable_miss_rate=True,avg_topt_per_gpu=None):
+    def __init__(self, window_duration, gpu_allocations, num_gpus=2, enable_miss_rate=True,avg_topt_per_gpu=None):
         self.window_duration = window_duration
         self.gpu_allocations = gpu_allocations
         self.histogram = defaultdict(int)
         self.node_to_count = defaultdict(int)
 
-        self.timestamps: List[Tuple[datetime, LPTreeNode, LPTreeNode]] = []
+        self.timestamps = []
         self.num_gpus = num_gpus
         self.enable_miss_rate = enable_miss_rate
         self.prev_mis_rates = {}
@@ -32,24 +31,35 @@ class SlidingWindowHistogram:
         self.decoding_size = defaultdict(int)
         self.avg_topt_per_gpu = avg_topt_per_gpu
 
-    def update(self, timestamp, node: LPTreeNode, leaf_node: LPTreeNode, runtime_idx, decoding_length):
+        self.current_allocation_cost_per_gpu = [0 for i in range(self.num_gpus)]
+        self.per_node_per_gpu_allocation_cost = defaultdict(lambda: defaultdict(int))
+
+    def update(self, timestamp, node, leaf_node, runtime_idx, decoding_length):
         self.timestamps.append((timestamp, node, leaf_node))
         self.histogram[node] += 1 * leaf_node.context_length
         self.node_to_count[node] += 1
         self.decoding_size[node] = decoding_length
-        # of being evicted or not
-        # hit_tokens = 0
-        # node_iter = node
-        # while node_iter:
-        #     if node_iter.has_cached_gpu(runtime_idx):
-        #         hit_tokens += node_iter.num_tokens
-        #     node = node_iter.parent
+
         self.hit_tokens[node] += leaf_node.context_length - leaf_node.num_tokens
         self.prompt_tokens[node] += leaf_node.context_length
 
         self.prev_mis_rates[node] = 1 - (self.hit_tokens[node] / self.prompt_tokens[node])
         self._remove_old_entries(timestamp)
 
+        self.update_allocation_cost_for_node(node, runtime_idx)
+
+    def update_allocation_cost_for_node(self, node, runtime_idx):
+        topt = np.median(self.avg_topt_per_gpu[runtime_idx])
+        new_cost = self.get_node_cost(node, runtime_idx, topt)
+        old_cost = self.per_node_per_gpu_allocation_cost[node][runtime_idx]
+        self.current_allocation_cost_per_gpu[runtime_idx] -= old_cost
+        self.current_allocation_cost_per_gpu[runtime_idx] += new_cost
+        self.per_node_per_gpu_allocation_cost[node][runtime_idx] = new_cost
+
+    def remove_allocation_cost_for_node(node, runtime_idx):
+        old_cost = self.per_node_per_gpu_allocation_cost[node][runtime_idx]
+        self.current_allocation_cost_per_gpu[runtime_idx] -= old_cost
+    
     def _remove_old_entries(self, current_timestamp):
         window_start = current_timestamp - self.window_duration
         while self.timestamps and self.timestamps[0][0] < window_start:
@@ -69,6 +79,9 @@ class SlidingWindowHistogram:
 
     def rename_node(self, old_node, new_node):
         if old_node in self.histogram:
+            # parent's gpu allocation
+            for i in range(self.num_gpus):
+                self.per_node_per_gpu_allocation_cost[new_node][i] = self.per_node_per_gpu_allocation_cost[old_node][i]
             self.histogram[new_node] = self.histogram.pop(old_node)
             self.node_to_count[new_node] = self.node_to_count.pop(old_node)
             self.prev_mis_rates[new_node] = self.prev_mis_rates.pop(old_node)
@@ -91,7 +104,6 @@ class SlidingWindowHistogram:
         for gpu in range(self.num_gpus):
             topt = np.median(self.avg_topt_per_gpu[gpu])
             topts.append(topt)
-
         for node, cost in self.histogram.items():
             for gpu in self.gpu_allocations.get(node, {}):
                 allocation[gpu] += self.get_node_cost(node, gpu, topts[gpu])
@@ -110,7 +122,7 @@ class SlidingWindowHistogram:
                 allocation[gpu] += self.get_node_cost(node, gpu, topts[gpu])
         return allocation
 
-    def get_node_cost(self, node: LPTreeNode, gpu, topt):
+    def get_node_cost(self, node, gpu, topt):
         prefill_cost = self.prev_mis_rates[node] * self.node_to_count[node] * prefill_time(node.num_tokens, node.context_length) / len(self.gpu_allocations.get(node)) # potentionally divide by length of node.cached_gpus here
         output_len = self.decoding_size[node]
         if node.decode_length:
@@ -120,7 +132,7 @@ class SlidingWindowHistogram:
         return prefill_cost + decode_cost
 
     # FIXME: miss-rate is not per-gpu
-    def get_eviction_prefill_cost(self, node: LPTreeNode, gpu, is_large_node: bool):
+    def get_eviction_prefill_cost(self, node, gpu, is_large_node):
         if is_large_node:
             eviction_cost = self.prev_mis_rates.get(node, 1.0) * \
                             self.node_to_count.get(node, node.ref_counter[gpu]) * \
@@ -191,8 +203,13 @@ class TTFTWindowedOverloadedDetector:
         return avg_second_half >= 2 * avg_first_half
 
 
-class GlobalSchedulerWithTime:
-    def __init__(self, num_nodes=2, enable_eviction=False, enable_rebalancing=True, enable_miss_rate=True) -> None:
+class GlobalSchedulerWithTimePerf:
+    def __init__(self, 
+                 num_nodes=2, 
+                 enable_eviction=False, 
+                 enable_rebalancing=True, 
+                 enable_miss_rate=True
+        ):
         self.num_gpus = num_nodes
         self.gpu_allocations = {}
         self.counter = 0
@@ -238,37 +255,37 @@ class GlobalSchedulerWithTime:
                     self.overload_detector.rename_node(child, parent_node, gpu)
 
     # Recursively update get/update parent gpu allocation
-    def get_parent_gpu_allocation(self, node: LPTreeNode):
+    def get_parent_gpu_allocation(self, node):
         if not node:
             return self.all_gpus
         if self.gpu_allocations.get(node):
             return self.gpu_allocations.get(node)
         return self.get_parent_gpu_allocation(node.parent)
 
-    def update_gpu_cache_for_parent(self,node: LPTreeNode, gpu_id):
+    def update_gpu_cache_for_parent(self,node, gpu_id):
         if not node:
             return
         node.cached_gpus = node.cached_gpus.union(gpu_id)
         self.update_cached_gpus_of_parent(node.parent, gpu_id)
 
-    def update_gpu_allocation_for_parent(self, node: LPTreeNode, gpu_id):
+    def update_gpu_allocation_for_parent(self, node, gpu_id):
         if not node:
             return
         self.gpu_allocations[node] = self.gpu_allocations.get(node, set()).union(gpu_id)
         self.update_gpu_allocation_for_parent(node.parent, gpu_id)
 
-    def is_small_node(self, node: LPTreeNode):
+    def is_small_node(self, node):
         return not self.is_large_node(node)
 
-    def is_large_node(self, node: LPTreeNode):
+    def is_large_node(self, node):
         return node.num_tokens > node.context_length - node.num_tokens
 
-    def get_important_node(self, node: LPTreeNode):
+    def get_important_node(self, node):
         if self.is_large_node(node):
             return node
         return self.get_important_node(node.parent)
 
-    def get_recomp_cost(self, node: LPTreeNode, gpu_id, histogram: SlidingWindowHistogram):
+    def get_recomp_cost(self, node, gpu_id, histogram):
         if not node:
             return 0
         if node.has_cached_gpu(gpu_id):
@@ -276,7 +293,7 @@ class GlobalSchedulerWithTime:
         else:
             return histogram.histogram.get(node, 1) + self.get_recomp_cost(node.parent, gpu_id, histogram)
 
-    def get_recomp_cost_basic(self, node: LPTreeNode, gpu_id):
+    def get_recomp_cost_basic(self, node, gpu_id):
         if not node:
             return 0
         if node.has_cached_gpu(gpu_id):
@@ -285,7 +302,7 @@ class GlobalSchedulerWithTime:
             ref_cnt_cached = sum([node.ref_counter[gpu] for gpu in node.cached_gpus])
             return node.num_tokens * ref_cnt_cached + self.get_recomp_cost_basic(node.parent, gpu_id)
 
-    def get_recomp_cost_basic_time(self, node: LPTreeNode, gpu_id):
+    def get_recomp_cost_basic_time(self, node, gpu_id):
         if not node:
             return 0
         if node.has_cached_gpu(gpu_id):
@@ -293,7 +310,7 @@ class GlobalSchedulerWithTime:
         else:
             return prefill_time(node.num_tokens, node.context_length) + self.get_recomp_cost_basic_time(node.parent, gpu_id)
 
-    def evict_callback(self, node: LPTreeNode, runtime_selected: int):
+    def evict_callback(self, node, runtime_selected):
         """Method to handle eviction logic."""
         # TODO: Maybe update the parent if child has no parent
         node.evicted_gpus.add(runtime_selected)
@@ -309,104 +326,102 @@ class GlobalSchedulerWithTime:
     
     # NOTE: simple heuristic used: assume GPU memory is always full
     #       -> evict size is the leaf node size
-    def virtual_evict_for_routing(self, leaf_node: LPTreeNode, runtime_selected: int):
+    def virtual_evict_for_routing(self, leaf_node, runtime_selected):
         num_to_evict = leaf_node.num_tokens
         evicted_tree_nodes = self.cache.virtual_lru_eviction(num_to_evict, runtime_selected)
         # eviction_cost = ref_cnt * miss_rate * prefill_time(node.num_tokens)
         eviction_cost = 0
-        victim: LPTreeNode
         for victim in evicted_tree_nodes:
             eviction_cost += self.histogram.get_eviction_prefill_cost(victim, runtime_selected, self.is_large_node(victim))
         return eviction_cost
     
     def runtime_selector(
         self,
-        text: str = None,
-        request_id: str = None,
+        text = None,
+        request_id = None,
         input_ids=None,
         sampling_params=None,
         runtime_id_with_highest_hit_rate=None,
         hit_rates=None,
-        *args, **kwargs,
+        *args, **kwargs
     ):
         decoding_length = sampling_params.get("max_new_tokens", sampling_params.get("max_tokens", 45))
         # Tokenize the text
         start_time = time.time()
-        with self.lock:
-            start_time = time.time()
+        start_time = time.time()
 
-            split_nodes = {}
-            leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
-            
-            self.handle_split_nodes_gpu_allocations(split_nodes, self.gpu_allocations) # copies split node gpu allocation
-            self.handle_split_node_histogram(split_nodes)
+        split_nodes = {}
+        leaf_node = self.cache.insert(tuple(input_ids), split_nodes=split_nodes)
+        
+        self.handle_split_nodes_gpu_allocations(split_nodes, self.gpu_allocations) # copies split node gpu allocation
+        self.handle_split_node_histogram(split_nodes)
 
-            important_node = self.get_important_node(leaf_node)
-
-            if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
-                gpu_selected = self.get_parent_gpu_allocation(leaf_node)
-            else:
-                if runtime_id_with_highest_hit_rate is None:
-                    recom_costs = []
-                    for gpu_id in range(self.num_gpus):
-                        recomputation_cost = 0
-                        recom_costs.append(recomputation_cost)
-                    histogram_mem_cost = self.histogram.current_allocation_per_gpu()
-                    if self.enable_eviction:
-                        costs = [
-                            recom_costs[gpu_id] + \
-                            histogram_mem_cost[gpu_id] + \
-                            self.virtual_evict_for_routing(leaf_node, gpu_id)
-                            for gpu_id in range(self.num_gpus)
-                        ]
-                    else:
-                        costs = [
-                            recom_costs[gpu_id] + \
-                            histogram_mem_cost[gpu_id]
-                            for gpu_id in range(self.num_gpus)
-                        ]
-                    gpu_selected = int(np.argmin(costs))
-                    gpu_selected = set([gpu_selected])
-                else:
-                    gpu_selected = set([runtime_id_with_highest_hit_rate])
-
-            runtime_idx = list(gpu_selected)[0]
-            if len(gpu_selected) > 1:
-                # find the index that's lower
+        important_node = self.get_important_node(leaf_node)
+        if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
+            gpu_selected = self.get_parent_gpu_allocation(leaf_node)
+        else:
+            if runtime_id_with_highest_hit_rate is None:
                 recom_costs = []
                 for gpu_id in range(self.num_gpus):
                     recomputation_cost = 0
                     recom_costs.append(recomputation_cost)
-                histogram_mem_cost = self.histogram.current_allocation_per_gpu()
+
+                histogram_mem_cost = self.histogram.current_allocation_cost_per_gpu
                 if self.enable_eviction:
                     costs = [
                         recom_costs[gpu_id] + \
                         histogram_mem_cost[gpu_id] + \
                         self.virtual_evict_for_routing(leaf_node, gpu_id)
-                        for gpu_id in gpu_selected
+                        for gpu_id in range(self.num_gpus)
                     ]
                 else:
                     costs = [
                         recom_costs[gpu_id] + \
                         histogram_mem_cost[gpu_id]
-                        for gpu_id in gpu_selected
+                        for gpu_id in range(self.num_gpus)
                     ]
-                runtime_idx = int(np.argmin(costs))
-                # runtime_idx = int(np.random.choice(list(gpu_selected)))
-            self.counter += 1
-            self.histogram.update(datetime.now(), important_node, leaf_node, runtime_idx, decoding_length=decoding_length)
-            self.update_gpu_allocation_for_parent(leaf_node, gpu_selected)
-            
-            self.per_gpu_load[runtime_idx] += 1
-            self.cache.update_allocated_size(leaf_node, runtime_idx)
-            # NOTE: eviction handled by iterative feedback
+                gpu_selected = int(np.argmin(costs))
+                gpu_selected = set([gpu_selected])
+            else:
+                gpu_selected = set([runtime_id_with_highest_hit_rate])
+
+        runtime_idx = list(gpu_selected)[0]
+        if len(gpu_selected) > 1:
+            # find the index that's lower
+            recom_costs = []
+            for gpu_id in range(self.num_gpus):
+                recomputation_cost = 0
+                recom_costs.append(recomputation_cost)
+            histogram_mem_cost = self.histogram.current_allocation_per_gpu()
             if self.enable_eviction:
-                self.handle_eviction(runtime_idx)
+                costs = [
+                    recom_costs[gpu_id] + \
+                    histogram_mem_cost[gpu_id] + \
+                    self.virtual_evict_for_routing(leaf_node, gpu_id)
+                    for gpu_id in gpu_selected
+                ]
+            else:
+                costs = [
+                    recom_costs[gpu_id] + \
+                    histogram_mem_cost[gpu_id]
+                    for gpu_id in gpu_selected
+                ]
+            runtime_idx = int(np.argmin(costs))
+            # runtime_idx = int(np.random.choice(list(gpu_selected)))
+        self.counter += 1
+        self.update_gpu_allocation_for_parent(leaf_node, gpu_selected)
+        self.histogram.update(datetime.now(), important_node, leaf_node, runtime_idx, decoding_length=decoding_length)
+        
+        self.per_gpu_load[runtime_idx] += 1
+        self.cache.update_allocated_size(leaf_node, runtime_idx)
+        # NOTE: eviction handled by iterative feedback
+        if self.enable_eviction:
+            self.handle_eviction(runtime_idx)
 
-            if self.enable_rebalancing:
-                self.handle_important_node_stealing(runtime_idx)
+        # if self.enable_rebalancing:
+        #     self.handle_important_node_stealing(runtime_idx)
 
-                # self.work_steal_low_loaded_prefixes()
+            # self.work_steal_low_loaded_prefixes()
 
         self.metrics_dict.append(
             {
@@ -419,7 +434,7 @@ class GlobalSchedulerWithTime:
         return runtime_idx
     
     def finish_request(
-        self, text: str = None, request_id: str = None, input_ids=None, func_output: RequestFuncOutput=None
+        self, text = None, request_id = None, input_ids=None, func_output=None
     ):
         with self.lock:
             runtime_id = func_output.runtime_selected
@@ -440,14 +455,14 @@ class GlobalSchedulerWithTime:
         allocations_with_indices = [(gpu_id, allocation_cost_per_gpu[gpu_id]) for gpu_id in range(len(allocation_cost_per_gpu))]
         # logger.info(allocations_with_indices)
         allocations_with_indices = list(sorted(allocations_with_indices, key=lambda x: -x[1]))
-
         self.handle_important_node_stealing_recursive(allocations_with_indices)
-        
+
     def handle_important_node_stealing_recursive(self, allocation_cost_with_devices):
         if len(allocation_cost_with_devices) == 1:
             return
         larger_device, larger_allocation_cost = allocation_cost_with_devices[0]
         smaller_device, smaller_device_allocation_cost = allocation_cost_with_devices[-1] # Last element is the smallest
+
         if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
             return
         # if self.per_gpu_load[larger_device] < self.HIGH_LOAD_THRESHOLD * self.per_gpu_load[smaller_device]:
@@ -482,7 +497,6 @@ class GlobalSchedulerWithTime:
         else:
             steal_n = 0
             while node_cost_for_gpu:
-                node: LPTreeNode
                 cost, node = heapq.heappop(node_cost_for_gpu)
 
                 assert self.is_large_node(node)
@@ -495,6 +509,10 @@ class GlobalSchedulerWithTime:
                 larger_allocation_cost -= cost
                 smaller_device_allocation_cost += cost
                 self.gpu_allocations[node] = {smaller_device}
+
+                self.remove_allocation_cost_for_node(node, larger_device)
+                self.update_allocation_cost_for_node(node, smaller_device)
+
                 self.update_children(node, smaller_device)
                 steal_n += 1
                 # if larger_allocation_cost < self.HIGH_LOAD_THRESHOLD * smaller_device_allocation_cost:
@@ -505,20 +523,11 @@ class GlobalSchedulerWithTime:
         allocation_cost_with_devices[-1] = (smaller_device, smaller_device_allocation_cost)
         self.handle_important_node_stealing_recursive(allocation_cost_with_devices[1:])
 
-    def update_children(self, node: LPTreeNode, gpu_id):
+    def update_children(self, node, gpu_id):
         for child in node.children.values():
             self.gpu_allocations[child] = {gpu_id}
             self.update_children(child, gpu_id)
     
-    def print(self):
-        self._print_helper(self.cache.root_node, 0)
-
-    def _print_helper(self, node: LPTreeNode, indent=0, depth=0):
-        for key, child in node.children.items():
-            allocated_gpus = self.gpu_allocations.get(child, set())
-            print(f"{' ' * indent}{tokenizer.decode(child.value)[:20].strip()} Cached: {child.cached_gpus} Allocated: {allocated_gpus} Evicted: {child.evicted_gpus} {len(child.value)}")
-            self._print_helper(child, indent=indent + 2, depth=depth + 1)
-
     def work_steal_low_loaded_prefixes(self):
         low_load_nodes = []
         allocation_cost_per_gpu = self.histogram.current_allocation_per_gpu_with_atleast_min_load_or_zero_ref(2)
@@ -539,9 +548,55 @@ class GlobalSchedulerWithTime:
                 return runtime_id
         return None
 
-    def update_overload_detector(self, input_ids, runtime_idx, func_output: RequestFuncOutput):
+    def update_overload_detector(self, input_ids, runtime_idx, func_output):
         # Overload detector based on the current ttft
         leaf_node = self.cache.find_node(input_ids)
         important_node = self.get_important_node(leaf_node)
         self.overload_detector.add_data_point(datetime.now(), important_node, runtime_idx, func_output.ttft)
+
+if __name__ == "__main__":
+    perf = GlobalSchedulerWithTimePerf()
+    from benchmarks.benchmark_workload_gen import ToolBenchDataLoader, LoadDistribution
+
+    # num_requests = 50000
+    # num_workloads = 1500
+
+    # num_requests = 50000
+    # num_workloads = 250
+
+    # dataloader = ToolBenchDataLoader(
+    #     num_patterns=num_workloads,
+    #     total_num_requests=num_requests,
+    #     tokenizer=tokenizer,
+    #     data_path="benchmarks/datasets/G1_workload_updated_input_output_lengths_4096.json",
+    #     load_dist=LoadDistribution.EVEN,
+    # )
+    # requests = dataloader.generate_workload()
+    # from tqdm import tqdm
+        
+    # start_time = time.perf_counter()
+    # for request in tqdm(requests):
+    #     select = perf.runtime_selector(input_ids=request["input_ids"], sampling_params={})
+    # end_time = time.perf_counter()
+    # print(f"Total time elapsed: {end_time - start_time} Throughput {num_requests/(end_time - start_time)}reqs/sec")
+
+    #  376 reqs/sec on toolbench
+
+    # from benchmarks.benchmark_workload_gen import VideoDataLoader, LoadDistribution
+    
+    num_requests = 50000
+    num_workloads = 150
+    dataloader = VideoDataLoader(
+        data_path="benchmarks/datasets/VideoQA.csv",
+        total_num_requests=num_requests,
+        max_shared_prompt_token_length=max_shared_prompt_length,
+        num_patterns=num_workloads,
+        tokenizer=tokenizer,
+    )
+    requests = dataloader.generate_workload()
+    start_time = time.perf_counter()
+    for request in tqdm(requests):
+        select = perf.runtime_selector(input_ids=request["input_ids"], sampling_params={})
+    end_time = time.perf_counter()
+    print(f"Total time elapsed: {end_time - start_time} Throughput {num_requests/(end_time - start_time)}reqs/sec")
     

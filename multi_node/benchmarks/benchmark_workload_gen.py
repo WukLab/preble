@@ -5,7 +5,6 @@ import uuid
 import pandas as pd
 import math
 
-
 import numpy as np
 import random
 from tqdm import tqdm
@@ -199,14 +198,24 @@ class DataLoader:
         text = tokenizer.decode(request["input_ids"])
         request["text"] = text
 
-    def add_input_token_ids_to_workload(self, workload):
+    def add_input_token_ids_to_workload(self, workload, disable_progress_bar=False):
+        # with ThreadPoolExecutor(64) as executor:
+        #     futures = []
+        #     for request in workload:
+        #         futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
+        #     for future in futures:
+        #         future.result()
+        
         with ThreadPoolExecutor(64) as executor:
             futures = []
             for request in workload:
                 futures.append(executor.submit(self.get_token_ids, request, self.tokenizer))
-            for future in futures:
+            
+            # Wrap tqdm around the futures to display a progress bar
+            for future in tqdm(futures, desc="Processing workload", disable=disable_progress_bar):
+                # Using as_completed would be more typical for tqdm, but here we're just ensuring completion
                 future.result()
-    
+
     def add_text_from_token_ids_to_workload(self, workload):
         with ThreadPoolExecutor(64) as executor:
             futures = []
@@ -744,7 +753,7 @@ class TBOracleB(CustomRuntimeSelector):
     tbl = {}
     counter: int = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args,**kwargs):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -1401,9 +1410,11 @@ class VirtualEnvLoader(DataLoader):
     """DataLoader for VirtualEnv dataset."""
 
     def __init__(self, data_path: str, num_patterns: int,
-                 tokenizer: PreTrainedTokenizer):
+                 tokenizer: PreTrainedTokenizer,total_num_requests=None):
         super().__init__(data_path, num_patterns, None, tokenizer)
         self.data = self.read_data(data_path)
+        self.total_num_requests = total_num_requests
+        self.tokenizer = tokenizer
 
     def read_data(self, data_path: str):
         with open(data_path, 'r') as f:
@@ -1419,12 +1430,25 @@ class VirtualEnvLoader(DataLoader):
         if self.num_patterns > len(self.data):
             print(f'Not enough patterns in the dataset. Only {len(self.data)} patterns available.')
             num_patterns = len(self.data)
+        num_raw_questions = sum(len(self.data[i % len(self.data)]) for i in range(self.num_patterns))
+        scale_factor = self.total_num_requests / num_raw_questions
+        
+        sample_response = self.tokenizer.decode([1 for _ in range(14)])
+        
         requests = []
         for i in range(self.num_patterns):
             env_id = f"Environment ID {i} "
             sample = self.data[i % len(self.data)]
             req_group = []
-            for j, turn in enumerate(sample):
+            last_turn = None
+            for j in range(math.ceil(len(sample) * scale_factor)):
+                # if j > 50:
+                #     continue
+                if j >= len(sample):
+                    turn = {"prompt": last_turn["prompt"] + sample_response}
+                else:
+                    turn = sample[j]
+                last_turn = turn
                 req_group.append({
                     'text': env_id + turn['prompt'],
                     'sampling_params': {
@@ -1432,8 +1456,10 @@ class VirtualEnvLoader(DataLoader):
                         'max_new_tokens': 26,
                     },
                 })
-            self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
+
+        for req_group in requests:
+            self.add_input_token_ids_to_workload(req_group, disable_progress_bar=True)
         random.shuffle(requests)
         return requests
 
@@ -1566,9 +1592,23 @@ class ProgrammingDataset(DataLoader):
             "shared_length": self.shared_length
         }
 
+@dataclass
+class VirtualenvOracle(CustomRuntimeSelector):
+    num_workloads: int
+    trace = {}
+    rr = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
+        num_nodes = self.num_nodes
+        self.trace[request_id] = text[:50]
+        for i in range(self.num_workloads):
+            if text.startswith(f"Environment ID {i} "):
+                return i % num_nodes
+        self.rr = (self.rr + 1) % num_nodes
+        return self.rr
 
 
-def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration"):
+def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Coding"):
     TRACE_NAMES = [
         "Coding",
         "Conversation",
@@ -1581,7 +1621,7 @@ def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset
     df_traces = {}
     for trace_name, trace_filename in zip(TRACE_NAMES, TRACE_FILENAMES):
         df_traces[trace_name] = pd.read_csv(os.path.join(azure_llm_infernce_trace_dir, trace_filename), parse_dates=["TIMESTAMP"])
-    convo_trace = df_traces["Conversation"]
+    convo_trace = df_traces[trace_name]
     first_timestamp = convo_trace['TIMESTAMP'].iloc[0]
     convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'] - first_timestamp
     convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'].dt.total_seconds()
