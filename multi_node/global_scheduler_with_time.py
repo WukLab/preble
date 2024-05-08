@@ -221,7 +221,7 @@ class GlobalSchedulerWithTime:
         self.HIGH_LOAD_THRESHOLD = 15
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
-
+        self.enable_rebalancing = False
 
     
     # Consider Split nodes

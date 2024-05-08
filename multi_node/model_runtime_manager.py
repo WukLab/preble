@@ -87,10 +87,11 @@ class EndpointRuntimeInterface:
         output.append_to_queue_time = chunk['meta_info']['append_to_queue_time'] - current_experiment_state_time
 
 class URLRuntime(EndpointRuntimeInterface):
-    def __init__(self, url, gpu):
-        super().__init__()
+    def __init__(self, url, gpu, *args, **kargs):
         self.url = url
         self.gpu = gpu
+        self.hit_ratio_url = self.url + '/windowed_prefix_hit_ratio'
+        super().__init__()
 
 class ExtendedSGLangRuntime(SGLangServer, EndpointRuntimeInterface):
     def __init__(self, gpu, *args, **kwargs):
@@ -183,8 +184,9 @@ class ModelDetails:
                 )
             elif config.url:
                 runtime = URLRuntime(
-                    config.url, 
-                    cuda_devices=[gpu_id],
+                    gpu=gpu_id,
+                    url=config.url, 
+                    # cuda_devices=[gpu_id],
                     **config.runtime_args)
             elif config.vllm_config is not None:
                 runtime = VLLMRuntime(
