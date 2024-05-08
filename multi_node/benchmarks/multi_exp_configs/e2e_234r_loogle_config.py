@@ -107,18 +107,17 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 exp_time = float('inf')
 
 exp_list = []
-for i in [1]:
+for i in [2]:
     configuration_to_test = [
         # scale_to_gpu([30, 168, 0.1], i / 2),
         # scale_to_gpu([30, 168, 0.2], i / 2),
-        # scale_to_gpu([30, 168, 0.3], i / 2),
-        # scale_to_gpu([30, 281, 0.5], i / 2),
-        # scale_to_gpu([30, 393, 0.7], i / 2),
+        scale_to_gpu([30, 168, 0.3], i / 2),
+        scale_to_gpu([30, 281, 0.5], i / 2),
+        scale_to_gpu([30, 393, 0.7], i / 2),
         # scale_to_gpu([30, 449, 0.8], i / 2),
-        # scale_to_gpu([30, 505, 0.9], i / 2),
+        scale_to_gpu([30, 505, 0.9], i / 2),
         # scale_to_gpu([30, 561, 1.0], i / 2),
         # scale_to_gpu([30, 1122, 2.0], i / 2),
-        scale_to_gpu([2, 2, 2.0], i / 2),
     ]
     policies_to_test = [
         # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
@@ -127,10 +126,10 @@ for i in [1]:
     ]
     workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        # log_file_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final/exp.log",
-        # csv_log_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final/exp.csv",
-        log_file_path="logs/debug_loogle/exp.log",
-        csv_log_path="logs/debug_loogle/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final_ours/exp.log",
+        csv_log_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final_ours/exp.csv",
+        # log_file_path="logs/debug_loogle/exp.log",
+        # csv_log_path="logs/debug_loogle/exp.csv",
         simulate=False,
         model_path=model_name,
         workload_configs=workloads,

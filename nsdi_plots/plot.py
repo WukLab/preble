@@ -24,7 +24,7 @@ def plot_all_metrics(fpath, ax, y_columns, x_lim=None):
                 
 fig, ax = plt.subplots(1, 2, figsize=(12.5, 4.5))
 y_columns = ['average_request_latency', 'p99_latency']
-plot_all_metrics('/home/exx/nsdi_zijian/stateful_llm_serving/real_ckpt_all_in_one/2r_programming_H100/exp.csv', ax, y_columns)
+plot_all_metrics('/home/exx/nsdi_zijian/stateful_llm_serving/real_ckpt_all_in_one/2r_loogle_H100_final_ours/exp.csv', ax, y_columns)
 # plot_all_metrics('/mnt/ssd1/alm-os/sglang_multi_model/real_ckpt_all_in_one/3r_toolbench/exp.csv', ax, y_columns2)
 fig.suptitle('ToolBench 70B 2x4 GPUs')
 plt.tight_layout()
