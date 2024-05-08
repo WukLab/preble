@@ -89,19 +89,20 @@ configuration_to_test = [
     # scale_to_gpu([100, 312, 0.5], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 625, 1], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 1250, 2], len(ours_gpu_configs) // 2),
-    scale_to_gpu([160, 1875, 3], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 1875, 3], len(ours_gpu_configs) // 2),
 
     # scale_to_gpu([160, 1562, 2.5], len(ours_gpu_configs) // 2),
     # scale_to_gpu([160, 2187, 3.5], len(ours_gpu_configs) // 2),
-    scale_to_gpu([160, 2500, 4], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 2500, 4], len(ours_gpu_configs) // 2),
     # scale_to_gpu([160, 3125, 5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 3755, 6], len(ours_gpu_configs) // 2),
     scale_to_gpu([160, 3755, 6], len(ours_gpu_configs) // 2),
 ]
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
-    (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
+    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.PROGRAMMING_ORACLE, baseline_gpu_configs, 'oracle'),
 ]
 

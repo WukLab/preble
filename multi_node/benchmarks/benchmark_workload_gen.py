@@ -975,6 +975,19 @@ class LoogleOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+        
+@dataclass
+class ProgrammingOracle(CustomRuntimeSelector):
+    def __post_init__(self):
+        self.trace = {}
+        self.tbl = {}
+        self.counter = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
+        if text not in self.tbl:
+            self.tbl[text] = self.counter % self.num_nodes
+            self.counter += 1
+        return self.tbl[text]
 
 
 class MultiDomainToolBenchDataLoader(DataLoader):
@@ -1163,6 +1176,7 @@ class TBMultiDomainOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+        
 
 class ChameleonTabMWPLoader(DataLoader):
     """DataLoader for Chameleon + TabMWP dataset"""

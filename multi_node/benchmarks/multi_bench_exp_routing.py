@@ -69,6 +69,7 @@ def register_selector(
         CustomPolicyType.TBORACLE: TBOracle,
         CustomPolicyType.TBORACLE_B: TBOracleB,
         CustomPolicyType.LOOGLE_ORACLE: LoogleOracle,
+        CustomPolicyType.PROGRAMMING_ORACLE: ProgrammingOracle,
         CustomPolicyType.VIDEO_ORACLE: VideoOracle,
         CustomPolicyType.TB_DOMAIN_ORACLE: TBMultiDomainOracle,
     }
@@ -229,7 +230,7 @@ if __name__ == "__main__":
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_common_share_micro_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_zipf import exp_args
-    # from multi_node.benchmarks.multi_exp_configs.e2e_programming import exp_args
-    from multi_node.benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_programming import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
     
     run_all_experiments(exp_args)
