@@ -106,7 +106,6 @@ class SlidingWindowHistogram:
 
     def get_node_cost(self, node: LPTreeNode, gpu):
         prefill_cost = self.prev_mis_rates[node] * self.node_to_count[node] * prefill_time(node.num_tokens, node.context_length) / len(self.gpu_allocations.get(node)) # potentionally divide by length of node.cached_gpus here
-        
         topt = np.median(self.avg_topt_per_gpu[gpu])
         output_len = self.decoding_size[node]
         if node.decode_length:

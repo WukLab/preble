@@ -215,7 +215,8 @@ class ModelRpcServer:
         while self.hit_trace_buffer and timestamp - self.hit_trace_buffer[0][0] > self.hit_trace_window_size:
             self.hit_trace_buffer.popleft()
     
-    def exposed_get_hit_ratio(self):
+    def exposed_get_windowed_hit_ratio(self):
+        print('here')
         return self.get_hit_ratio()
     
     def get_hit_ratio(self):
@@ -1418,7 +1419,7 @@ class ModelRpcClient:
             self.step = async_wrap(self.model_server.exposed_step)
             self.forward_once = async_wrap(self.model_server.forward_step)
             self.push_req_step = async_wrap(self.model_server.handle_generate_request)
-            self.get_hit_ratio = async_wrap(self.model_server.exposed_get_hit_ratio)
+            self.get_windowed_hit_ratio = async_wrap(self.model_server.exposed_get_windowed_hit_ratio)
             self.get_migrate_candidates = async_wrap(self.model_server.exposed_get_migration_candidates)
             self.scheduler_metrics_request = async_wrap(
                 self.model_server.exposed_scheduler_metrics_request
@@ -1451,7 +1452,7 @@ class ModelRpcClient:
             self.step = async_wrap("step")
             # TODO: test push_req_step in TP mode
             self.push_req_step = async_wrap("handle_generate_request")
-            self.get_hit_ratio = async_wrap("get_hit_ratio")
+            self.get_windowed_hit_ratio = async_wrap("get_windowed_hit_ratio")
             self.scheduler_metrics_request = async_wrap(
                 'exposed_scheduler_metrics_request'
             ) # TODO test metric collection in TP mode

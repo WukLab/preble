@@ -887,14 +887,16 @@ class LooGLEDataset(DataLoader):
         sampled_dataset = self.data.shuffle().select(range(self.num_patterns))
         qa_pairs = [eval(item['qa_pairs']) for item in sampled_dataset]
         num_raw_requests = sum(len(qas) for qas in qa_pairs)
+        # print(qa_pairs, num_raw_requests)
+        
         #NOTE: loogle dataset has not enought QAs for each document
         #      We replicate QAs w.r.t existing prefix sharing distributions
         scale_factor = self.total_num_requests / num_raw_requests
         request_pre_prefix = [0] * len(sampled_dataset)
         for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
-            if i == 0:
-                print(raw_inputs)
+            # if i == 0:
+            #     print(raw_inputs)
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):
                 request_pre_prefix[i] += 1
