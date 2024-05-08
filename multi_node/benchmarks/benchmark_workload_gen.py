@@ -744,7 +744,7 @@ class TBOracleB(CustomRuntimeSelector):
     tbl = {}
     counter: int = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kargs):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)

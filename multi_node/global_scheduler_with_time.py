@@ -216,6 +216,7 @@ class GlobalSchedulerWithTime:
         self.HIGH_LOAD_THRESHOLD = 1.5
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
+        self.rr_cnt = 0
 
 
     
@@ -343,6 +344,9 @@ class GlobalSchedulerWithTime:
             important_node = self.get_important_node(leaf_node)
             if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
                 gpu_selected = self.get_parent_gpu_allocation(leaf_node)
+            # else:
+            #     gpu_selected = [self.rr_cnt]
+            #     self.rr_cnt = (self.rr_cnt + 1) % self.num_gpus
             else:
                 if runtime_id_with_highest_hit_rate is None:
                     recom_costs = []

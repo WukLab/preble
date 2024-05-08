@@ -187,3 +187,20 @@ def create_programming_dataset_micro(config, model_name, exp_time, max_tokens_ov
     send_out_times = calc_send_out_times(requests, request_rate, exp_time)
     return dataloader, requests, send_out_times
 
+def create_toolbench_dataset_zipf(config, model_name, exp_time, data_path, load_dist) -> Iterator[WorkloadConfig]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    num_workloads, num_requests, request_rate, zipf = config
+    if exp_time != float("inf"):
+        num_requests = int(request_rate * exp_time)
+    print(f'Initialize toolbench dataset with {num_workloads} workloads and {num_requests} requests')
+    dataloader = ToolBenchDataLoader(
+        num_patterns=num_workloads,
+        total_num_requests=num_requests,
+        tokenizer=tokenizer,
+        data_path=data_path,
+        load_dist=load_dist,
+    )
+    requests = dataloader.generate_workload(k=zipf)
+    random.shuffle(requests)
+    send_out_times = calc_send_out_times(requests, request_rate, exp_time)
+    return dataloader, requests, send_out_times
