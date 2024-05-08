@@ -83,9 +83,9 @@ configuration_to_test = [
     # scale_to_gpu([230, 1000, 12], len(ours_gpu_configs) // 2),
 
     # scale_to_gpu([320, 900, 3], len(ours_gpu_configs) // 2),
-    scale_to_gpu([320, 1800, 6], len(ours_gpu_configs) // 2),
-    scale_to_gpu([320, 2700, 9], len(ours_gpu_configs) // 2),
-    scale_to_gpu([320, 3600, 12], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([320, 1800, 6], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([320, 2700, 9], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([320, 3600, 12], len(ours_gpu_configs) // 2),
     scale_to_gpu([320, 4500, 15], len(ours_gpu_configs) // 2),
     # scale_to_gpu([320, 5400, 18], len(ours_gpu_configs) // 2),
 
@@ -100,10 +100,9 @@ configuration_to_test = [
 ]
 
 policies_to_test = [
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VirtualenvOracle, baseline_gpu_configs, 'oracle'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'all_stuff'),
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VirtualenvOracle, baseline_gpu_configs, 'oracle'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'all_stuff'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-
 ]
 
 def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
