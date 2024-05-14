@@ -47,25 +47,11 @@ class CustomPolicyType(Enum):
     VIDEO_ORACLE = auto()
     PROGRAMMING_ORACLE = auto()
 
-    GREEDY_LP = auto()
-    GREEDY_LP_OLD = auto()
-
-    BASIC_MEM_SCHEDULER = auto()
-    BASIC_MEM_SCHEDULERV2 = auto()
-    BASIC_MEM_SCHEDULERV2_5 = auto()
-    BasicMemSchedulerV3 = auto()
-
-    HistogramBasedMemoryLoadScheduler = auto()
-    HiostgramBasedRecompLoad = auto()
-    HiostgramBasedRecompLoadWithEviction = auto()
     GlobalScheduler = auto()
     GlobalSchedulerWithoutRebalancing = auto()
     GlobalSchedulerWithoutMissRate = auto()
     GlobalSchedulerTime = auto()
     GlobalSchedulerTimeWithEviction = auto()
-
-    MemSchedulerEvictBasedOnLoad = auto()
-    MemSchedulerWithGlobalEviction = auto()
 
 class DataParallelRequestRouter:
     def __init__(
