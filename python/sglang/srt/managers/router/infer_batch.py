@@ -772,7 +772,8 @@ class Batch:
         # TODO(lmzheng): apply penalty
         probs = torch.softmax(logits, dim=-1)
         probs_sort, probs_idx = _top_p_top_k(probs, self.top_ps, self.top_ks)
-        sampled_index = torch.multinomial(probs_sort, num_samples=1)
+        # sampled_index = torch.multinomial(probs_sort, num_samples=1)
+        sampled_index = torch.zeros(probs_sort.shape[0], 1, dtype=torch.int64, device=probs_sort.get_device())
         batch_next_token_ids = torch.gather(probs_idx, dim=1, index=sampled_index).view(
             -1
         )

@@ -215,6 +215,9 @@ class ModelRpcServer:
         while self.hit_trace_buffer and timestamp - self.hit_trace_buffer[0][0] > self.hit_trace_window_size:
             self.hit_trace_buffer.popleft()
     
+    def exposed_get_windowed_hit_ratio(self):
+        return self.get_hit_ratio()
+    
     def get_hit_ratio(self):
         hit_tokens = sum(x[1] for x in self.hit_trace_buffer)
         total_prompt_len = sum(x[2] for x in self.hit_trace_buffer)
@@ -1413,7 +1416,7 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap(self.model_server.exposed_step)
-            self.forward_once = async_wrap(self.model_server.forward_step)
+            self.get_windowed_hit_ratio = async_wrap(self.model_server.exposed_get_windowed_hit_ratio)
             self.push_req_step = async_wrap(self.model_server.handle_generate_request)
             self.get_migrate_candidates = async_wrap(self.model_server.exposed_get_migration_candidates)
             self.scheduler_metrics_request = async_wrap(
@@ -1433,26 +1436,12 @@ class ModelRpcClient:
                         i, server_args, port_args
                     )
 
-                self.model_servers = executor.map(init_model, range(tp_size))
-            
-            # rets = []
-            # for i in range(tp_size):
-            #     rets.append(start_model_process(port_args.model_rpc_ports[i]))
-            # self.remote_services = [x[0] for x in rets]
-            # self.procs = [x[1] for x in rets]
-            
-            # # Init model
-            # def init_model(i):
-            #     return self.remote_services[i].ModelRpcServer(
-            #         i, server_args, port_args
-            #     )
-            # self.model_servers = []
-            # for i in range(tp_size):
-            #     self.model_servers.append(init_model(i))
-                
+                ret = executor.map(init_model, range(tp_size))
+                self.model_servers = [x for x in ret]
             # Wrap functions
             def async_wrap(func_name):
                 fs = [rpyc.async_(getattr(m, func_name)) for m in self.model_servers]
+                print(func_name, len(fs))
                 async def _func(*args, **kwargs):
                     tasks = [f(*args, **kwargs) for f in fs]
                     await asyncio.gather(*[asyncio.to_thread(t.wait) for t in tasks])
@@ -1460,12 +1449,13 @@ class ModelRpcClient:
                 return _func
 
             self.step = async_wrap("step")
-            self.forward_once = async_wrap("forward_step")
+            self.get_windowed_hit_ratio = async_wrap("get_windowed_hit_ratio")
             # TODO: test push_req_step in TP mode
             self.push_req_step = async_wrap("handle_generate_request")
             self.scheduler_metrics_request = async_wrap(
                 'exposed_scheduler_metrics_request'
             ) # TODO test metric collection in TP mode
+    
 
 def _init_service(port):
     t = ThreadedServer(

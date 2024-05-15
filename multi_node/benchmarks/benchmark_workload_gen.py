@@ -225,6 +225,67 @@ class DataLoader:
 
     def get_tokenizer(self):
         return self.tokenizer
+    
+class PercentCommonSharedDataLoader(DataLoader):
+    def __init__(
+        self,
+        num_patterns: int,
+        total_num_requests: int,
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        load_dist: LoadDistribution = LoadDistribution.EVEN,
+        distribution_of_non_shared: float = 0.0,
+        percent_of_common_shared: float = 1.0,
+        output_len: int = 1,
+        context_len: int = None, # if this is not none, ignore num_in_context_exampels
+    ):
+        super().__init__(
+            "random", num_patterns, total_num_requests, tokenizer, load_dist
+        )
+        self.distribution_of_non_shared = distribution_of_non_shared
+        self.output_len = output_len
+        self.context_len = context_len
+        self.percent_of_common_shared = percent_of_common_shared
+    
+    def generate_workload(self):
+        num_prefixed_shared = int(
+            self.total_num_requests * (1 - self.distribution_of_non_shared)
+        )
+        num_non_shared = int(self.total_num_requests * self.distribution_of_non_shared)
+        workload = []
+        sampling_params = {
+            "experiment_id": f"random_experiment_{self.num_patterns}_{self.distribution_of_non_shared}_{self.total_num_requests}",
+            "temperature": 0,
+            "max_new_tokens": self.output_len,
+            "ignore_eos": True, # For better micro-benchmark
+        }
+        
+        common_prompt_lengths = math.floor(self.context_len * self.percent_of_common_shared)
+        unique_sharing_length = self.context_len - common_prompt_lengths
+        for i in range(num_prefixed_shared):
+            workload_num = 1 + i % self.num_patterns
+            prompt_tokens = [0] * common_prompt_lengths + [workload_num] * unique_sharing_length
+            workload.append(
+                {
+                    "input_ids" : prompt_tokens,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
+                }
+            )
+        for i in range(num_non_shared):
+            prompt_tokens = [1 + i + self.num_patterns] * self.context_len
+            workload.append(
+                {
+                    "input_ids" : prompt_tokens,
+                    "sampling_params": copy.deepcopy(sampling_params),
+                    "rid": uuid.uuid4().hex,
+                }
+            )
+        logger.info('Start decoding to text')
+        self.add_text_from_token_ids_to_workload(workload)
+        random.shuffle(workload)
+        return workload
+        
+        
 
 class WorkloadPrefixDataLoader(DataLoader):
     def __init__(
@@ -239,6 +300,7 @@ class WorkloadPrefixDataLoader(DataLoader):
         random_workload_path=None,
         workload_start_from: int = 0,
         decoding_size=None,
+        context_len: int = None, # if this is not none, ignore num_in_context_exampels
     ):
         super().__init__(
             "random", num_patterns, total_num_requests, tokenizer, load_dist
@@ -249,6 +311,9 @@ class WorkloadPrefixDataLoader(DataLoader):
         self.random_workload_path=random_workload_path
         self.workload_start_from = workload_start_from
         self.decoding_size = decoding_size
+        self.context_len = context_len
+        if self.context_len:
+            self.num_in_context_examples = math.ceil(self.context_len / 475)
 
     def generate_workload(self, k):
         num_prefixed_shared = int(
@@ -292,11 +357,11 @@ class WorkloadPrefixDataLoader(DataLoader):
                 }
             )
         self.add_input_token_ids_to_workload(workload)
-        random.shuffle(workload)
 
-        prompt_lens = [len(p["input_ids"]) for p in workload]
-        plt.hist(prompt_lens)
-        plt.savefig(f"react_prompt_length.png")
+        random.shuffle(workload)
+        # prompt_lens = [len(p["input_ids"]) for p in workload]
+        # plt.hist(prompt_lens)
+        # plt.savefig(f"react_prompt_length.png")
         return workload
     
     @staticmethod
@@ -744,7 +809,7 @@ class TBOracleB(CustomRuntimeSelector):
     tbl = {}
     counter: int = 0
 
-    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None):
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kargs):
         match = re.search(r"You have access of the following tools:\n1.(.+?): ", text)
         if match:
             tool = match.group(1)
@@ -802,7 +867,8 @@ class LooGLEDataset(DataLoader):
         if LooGLE_dataset_type == LooGLEDatasetType.LONG_QA:
             data = load_dataset("bigainlco/LooGLE", "longdep_qa", split="test")
         elif LooGLE_dataset_type == LooGLEDatasetType.SHORT_QA:
-            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test", download_mode='force_redownload')
+            # data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test", download_mode='force_redownload')
+            data = load_dataset("bigainlco/LooGLE", "shortdep_qa", split="test")
         self.data = data
         self.prompt_format = self.prompt_format[LooGLE_dataset_type]
         return data
@@ -821,12 +887,16 @@ class LooGLEDataset(DataLoader):
         sampled_dataset = self.data.shuffle().select(range(self.num_patterns))
         qa_pairs = [eval(item['qa_pairs']) for item in sampled_dataset]
         num_raw_requests = sum(len(qas) for qas in qa_pairs)
+        # print(qa_pairs, num_raw_requests)
+        
         #NOTE: loogle dataset has not enought QAs for each document
         #      We replicate QAs w.r.t existing prefix sharing distributions
         scale_factor = self.total_num_requests / num_raw_requests
         request_pre_prefix = [0] * len(sampled_dataset)
         for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
+            # if i == 0:
+            #     print(raw_inputs)
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):
                 request_pre_prefix[i] += 1
@@ -867,7 +937,6 @@ class LooGLEDataset(DataLoader):
                 new_tokenized_prompt = self.tokenizer.encode(new_prompt)
                 request["text"] = new_prompt
                 request["input_ids"] = new_tokenized_prompt
-                print(f'prompt length: {len(new_tokenized_prompt)}')
             return request
 
         with ThreadPoolExecutor(64) as executor:
@@ -907,6 +976,19 @@ class LoogleOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+        
+@dataclass
+class ProgrammingOracle(CustomRuntimeSelector):
+    def __post_init__(self):
+        self.trace = {}
+        self.tbl = {}
+        self.counter = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
+        if text not in self.tbl:
+            self.tbl[text] = self.counter % self.num_nodes
+            self.counter += 1
+        return self.tbl[text]
 
 
 class MultiDomainToolBenchDataLoader(DataLoader):
@@ -1095,6 +1177,7 @@ class TBMultiDomainOracle(CustomRuntimeSelector):
             return self.tbl[tool]
         else:
             return random.randint(0, self.num_nodes - 1)
+        
 
 class ChameleonTabMWPLoader(DataLoader):
     """DataLoader for Chameleon + TabMWP dataset"""
@@ -1399,9 +1482,11 @@ class VirtualEnvLoader(DataLoader):
     """DataLoader for VirtualEnv dataset."""
 
     def __init__(self, data_path: str, num_patterns: int,
-                 tokenizer: PreTrainedTokenizer):
+                 tokenizer: PreTrainedTokenizer,total_num_requests=None):
         super().__init__(data_path, num_patterns, None, tokenizer)
         self.data = self.read_data(data_path)
+        self.total_num_requests = total_num_requests
+        self.tokenizer = tokenizer
 
     def read_data(self, data_path: str):
         with open(data_path, 'r') as f:
@@ -1417,29 +1502,53 @@ class VirtualEnvLoader(DataLoader):
         if self.num_patterns > len(self.data):
             print(f'Not enough patterns in the dataset. Only {len(self.data)} patterns available.')
             num_patterns = len(self.data)
-        examples_per_pattern = np.ceil(k / num_patterns)
-        data = [examples for examples in self.data if len(examples) >= examples_per_pattern]
-        if len(data) < num_patterns:
-            print(f'Not enough patterns in the dataset with {examples_per_pattern} examples. Only {len(data)} patterns available.')
+        num_raw_questions = sum(len(self.data[i % len(self.data)]) for i in range(self.num_patterns))
+        scale_factor = self.total_num_requests / num_raw_questions
+        
+        sample_response = self.tokenizer.decode([1 for _ in range(14)])
+        
         requests = []
-        for i, sample in enumerate(data[:num_patterns]):
+        for i in range(self.num_patterns):
+            env_id = f"Environment ID {i} "
+            sample = self.data[i % len(self.data)]
             req_group = []
-            for j, turn in enumerate(sample):
-                if j == examples_per_pattern:
-                    break
+            last_turn = None
+            for j in range(math.ceil(len(sample) * scale_factor)):
+                # if j > 50:
+                #     continue
+                if j >= len(sample):
+                    turn = {"prompt": last_turn["prompt"] + sample_response}
+                else:
+                    turn = sample[j]
+                last_turn = turn
                 req_group.append({
-                    'text': turn['prompt'],
+                    'text': env_id + turn['prompt'],
                     'sampling_params': {
                         'temperature': 0.0,
                         'max_new_tokens': 26,
                     },
                 })
-            self.add_input_token_ids_to_workload(req_group)
             requests.append(req_group)
-            total_requests += len(req_group)
-        
+
+        for req_group in requests:
+            self.add_input_token_ids_to_workload(req_group)
+        random.shuffle(requests)
         return requests
-    
+
+@dataclass
+class VirtualenvOracle(CustomRuntimeSelector):
+    num_workloads: int
+    trace = {}
+    rr = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
+        num_nodes = self.num_nodes
+        self.trace[request_id] = text[:50]
+        for i in range(self.num_workloads):
+            if text.startswith(f"Environment ID {i} "):
+                return i % num_nodes
+        self.rr = (self.rr + 1) % num_nodes
+        return self.rr
 
 class ProgrammingDataset(DataLoader):
     def __init__(

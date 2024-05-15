@@ -31,13 +31,11 @@ from data_parallel_request_cache import (
     CustomPolicyType,
     DataParallelRuntimeSelectionPolicy,
 )
-from greedy_lp import GurobiGreedyLPScheduler
 from model_runtime_manager import ModelDetails, RequestFuncOutput
 from multi_node_loader import MultiNodeLoader
 
 from benchmark_utils import BenchmarkMetrics
 from benchmark_workload_gen import *
-from basic_mem_scheduler import BasicMemSchedulerV2
 from multi_node.global_scheduler import GlobalScheduler
 from multi_node.global_scheduler_with_time import GlobalSchedulerWithTime
 from multi_experiment_benchmark_utils import DefaultWorkload, ConfigurableMajorExperimentArgs, AllExperiments, ExperimentType, Workload
@@ -69,8 +67,10 @@ def register_selector(
         CustomPolicyType.TBORACLE: TBOracle,
         CustomPolicyType.TBORACLE_B: TBOracleB,
         CustomPolicyType.LOOGLE_ORACLE: LoogleOracle,
+        CustomPolicyType.PROGRAMMING_ORACLE: ProgrammingOracle,
         CustomPolicyType.VIDEO_ORACLE: VideoOracle,
         CustomPolicyType.TB_DOMAIN_ORACLE: TBMultiDomainOracle,
+        CustomPolicyType.VIRTUALENV_ORACLE: VirtualenvOracle
     }
 
     def handle_oracle(oracle_type):
@@ -91,9 +91,6 @@ def register_selector(
         )
         return
 
-    def handle_basic_mem_schedulerv2():
-        return BasicMemSchedulerV2(num_nodes=len(model_details.runtimes))
-
     def handle_histogram_based_recomp():
         return GlobalScheduler(
             num_nodes=len(model_details.runtimes), enable_eviction=False, enable_miss_rate=True
@@ -105,7 +102,6 @@ def register_selector(
         )
     
     selector_creators = {
-        CustomPolicyType.BASIC_MEM_SCHEDULERV2: handle_basic_mem_schedulerv2,
         CustomPolicyType.GlobalScheduler: handle_histogram_based_recomp,
         CustomPolicyType.GlobalSchedulerWithoutMissRate: handle_histogram_based_recomp_without_miss_rate,
         CustomPolicyType.GlobalSchedulerTime: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes)),
@@ -224,8 +220,12 @@ if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.e2e_videoQA_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
-    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
-    from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_common_share_micro_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_zipf import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_programming import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
     
     run_all_experiments(exp_args)

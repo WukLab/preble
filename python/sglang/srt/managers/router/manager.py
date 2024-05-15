@@ -140,7 +140,7 @@ class RouterManager:
                 await self.dump_trace(recv_req)
                 continue
             if isinstance(recv_req, PrefixHitInspect):
-                recv_req.hit_ratio = self.model_client.model_server.get_hit_ratio()
+                recv_req.hit_ratio = await self.model_client.get_windowed_hit_ratio()
                 await self.send_to_tokenizer.send_pyobj(recv_req)
                 continue
             recv_req.append_to_queue_time = time.time()

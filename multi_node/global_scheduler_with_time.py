@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
-from greedy_lp import RequestFuncOutput
+from benchmarks.benchmark_utils import RequestFuncOutput
 from global_lru_cache import LPRadixCache, LPTreeNode
 import time
 import numpy as np
@@ -11,6 +11,7 @@ from typing import List, Tuple
 from transformers import AutoTokenizer
 import logging
 from benchmarks.exp_configs.model_equations import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
+# from benchmarks.exp_configs.model_equations import LP_Llama3_70B_H100_sglang_extend_flashinfer as prefill_time
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
@@ -105,7 +106,6 @@ class SlidingWindowHistogram:
 
     def get_node_cost(self, node: LPTreeNode, gpu):
         prefill_cost = self.prev_mis_rates[node] * self.node_to_count[node] * prefill_time(node.num_tokens, node.context_length) / len(self.gpu_allocations.get(node)) # potentionally divide by length of node.cached_gpus here
-        
         topt = np.median(self.avg_topt_per_gpu[gpu])
         output_len = self.decoding_size[node]
         if node.decode_length:
@@ -216,7 +216,6 @@ class GlobalSchedulerWithTime:
         self.HIGH_LOAD_THRESHOLD = 1.5
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
-
 
     
     # Consider Split nodes

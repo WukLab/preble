@@ -70,3 +70,6 @@
    70  python model_equation_aio_regression.py 
    71  git add -A
    72  history > profile.txt 
+
+
+ CUDA_VISIBLE_DEVICES=0,1,2,3 python -m sglang.launch_server --model-path meta-llama/Meta-Llama-3-70B --host 0.0.0.0 --mem-fraction-static 0.75 --context-length 4096 --enable-flashinfer --schedule-heuristic lpm --tp-size 4 --load-format dummy

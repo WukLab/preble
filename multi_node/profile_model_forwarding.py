@@ -7,8 +7,6 @@ import torch
 import asyncio
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
-
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.utils import handle_port_init
 from sglang.srt.managers.router.model_rpc import ModelRpcClient, ModelRpcServer

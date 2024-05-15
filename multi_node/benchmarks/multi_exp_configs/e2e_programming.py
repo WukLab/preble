@@ -30,8 +30,10 @@ sglang_server_args = {
 }
 # GPU Configuration
 baseline_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
     #GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     #GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -56,8 +58,10 @@ ours_server_args = {
 
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -85,21 +89,23 @@ configuration_to_test = [
     # scale_to_gpu([100, 312, 0.5], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 625, 1], len(ours_gpu_configs) // 2),
     # scale_to_gpu([100, 1250, 2], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 1875, 3], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 1875, 3], len(ours_gpu_configs) // 2),
 
-    scale_to_gpu([100, 1562, 2.5], len(ours_gpu_configs) // 2),
-    scale_to_gpu([100, 2187, 3.5], len(ours_gpu_configs) // 2),
-
-    # scale_to_gpu([100, 2500, 4], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([100, 3125, 5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 1562, 2.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 2187, 3.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 2500, 4], len(ours_gpu_configs) // 2),
+    scale_to_gpu([160, 2812, 4.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 3125, 5], len(ours_gpu_configs) // 2),
+    scale_to_gpu([160, 3437, 5.5], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 3755, 6], len(ours_gpu_configs) // 2),
+    # scale_to_gpu([160, 3755, 6], len(ours_gpu_configs) // 2),
 ]
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_without_rebalancing'),
     (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline_with_lpm'),
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'ours'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.PROGRAMMING_ORACLE, baseline_gpu_configs, 'oracle'),
 ]
 
 def gen_workloads_for_programming(configuration_to_test, policies_to_test):
@@ -132,11 +138,11 @@ def gen_workloads_for_programming(configuration_to_test, policies_to_test):
 
 workloads = gen_workloads_for_programming(configuration_to_test, policies_to_test)
 loogle_experiment = ConfigurableMajorExperimentArgs(
-    log_file_path="programming_logs/programming_12_version2.log",
-    csv_log_path="programming_logs/programming_12_version2.csv",
+    log_file_path="real_ckpt_all_in_one/2r_programming_H100/exp.log",
+    csv_log_path="real_ckpt_all_in_one/2r_programming_H100/exp.csv",
     # log_file_path="logs/debug_loogle_cp_2048/exp.log",
     # csv_log_path="logs/debug_loogle_cp_2048/exp.csv",
-    simulate=True,
+    simulate=False,
     model_path=model_name,
     workload_configs=workloads,
     experiment_type=ExperimentType.default,

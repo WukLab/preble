@@ -45,6 +45,7 @@ class CustomPolicyType(Enum):
 
     LOOGLE_ORACLE = auto()
     VIDEO_ORACLE = auto()
+    PROGRAMMING_ORACLE = auto()
 
     GREEDY_LP = auto()
     GREEDY_LP_OLD = auto()
@@ -65,6 +66,8 @@ class CustomPolicyType(Enum):
 
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()
+
+    VIRTUALENV_ORACLE = auto()
 
 class DataParallelRequestRouter:
     def __init__(

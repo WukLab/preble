@@ -102,6 +102,21 @@ def llama3_70b_A100_tp2_sglang_extend_flashinfer(
     total_time /= 1e3
     return total_time
 
+def llama3_70b_H100_tp2_sglang_extend_flashinfer(
+    num_reqs, 
+    num_batched_tokens, 
+    total_context, 
+    input_id_lens,
+    num_unique_kv = None,
+    seq_lens: torch.Tensor = None,
+):
+    total_time = 0
+    for i, extend_lengths in enumerate(input_id_lens):
+        seq_len = seq_lens[i].item()
+        total_time += 18.667307208113755 + 7.98791064e-02 * extend_lengths + 2.68531603e-03 * seq_len + 7.44344923e-07 * extend_lengths * seq_len
+    total_time /= 1e3
+    return total_time
+
 def mistrial_7b_A6000_sglang_decode_flashinfer(
     num_reqs, 
     num_batched_tokens, 
@@ -110,13 +125,21 @@ def mistrial_7b_A6000_sglang_decode_flashinfer(
 ):
     return mistrial_7b_A6000_sglang_base(num_reqs, num_batched_tokens, total_context, num_unique_kv) / 0.9
 
+def LP_Llama3_70B_H100_sglang_extend_flashinfer(num_extend_tokens, total_context):
+    # LLama70B H100
+    total_time = 28.931389307785594 + 1.82233431e-01 * num_extend_tokens  + 4.00365142e-03 * total_context + 2.55050069e-06 * num_extend_tokens * total_context
+    total_time /= 1e3
+    return total_time
+
 def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
     # if num_extend_tokens < 192:
     #     print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")
     #     return num_extend_tokens / 1000
+    
     return mistral_7b_A6000_sglang_extend_flashinfer(
         1, num_extend_tokens, total_context, [num_extend_tokens], num_extend_tokens, torch.tensor([total_context])
     )
+    
     
 def mistral_7b_A100_sglang_extend_flashinfer(
     num_reqs, 
