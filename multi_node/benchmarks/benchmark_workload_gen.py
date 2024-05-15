@@ -937,7 +937,6 @@ class LooGLEDataset(DataLoader):
                 new_tokenized_prompt = self.tokenizer.encode(new_prompt)
                 request["text"] = new_prompt
                 request["input_ids"] = new_tokenized_prompt
-                print(f'prompt length: {len(new_tokenized_prompt)}')
             return request
 
         with ThreadPoolExecutor(64) as executor:
@@ -1536,6 +1535,20 @@ class VirtualEnvLoader(DataLoader):
         random.shuffle(requests)
         return requests
 
+@dataclass
+class VirtualenvOracle(CustomRuntimeSelector):
+    num_workloads: int
+    trace = {}
+    rr = 0
+
+    def runtime_selector(self, text: str, request_id: str, input_ids: List = None, sampling_params=None, *args, **kwargs):
+        num_nodes = self.num_nodes
+        self.trace[request_id] = text[:50]
+        for i in range(self.num_workloads):
+            if text.startswith(f"Environment ID {i} "):
+                return i % num_nodes
+        self.rr = (self.rr + 1) % num_nodes
+        return self.rr
 
 class ProgrammingDataset(DataLoader):
     def __init__(

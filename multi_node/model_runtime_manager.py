@@ -203,6 +203,7 @@ class ModelDetails:
                     model_path=model_path,
                     gpu=gpu_id,
                     gpu_config=config,
+                    cuda_devices=[gpu_id],
                     **config.runtime_args,
                 )
             #  VLLM Runtime

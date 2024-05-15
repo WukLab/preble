@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
-from greedy_lp import RequestFuncOutput
+from benchmarks.benchmark_utils import RequestFuncOutput
 from global_lru_cache import LPRadixCache, LPTreeNode
 import time
 import numpy as np

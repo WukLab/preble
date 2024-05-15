@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
-from greedy_lp import RequestFuncOutput
+from benchmarks.benchmark_utils import RequestFuncOutput
 from global_lru_cache import LPRadixCache, LPTreeNode
 import time
 import numpy as np
@@ -10,8 +10,8 @@ from collections import deque
 from typing import List, Tuple
 from transformers import AutoTokenizer
 import logging
-# from benchmarks.exp_configs.model_equations import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
-from benchmarks.exp_configs.model_equations import LP_Llama3_70B_H100_sglang_extend_flashinfer as prefill_time
+from benchmarks.exp_configs.model_equations import LP_mistral_7b_A6000_sglang_extend_flashinfer as prefill_time
+# from benchmarks.exp_configs.model_equations import LP_Llama3_70B_H100_sglang_extend_flashinfer as prefill_time
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
@@ -340,7 +340,7 @@ class GlobalSchedulerWithTime:
             self.handle_split_node_histogram(split_nodes)
 
             important_node = self.get_important_node(leaf_node)
-            if len(split_nodes) == 0 or leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
+            if leaf_node.num_tokens < leaf_node.context_length - leaf_node.num_tokens: # check that gpu allocation exists for important node
                 gpu_selected = self.get_parent_gpu_allocation(leaf_node)
             else:
                 if runtime_id_with_highest_hit_rate is None:

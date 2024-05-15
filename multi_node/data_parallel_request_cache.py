@@ -67,6 +67,8 @@ class CustomPolicyType(Enum):
     MemSchedulerEvictBasedOnLoad = auto()
     MemSchedulerWithGlobalEviction = auto()
 
+    VIRTUALENV_ORACLE = auto()
+
 class DataParallelRequestRouter:
     def __init__(
         self,
