@@ -39,10 +39,10 @@ sglang_server_args = {
 
 # GPU Configuration
 baseline_gpu_configs = [
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    # GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -62,10 +62,10 @@ ours_server_args = {
 }
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    # GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args, ssh_config=ssh_config_06),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -111,11 +111,11 @@ for i in [2]:
     configuration_to_test = [
         # scale_to_gpu([30, 168, 0.1], i / 2),
         # scale_to_gpu([30, 168, 0.2], i / 2),
-        scale_to_gpu([30, 168, 0.3], i / 2),
-        scale_to_gpu([30, 281, 0.5], i / 2),
-        scale_to_gpu([30, 393, 0.7], i / 2),
+        # scale_to_gpu([30, 168, 0.3], i / 2),
+        # scale_to_gpu([30, 281, 0.5], i / 2),
+        scale_to_gpu([24, 393, 0.7], i / 2),
         # scale_to_gpu([30, 449, 0.8], i / 2),
-        scale_to_gpu([30, 505, 0.9], i / 2),
+        # scale_to_gpu([30, 505, 0.9], i / 2),
         # scale_to_gpu([30, 561, 1.0], i / 2),
         # scale_to_gpu([30, 1122, 2.0], i / 2),
     ]
@@ -130,7 +130,7 @@ for i in [2]:
         csv_log_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final_ours/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=False,
+        simulate=True,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,
