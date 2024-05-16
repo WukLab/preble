@@ -4,15 +4,21 @@ import multiprocessing
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple
 import json
 from dataclasses import dataclass
 import math
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import rpyc
 import torch
 from rpyc.utils.classic import obtain
 from rpyc.utils.server import ThreadedServer
+
+try:
+    from vllm.logger import _default_handler as vllm_default_logger
+except ImportError:
+    from vllm.logger import logger as vllm_default_logger
+
 from sglang.srt.constrained.fsm_cache import FSMCache
 from sglang.srt.constrained.jump_forward import JumpForwardCache
 from sglang.srt.hf_transformers_utils import get_processor, get_tokenizer
@@ -23,7 +29,7 @@ from sglang.srt.managers.io_struct import (
     SchedulingMetricsReqInput, 
     SchedulingMetricsOut
 )
-from sglang.srt.managers.router.infer_batch import Batch, ForwardMode, Req, SchedulingBudget
+from sglang.srt.managers.router.infer_batch import Batch, ForwardMode, Req, SchedulingBudget, FinishReason
 from sglang.srt.managers.router.model_runner import ModelRunner
 from sglang.srt.managers.router.radix_cache import RadixCache
 from sglang.srt.managers.router.scheduler import Scheduler
@@ -36,11 +42,12 @@ from sglang.srt.utils import (
     is_multimodal_model,
     set_random_seed,
 )
-from vllm.logger import _default_handler as vllm_default_handler
 from collections import deque
 import os
 
 logger = logging.getLogger("model_rpc")
+vllm_default_logger.setLevel(logging.WARN)
+logging.getLogger("vllm.utils").setLevel(logging.WARN)
 
 detail_batch_logger = logger.debug
 
@@ -52,6 +59,7 @@ class ModelRpcServer:
         port_args: PortArgs,
         simulate: bool = False,
         gpu_config: GPUConfig = None,
+        model_overide_args: Optional[dict] = None,
     ):
         server_args, port_args = [obtain(x) for x in [server_args, port_args]]
         self.gpu_config = gpu_config
@@ -67,18 +75,16 @@ class ModelRpcServer:
         self.schedule_heuristic = server_args.schedule_heuristic
         logger.info(f"schedule_heuristic: {self.schedule_heuristic}")
         self.disable_regex_jump_forward = server_args.disable_regex_jump_forward
-        vllm_default_handler.setLevel(
-            level=getattr(logging, server_args.log_level.upper())
-        )
 
         # Init model and tokenizer
         self.model_config = ModelConfig(
             server_args.model_path,
             server_args.trust_remote_code,
             context_length=server_args.context_length,
+            model_overide_args=model_overide_args,
         )
 
-        # for model end global settings
+        # For model end global settings
         server_args_dict = {
             "enable_flashinfer": server_args.enable_flashinfer,
             "attention_reduce_in_fp32": server_args.attention_reduce_in_fp32,
@@ -129,10 +135,16 @@ class ModelRpcServer:
             f"max_prefill_num_token={self.max_prefill_num_token}, "
             f"context_len={self.model_config.context_len}, "
         )
-        logger.info(server_args.get_optional_modes_logging())
+        if self.tp_rank == 0:
+            logger.info(f"server_args: {server_args.print_mode_args()}")
 
         # Init cache
-        self.tree_cache = RadixCache(server_args.disable_radix_cache, server_args.enable_partial_eviction)
+        self.tree_cache = RadixCache(
+            req_to_token_pool=self.model_runner.req_to_token_pool,
+            token_to_kv_pool=self.model_runner.token_to_kv_pool,
+            disable=server_args.disable_radix_cache,
+            enable_partial_eviction=server_args.enable_partial_eviction,
+        )
         self.tree_cache_metrics = {"total": 0, "hit": 0}
         self.scheduler = Scheduler(
             self.schedule_heuristic,
@@ -160,6 +172,8 @@ class ModelRpcServer:
         self.out_pyobjs = []
         self.decode_forward_ct = 0
         self.stream_interval = server_args.stream_interval
+        self.num_generated_tokens = 0
+        self.last_stats_tic = time.time()
 
         # Init the FSM cache for constrained generation
         self.regex_fsm_cache = FSMCache(
@@ -202,7 +216,7 @@ class ModelRpcServer:
             logger.info("Cache flushed successfully!")
         else:
             warnings.warn(
-                "Cache not flushed because there are pending requests. "
+                f"Cache not flushed because there are pending requests. "
                 f"#queue-req: {len(self.forward_queue)}, "
                 f"#running-req: {0 if self.running_batch is None else len(self.running_batch.reqs)}"
             )
@@ -621,6 +635,8 @@ class ModelRpcServer:
             # Run new fill batch
             forward_times.append(self.forward_fill_batch(new_batch, forward_simulation))
 
+            self.cache_filled_batch(new_batch)
+
             if not new_batch.is_empty():
                 if self.running_batch is None:
                     self.running_batch = new_batch
@@ -631,6 +647,7 @@ class ModelRpcServer:
             if self.running_batch is not None:
                 # Run a few decode batches continuously for reducing overhead
                 for _ in range(10):
+                    self.num_generated_tokens += len(self.running_batch.reqs)
                     forward_time = self.forward_decode_batch(self.running_batch, forward_simulation)
                     forward_times.append(forward_time)
                     if self.running_batch.is_empty():
@@ -646,10 +663,16 @@ class ModelRpcServer:
                                 self.token_to_kv_pool.available_size()
                                 + self.tree_cache.evictable_size()
                             )
+                            throuhgput = self.num_generated_tokens / (
+                                time.time() - self.last_stats_tic
+                            )
+                            self.num_generated_tokens = 0
+                            self.last_stats_tic = time.time()
                             logger.info(
                                 f"#running-req: {len(self.running_batch.reqs)}, "
                                 f"#token: {num_used}, "
                                 f"token usage: {num_used / self.max_total_num_token:.2f}, "
+                                f"gen throughput (token/s): {throuhgput:.2f}, "
                                 f"#queue-req: {len(self.forward_queue)}"
                             )
             else:
@@ -701,6 +724,7 @@ class ModelRpcServer:
         req.sampling_params = recv_req.sampling_params
         req.return_logprob = recv_req.return_logprob
         req.logprob_start_len = recv_req.logprob_start_len
+        req.top_logprobs_num = recv_req.top_logprobs_num
         req.stream = recv_req.stream
         req.tokenizer = self.tokenizer
 
@@ -803,23 +827,23 @@ class ModelRpcServer:
                 and req.extend_input_len + new_batch_input_tokens
                 < self.max_prefill_num_token
             ):
-                delta = self.tree_cache.inc_ref_counter(req.last_node)
+                delta = self.tree_cache.inc_lock_ref(req.last_node)
                 available_size += delta
 
                 if not (
                     req.extend_input_len + req.max_new_tokens() + new_batch_total_tokens
                     < available_size
                 ):
-                    # Undo the insertion
-                    delta = self.tree_cache.dec_ref_counter(req.last_node)
+                    # Undo locking
+                    delta = self.tree_cache.dec_lock_ref(req.last_node)
                     available_size += delta
+                    break
                 else:
                     req.num_inflight_tokens = num_new_tokens
                     req.num_cached_tokens = len(req.prefix_indices)
                     if budget:
                         budget.schedule_new_tokens(num_new_tokens)
                     # Add this request to the running batch
-                    self.token_to_kv_pool.add_refs(req.prefix_indices)
                     can_run_list.append(req)
                     new_batch_total_tokens += (
                         req.extend_input_len + req.max_new_tokens()
@@ -963,7 +987,6 @@ class ModelRpcServer:
             self.model_config.vocab_size, self.int_token_logit_bias, self.enable_iterative_eviction
         )
 
-        logprobs = None
         forward_time = 0
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
@@ -994,16 +1017,26 @@ class ModelRpcServer:
                 s = time.time()
                 if not self.use_sleep_forwarding:
                     logits, (
-                        prefill_logprobs,
-                        normalized_logprobs,
+                        prefill_token_logprobs,
+                        normalized_prompt_logprobs,
+                        prefill_top_logprobs,
+                        decode_top_logprobs,
                         last_logprobs,
                     ) = self.model_runner.forward(batch, ForwardMode.EXTEND)
-                    self.iter_cnt += 1
-                    #print(f"Iter count: {self.iter_cnt}")
-                    if prefill_logprobs is not None:
-                        logprobs = prefill_logprobs.cpu().tolist()
-                        normalized_logprobs = normalized_logprobs.cpu().tolist()
+                    if prefill_token_logprobs is not None:
+                        prefill_token_logprobs = prefill_token_logprobs.tolist()
+                        normalized_prompt_logprobs = normalized_prompt_logprobs.tolist()
+
                     next_token_ids, _ = batch.sample(logits)
+
+                    # Only transfer the selected logprobs of the next token to CPU to reduce overhead.
+                    if last_logprobs is not None:
+                        last_token_logprobs = last_logprobs[
+                            torch.arange(len(batch.reqs), device=next_token_ids.device),
+                            next_token_ids,
+                        ].tolist()
+
+                    next_token_ids = next_token_ids.tolist()
                 else:
                     vocab_size = self.model_config.vocab_size
                     logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
@@ -1017,7 +1050,7 @@ class ModelRpcServer:
                         batch.seq_lens,
                     ))
                     _ = batch.sample(logits)
-                    logprobs = normalized_logprobs = last_logprobs = None
+                    prefill_token_logprobs, normalized_prompt_logprobs, prefill_top_logprobs, decode_top_logprobs, last_logprobs = None, None, None, None, None
                 end_event.record()
                 forward_time = time.time() - s
                 forward_time = forward_time
@@ -1034,11 +1067,11 @@ class ModelRpcServer:
                     batch.seq_lens,
                 )
                 _ = batch.sample(logits)
-                logprobs = normalized_logprobs = last_logprobs = None
+                prefill_token_logprobs, normalized_prompt_logprobs, prefill_top_logprobs, decode_top_logprobs, last_logprobs = None, None, None, None, None
             next_token_ids = next_token_ids.cpu().tolist()
         else:
             next_token_ids = [self.tokenizer.eos_token_id] * len(batch.reqs)
-            logits = logprobs = normalized_logprobs = last_logprobs = None
+            prefill_token_logprobs, normalized_prompt_logprobs, prefill_top_logprobs, decode_top_logprobs, last_logprobs = None, None, None, None, None
             start_event, end_event = None, None
 
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
@@ -1057,19 +1090,31 @@ class ModelRpcServer:
                 req.output_ids = [next_token_ids[i]]
                 req.check_finished()
 
-                if logprobs is not None:
-                    req.logprob = logprobs[pt : pt + req.extend_input_len - 1]
-                    req.normalized_logprob = normalized_logprobs[i]
+                if req.return_logprob:
+                    req.normalized_prompt_logprob = normalized_prompt_logprobs[i]
 
-                    # If logprob_start_len > 0, then first logprob_start_len prompt tokens
-                    # will be ignored.
-                    prompt_token_len = len(req.logprob)
-                    token_ids = req.input_ids[-prompt_token_len:] + [next_token_ids[i]]
-                    token_logprobs = req.logprob + [last_logprobs[i]]
-                    req.token_logprob = list(zip(token_ids, token_logprobs))
+                    # If logprob_start_len > 0, then first logprob_start_len prompt tokens will be ignored.
+                    req.prefill_token_logprobs = list(
+                        zip(
+                            prefill_token_logprobs[pt : pt + req.extend_input_len - 1],
+                            req.input_ids[-req.extend_input_len + 1 :],
+                        )
+                    )
                     if req.logprob_start_len == 0:
-                        req.token_logprob = [(req.input_ids[0], None)] + req.token_logprob
-                    pt += req.extend_input_len
+                        req.prefill_token_logprobs = [
+                            (None, req.input_ids[0])
+                        ] + req.prefill_token_logprobs
+                    req.decode_token_logprobs = [
+                        (last_token_logprobs[i], next_token_ids[i])
+                    ]
+
+                if req.top_logprobs_num > 0:
+                    req.prefill_top_logprobs = prefill_top_logprobs[i]
+                    if req.logprob_start_len == 0:
+                        req.prefill_top_logprobs = [None] + req.prefill_top_logprobs
+                    req.decode_top_logprobs = [decode_top_logprobs[i]]
+
+                pt += req.extend_input_len
 
         self.handle_finished_requests(batch)
         if self.use_sleep_forwarding:
@@ -1163,6 +1208,18 @@ class ModelRpcServer:
             return start_event, end_event
         return forward_time
     
+    def cache_filled_batch(self, batch: Batch):
+        req_pool_indices_cpu = batch.req_pool_indices.cpu().tolist()
+        for i, req in enumerate(batch.reqs):
+            new_prefix_indices, new_last_node = self.tree_cache.cache_req(
+                token_ids=tuple(req.input_ids + req.output_ids)[:-1],
+                last_uncached_pos=len(req.prefix_indices),
+                req_pool_idx=req_pool_indices_cpu[i],
+                del_in_memory_pool=False,
+                old_last_node=req.last_node,
+            )
+            req.prefix_indices, req.last_node = new_prefix_indices, new_last_node
+
     def forward_decode_batch(self, batch: Batch, forward_simulation=None):
         start_decoding_schedule = time.time()
         # check if decode out of memory
@@ -1238,9 +1295,13 @@ class ModelRpcServer:
                 start_event = torch.cuda.Event(enable_timing=True)
                 end_event = torch.cuda.Event(enable_timing=True)
                 start_event.record()        
-                logits, (_, _, last_logprobs) = self.model_runner.forward(
-                    batch, ForwardMode.DECODE
-                )
+                logits, (
+                    _,
+                    _,
+                    _,
+                    decode_top_logprobs,
+                    last_logprobs,
+                ) = self.model_runner.forward(batch, ForwardMode.DECODE)
                 self.iter_cnt += 1
                 #print(f"Iter count: {self.iter_cnt}")
                 end_event.record()
@@ -1256,7 +1317,7 @@ class ModelRpcServer:
                     unique_kvs
                 ))   
                 _ = batch.sample(logits)
-                last_logprobs = None
+                decode_top_logprobs, last_logprobs = None, None
             forward_time = time.time() - s
             forward_time = forward_time
         else:
@@ -1270,26 +1331,28 @@ class ModelRpcServer:
                 unique_kvs
             )
             _ = batch.sample(logits)
-            last_logprobs = None
-        next_token_ids = next_token_ids.cpu().tolist()
+            decode_top_logprobs, last_logprobs = None, None
+        next_token_ids = next_token_ids.tolist()
 
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
-        reqs = batch.reqs
         if last_logprobs is not None:
-            last_logprobs = last_logprobs[
-                torch.arange(len(reqs)), next_token_ids
+            new_token_logprobs = last_logprobs[
+                torch.arange(len(batch.reqs)), next_token_ids
             ].tolist()
 
         # Check finish condition
-        for i, (req, next_tok_id) in enumerate(zip(reqs, next_token_ids)):
+        for i, (req, next_tok_id) in enumerate(zip(batch.reqs, next_token_ids)):
             req.update_after_step()
             if req.get_num_unfinished_tokens() == 0:
                 req.completion_tokens_wo_jump_forward += 1
                 req.output_ids.append(next_tok_id)
                 req.check_finished()
 
-                if last_logprobs is not None:
-                    req.token_logprob.append((next_tok_id, last_logprobs[i]))
+                if req.return_logprob:
+                    req.decode_token_logprobs.append((new_token_logprobs[i], next_tok_id))
+
+                if req.top_logprobs_num > 0:
+                    req.decode_top_logprobs.append(decode_top_logprobs[i])
 
         self.handle_finished_requests(batch)
         if self.use_sleep_forwarding:
@@ -1304,6 +1367,7 @@ class ModelRpcServer:
         output_and_jump_forward_strs = []
         output_hit_stop_str = []
         output_skip_special_tokens = []
+        output_spaces_between_special_tokens = []
         output_meta_info = []
         output_finished = []
         finished_indices = []
@@ -1331,6 +1395,9 @@ class ModelRpcServer:
                 output_skip_special_tokens.append(
                     req.sampling_params.skip_special_tokens
                 )
+                output_spaces_between_special_tokens.append(
+                    req.sampling_params.spaces_between_special_tokens
+                )
 
                 meta_info = {
                     "prompt_tokens": len(req.input_ids),
@@ -1340,11 +1407,23 @@ class ModelRpcServer:
                     "completion_tokens_wo_jump_forward": req.completion_tokens_wo_jump_forward,
                     "arrival_time": req.arrival_time,
                     "append_to_queue_time": req.append_to_queue_time,
+                    "finish_reason": FinishReason.to_str(req.finish_reason),
+                    "hit_stop_str": req.hit_stop_str,
                 }
                 if req.return_logprob:
-                    meta_info["prompt_logprob"] = req.logprob
-                    meta_info["token_logprob"] = req.token_logprob
-                    meta_info["normalized_prompt_logprob"] = req.normalized_logprob
+                    (
+                        meta_info["prefill_token_logprobs"],
+                        meta_info["decode_token_logprobs"],
+                        meta_info["prefill_top_logprobs"],
+                        meta_info["decode_top_logprobs"],
+                        meta_info["normalized_prompt_logprob"],
+                    ) = (
+                        req.prefill_token_logprobs,
+                        req.decode_token_logprobs,
+                        req.prefill_top_logprobs,
+                        req.decode_top_logprobs,
+                        req.normalized_prompt_logprob,
+                    )
                 output_meta_info.append(meta_info)
                 output_finished.append(req.finished)
 
@@ -1358,6 +1437,7 @@ class ModelRpcServer:
                     output_and_jump_forward_strs,
                     output_hit_stop_str,
                     output_skip_special_tokens,
+                    output_spaces_between_special_tokens,
                     output_meta_info,
                     output_finished,
                 )
@@ -1366,20 +1446,16 @@ class ModelRpcServer:
         # Remove finished reqs
         if finished_indices:
             # Update radix cache
-            req_pool_indices_cpu = batch.req_pool_indices.cpu().tolist()
+            req_pool_indices_cpu = batch.req_pool_indices.tolist()
             for i in finished_indices:
                 req = batch.reqs[i]
-                req_pool_idx = req_pool_indices_cpu[i]
-                token_ids = tuple(req.input_ids + req.output_ids)
-                seq_len = len(token_ids) - 1
-                indices = self.req_to_token_pool.req_to_token[req_pool_idx, :seq_len]
-                prefix_len = self.tree_cache.insert(
-                    token_ids[:seq_len], indices.clone()
+                self.tree_cache.cache_req(
+                    token_ids=tuple(req.input_ids + req.output_ids)[:-1],
+                    last_uncached_pos=len(req.prefix_indices),
+                    req_pool_idx=req_pool_indices_cpu[i],
                 )
 
-                self.token_to_kv_pool.free(indices[:prefix_len])
-                self.req_to_token_pool.free(req_pool_idx)
-                self.tree_cache.dec_ref_counter(req.last_node)
+                self.tree_cache.dec_lock_ref(req.last_node)
 
             # Update batch tensors
             if unfinished_indices:
@@ -1393,7 +1469,9 @@ class ModelRpcService(rpyc.Service):
 
 
 class ModelRpcClient:
-    def __init__(self, server_args: ServerArgs, port_args: PortArgs, gpu_config: GPUConfig = None):
+    def __init__(
+        self, server_args: ServerArgs, port_args: PortArgs, model_overide_args, gpu_config: GPUConfig = None,
+    ):
         tp_size = server_args.tp_size
         self.gpu_config = gpu_config
         self.tokenizer = get_tokenizer(
@@ -1405,7 +1483,7 @@ class ModelRpcClient:
         if tp_size == 1:
             # Init model
             self.model_server = ModelRpcService().exposed_ModelRpcServer(
-                0, server_args, port_args, False, gpu_config
+                0, server_args, port_args, False, gpu_config, model_overide_args
             )
 
             # Wrap functions
@@ -1433,7 +1511,7 @@ class ModelRpcClient:
                 # Init model
                 def init_model(i):
                     return self.remote_services[i].exposed_ModelRpcServer(
-                        i, server_args, port_args
+                        i, server_args, port_args, False, gpu_config, model_overide_args
                     )
 
                 ret = executor.map(init_model, range(tp_size))
@@ -1461,7 +1539,11 @@ def _init_service(port):
     t = ThreadedServer(
         ModelRpcService(),
         port=port,
-        protocol_config={"allow_pickle": True, "sync_request_timeout": 1800},
+        protocol_config={
+            "allow_public_attrs": True,
+            "allow_pickle": True,
+            "sync_request_timeout": 1800,
+        },
     )
     t.start()
 
@@ -1477,7 +1559,11 @@ def start_model_process(port):
             con = rpyc.connect(
                 "localhost",
                 port,
-                config={"allow_pickle": True, "sync_request_timeout": 1800},
+                config={
+                    "allow_public_attrs": True,
+                    "allow_pickle": True,
+                    "sync_request_timeout": 1800,
+                },
             )
             break
         except ConnectionRefusedError:

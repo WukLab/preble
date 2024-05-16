@@ -191,3 +191,6 @@ ToolQA
 CREATOR
 apibench_data
 ToolAlpaca
+
+# personnal
+work_dirs/
