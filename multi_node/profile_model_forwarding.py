@@ -8,7 +8,7 @@ import asyncio
 import os
 
 from sglang.srt.server_args import PortArgs, ServerArgs
-from sglang.srt.utils import handle_port_init
+from sglang.srt.utils import allocate_init_ports
 from sglang.srt.managers.router.model_rpc import ModelRpcClient, ModelRpcServer
 from sglang.srt.managers.router.infer_batch import Batch
 from sglang.srt.sampling_params import SamplingParams
@@ -186,7 +186,7 @@ async def profile_decoding(model_client: ModelRpcClient, num_seqs, ctx_len, toke
     
 def main(args):
     server_args = ServerArgs.from_cli_args(args)
-    port, additional_ports = handle_port_init(server_args.port, server_args.additional_ports, server_args.tp_size)
+    port, additional_ports = allocate_init_ports(server_args.port, server_args.additional_ports, server_args.tp_size)
     server_args.port = port
     server_args.additional_ports = additional_ports
     port_args = PortArgs(

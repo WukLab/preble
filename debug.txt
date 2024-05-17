@@ -1,0 +1,27 @@
+utils.py:179 - INFO - WARNING: Port 30000 is not available. Use 10001 instead.
+server.py:243 - INFO - http://127.0.0.1:10001, ports: PortArgs(tokenizer_port=10003, router_port=10004, detokenizer_port=10005, nccl_port=10006, migrate_port=10007, model_rpc_ports=[10008, 10009, 10010])
+model_rpc.py:71 - INFO - Use sleep forwarding: False
+model_rpc.py:76 - INFO - schedule_heuristic: lpm
+model_runner.py:343 - INFO - Rank 0: load weight begin.
+weight_utils.py:209 - INFO - Using model weights format ['*.safetensors']
+model_runner.py:385 - INFO - Rank 0: load weight end.
+model_runner.py:394 - INFO - kv one token size: 8 * 128 * 32 * 2 * 2 = 131072 bytes
+model_rpc.py:132 - INFO - Rank 0: max_total_num_token=237245, max_prefill_num_token=39540, context_len=32768, 
+model_rpc.py:139 - INFO - server_args: enable_flashinfer=True, attention_reduce_in_fp32=False, disable_radix_cache=False, disable_regex_jump_forward=False, disable_disk_cache=False, 
+model_rpc.py:876 - INFO - GPU: 0 new fill batch. #seq: 1. #cached_token: 0. #new_token: 9. #remaining_req: 0. #running_req: 0. tree_cache_hit_rate: 0.00%. windowed_cache_hit_rate: 0.00%. hit_tokens: 0. free_gpu_mem: 1.00. evictable mem: 0.00
+model_rpc.py:876 - INFO - GPU: 0 new fill batch. #seq: 1. #cached_token: 1. #new_token: 127. #remaining_req: 0. #running_req: 0. tree_cache_hit_rate: 0.73%. windowed_cache_hit_rate: 0.73%. hit_tokens: 1. free_gpu_mem: 1.00. evictable mem: 0.00
+model_rpc.py:876 - INFO - GPU: 0 new fill batch. #seq: 3. #cached_token: 369. #new_token: 17. #remaining_req: 0. #running_req: 1. tree_cache_hit_rate: 70.75%. windowed_cache_hit_rate: 70.75%. hit_tokens: 369. free_gpu_mem: 1.00. evictable mem: 0.00
+--- runtime ready ---
+
+--------------------------------------------------
+ _______ and I am the Head of School at _
+--------------------------------------------------
+--------------------------------------------------
+ the head of state and head of government of the United States
+--------------------------------------------------
+--------------------------------------------------
+ Paris. The capital of Italy is Rome. The capital of
+--------------------------------------------------
+--------------------------------------------------
+ bright, and it is up to us to ensure that it
+--------------------------------------------------

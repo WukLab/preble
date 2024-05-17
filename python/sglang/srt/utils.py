@@ -8,6 +8,8 @@ import time
 from importlib.metadata import PackageNotFoundError, version
 from io import BytesIO
 from typing import List, Optional
+import sys
+import traceback
 
 import numpy as np
 import pydantic
@@ -25,6 +27,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 show_time_cost = False
 time_infos = {}
 
+def get_exception_traceback():
+    etype, value, tb = sys.exc_info()
+    err_str = "".join(traceback.format_exception(etype, value, tb))
+    return err_str
 
 def enable_show_time_cost():
     global show_time_cost

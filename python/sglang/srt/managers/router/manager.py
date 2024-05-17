@@ -50,7 +50,7 @@ class RouterManager:
         self.recv_reqs = []
 
         # Init some configs
-        self.extend_dependency_time = global_config.request_dependency_time
+        self.request_dependency_time = global_config.request_dependency_time
         
         # Dict[uid -> migration url]
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}

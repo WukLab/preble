@@ -168,7 +168,7 @@ class RadixCache:
         # length of token is not in tree, calculated independently regardless
         def _traverse(node, length):
             while node != self.root_node:
-                if node.ref_counter > 0:
+                if node.lock_ref > 0:
                     seen.add(node)
                     length -= len(node.value)
                 node = node.parent

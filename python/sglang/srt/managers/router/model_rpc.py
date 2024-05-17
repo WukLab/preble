@@ -37,10 +37,10 @@ from sglang.srt.model_config import ModelConfig
 from sglang.srt.server_args import PortArgs, ServerArgs
 from sglang.srt.managers.router.model_runner import GPUConfig
 from sglang.srt.utils import (
-    get_exception_traceback,
     get_int_token_logit_bias,
     is_multimodal_model,
     set_random_seed,
+    get_exception_traceback,
 )
 from collections import deque
 import os
@@ -1036,7 +1036,6 @@ class ModelRpcServer:
                             next_token_ids,
                         ].tolist()
 
-                    next_token_ids = next_token_ids.tolist()
                 else:
                     vocab_size = self.model_config.vocab_size
                     logits = torch.ones((len(batch.reqs), vocab_size), dtype=torch.float16, device="cuda")
@@ -1068,7 +1067,7 @@ class ModelRpcServer:
                 )
                 _ = batch.sample(logits)
                 prefill_token_logprobs, normalized_prompt_logprobs, prefill_top_logprobs, decode_top_logprobs, last_logprobs = None, None, None, None, None
-            next_token_ids = next_token_ids.cpu().tolist()
+            next_token_ids = next_token_ids.tolist()
         else:
             next_token_ids = [self.tokenizer.eos_token_id] * len(batch.reqs)
             prefill_token_logprobs, normalized_prompt_logprobs, prefill_top_logprobs, decode_top_logprobs, last_logprobs = None, None, None, None, None

@@ -35,7 +35,6 @@ from sglang.srt.openai_api_adapter import (
     v1_completions,
 )
 from sglang.srt.server_args import PortArgs, ServerArgs
-from sglang.srt.utils import handle_port_init
 import logging
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse

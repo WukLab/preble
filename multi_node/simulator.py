@@ -39,7 +39,7 @@ from sglang.srt.managers.io_struct import (
     DumpTrace
 )
 from sglang.srt.sampling_params import SamplingParams
-from sglang.srt.backend_config import GLOBAL_BACKEND_CONFIG
+from sglang.global_config import global_config
 from sglang.srt.managers.router.infer_batch import Batch
 from benchmarks.benchmark_workload_gen import WorkloadPrefixDataLoader
 from benchmarks.benchmark_utils import RequestFuncOutput, BenchmarkMetrics
@@ -508,8 +508,8 @@ class ModelStepEvent(SimulationEvent):
         if len(out_pyobjs) != 0:
             has_finished = any([obj.finished for obj in out_pyobjs])
             if has_finished:
-                if GLOBAL_BACKEND_CONFIG.extend_dependency_time > 0:
-                    sleep_time = GLOBAL_BACKEND_CONFIG.extend_dependency_time
+                if global_config.request_dependency_time > 0:
+                    sleep_time = global_config.request_dependency_time 
         overhead = time.time() - start + forward_time + sleep_time
         self.update_lock(overhead, simulator, ServerRuntimeSimulator.Process.MANAGER)
         self.update_metric(simulator, out_pyobjs)

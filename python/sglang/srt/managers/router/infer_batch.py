@@ -193,9 +193,6 @@ class Req:
     def update_after_step(self):
         self.num_cached_tokens += self.num_inflight_tokens
         self.num_inflight_tokens = 0
-        # after one prefill step this is no longer needed
-        # set to None for logging purpose
-        self.prefix_indices = None
     
     def reset_state(self):
         self.prefix_indices = None
@@ -546,11 +543,15 @@ class Batch:
         reqs = [self.reqs[i] for i in selected_indices]
         new_indices = torch.tensor(selected_indices, dtype=torch.int32, device="cuda")
         new_batch = Batch.init_new(reqs, self.req_to_token_pool, self.token_to_kv_pool, self.tree_cache)
-        new_batch.seq_lens = self.seq_lens[new_indices]
-        new_batch.req_pool_indices = self.req_pool_indices[new_indices]
-        new_batch.position_ids_offsets = self.position_ids_offsets[new_indices]
+        # new_batch.seq_lens = self.seq_lens[new_indices]
+        # new_batch.req_pool_indices = self.req_pool_indices[new_indices]
+        # new_batch.position_ids_offsets = self.position_ids_offsets[new_indices]
         new_batch.return_logprob = any(req.return_logprob for req in reqs)
         for item in [
+            "seq_lens",
+            "req_pool_indices",
+            "position_ids_offsets",
+            "top_logprobs_nums",
             "temperatures",
             "top_ps",
             "top_ks",
@@ -683,6 +684,7 @@ class Batch:
             "frequency_penalties",
             "presence_penalties",
             "logit_bias",
+            "top_logprobs_nums",
         ]:
             cat_or_set(item)
     
@@ -774,6 +776,7 @@ class Batch:
         self.position_ids_offsets = position_ids_offsets
         self.extend_num_tokens = extend_num_tokens
         self.out_cache_loc = out_cache_loc
+        self.top_logprobs_nums = [r.top_logprobs_num for r in reqs]
 
         self.temperatures = torch.tensor(
             [r.sampling_params.temperature for r in reqs],

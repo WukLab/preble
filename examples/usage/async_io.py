@@ -45,8 +45,8 @@ if __name__ == "__main__":
     logger.addHandler(handler)
     
     # runtime = Runtime(model_path="meta-llama/Llama-2-7b-chat-hf")
-    # runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=512, load_format='dummy')
-    runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=32, enable_flashinfer=True, tp_size=2)
+    runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=32, enable_flashinfer=True)
+    # runtime = Runtime(model_path="mistralai/Mistral-7B-v0.1", chunk_prefill_budget=32, enable_flashinfer=True, tp_size=2)
     print("--- runtime ready ---\n")
     
     prefix = (

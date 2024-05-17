@@ -324,11 +324,6 @@ class ModelRunner:
             )
             initialize_model_parallel(tensor_model_parallel_size=self.tp_size)
 
-            # A small all_reduce for warmup.
-            if self.tp_size > 1:
-                torch.distributed.all_reduce(torch.zeros(1).cuda())
-            initialize_model_parallel(tensor_model_parallel_size=self.tp_size)
-
             total_gpu_memory = get_available_gpu_memory(
                 self.tp_rank, distributed=self.tp_size > 1
             ) * (1 << 30)
