@@ -1,4 +1,3 @@
-from transformers import AutoTokenizer
 import random
 import sys, os
 
@@ -33,7 +32,6 @@ sglang_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
-    # "chunk_prefill_budget": 512,
     'load_format': 'dummy',
 }
 
@@ -57,7 +55,7 @@ ours_server_args = {
     "chunk_prefill_budget": 512,
     'report_hit_ratio': True ,
     'enable_iterative_eviction': False,
-    'enable_partial_eviction': True,
+    'enable_partial_eviction': False,
     'load_format': 'dummy',
 }
 # GPU Configuration
@@ -75,7 +73,7 @@ ours_gpu_configs = [
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
-def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
+def gen_workloads_for_loogle(configuration_to_test, policies_to_test):
     for configuration in configuration_to_test:
         num_prefix_patters, num_requests, request_rate = configuration
         dataloader, requests, send_out_times = create_loogle_dataset(
@@ -109,28 +107,29 @@ exp_time = float('inf')
 exp_list = []
 for i in [2]:
     configuration_to_test = [
+        scale_to_gpu([2, 4, 0.7], i / 2),
         # scale_to_gpu([30, 168, 0.1], i / 2),
         # scale_to_gpu([30, 168, 0.2], i / 2),
         # scale_to_gpu([30, 168, 0.3], i / 2),
         # scale_to_gpu([30, 281, 0.5], i / 2),
-        scale_to_gpu([24, 393, 0.7], i / 2),
+        # scale_to_gpu([24, 393, 0.7], i / 2),
         # scale_to_gpu([30, 449, 0.8], i / 2),
         # scale_to_gpu([30, 505, 0.9], i / 2),
         # scale_to_gpu([30, 561, 1.0], i / 2),
         # scale_to_gpu([30, 1122, 2.0], i / 2),
     ]
     policies_to_test = [
-        # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
         (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
-    workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
+    workloads = gen_workloads_for_loogle(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final_ours/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/{i}r_loogle_H100_final_ours/exp.csv",
+        log_file_path=f"after_merge_upstream/{i}r_loogle/exp.log",
+        csv_log_path=f"after_merge_upstream/{i}r_loogle/exp.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=True,
+        simulate=False,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,

@@ -6,7 +6,8 @@ import uuid
 import uvloop
 import zmq
 import zmq.asyncio
-from sglang.srt.backend_config import GLOBAL_BACKEND_CONFIG
+
+from sglang.global_config import global_config
 from sglang.srt.managers.router.model_rpc import ModelRpcClient
 from sglang.srt.managers.tokenizer_manager import ReqState
 from sglang.srt.server_args import PortArgs, ServerArgs
@@ -49,11 +50,12 @@ class RouterManager:
         self.recv_reqs = []
 
         # Init some configs
-        self.extend_dependency_time = GLOBAL_BACKEND_CONFIG.extend_dependency_time
+        self.request_dependency_time = global_config.request_dependency_time
         
         # Dict[uid -> migration url]
         self.uid_to_migrate_decision: Dict[str, ReqState] = {}
         
+        # FIXME: if use router manager, fix gpu id for logging
         # self.gpu_id = self.model_client.model_server.current_gpu
         self.gpu_id = 0
 
@@ -86,9 +88,9 @@ class RouterManager:
             if len(out_pyobjs) != 0:
                 has_finished = any([obj.finished for obj in out_pyobjs])
                 if has_finished:
-                    if self.extend_dependency_time > 0:
+                    if self.request_dependency_time > 0:
                         slept = True
-                        await asyncio.sleep(self.extend_dependency_time)
+                        await asyncio.sleep(self.request_dependency_time)
 
             if not slept:
                 await asyncio.sleep(0.0006)
@@ -174,10 +176,7 @@ class RouterManager:
             self.model_client.model_server.forward_queue.extend(mreq.requets)
 
 def start_router_process(
-    server_args: ServerArgs,
-    port_args: PortArgs,
-    pipe_writer,
-    gpu_config: GPUConfig = None,
+    server_args: ServerArgs, port_args: PortArgs, pipe_writer, model_overide_args, gpu_config: GPUConfig,
 ):
     logging.basicConfig(
         level=getattr(logging, server_args.log_level.upper()),
@@ -185,7 +184,7 @@ def start_router_process(
     )
 
     try:
-        model_client = ModelRpcClient(server_args, port_args, gpu_config=gpu_config)
+        model_client = ModelRpcClient(server_args, port_args, model_overide_args, gpu_config)
         router = RouterManager(model_client, port_args)
     except Exception:
         pipe_writer.send(get_exception_traceback())

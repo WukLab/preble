@@ -6,26 +6,31 @@ import pkgutil
 from dataclasses import dataclass
 from functools import lru_cache
 import inspect
+from typing import List
+import os
 
 import numpy as np
 import torch
-from sglang.srt.managers.router.infer_batch import Batch, ForwardMode
-from sglang.srt.memory_pool import ReqToTokenPool, TokenToKVPool
-from sglang.srt.utils import is_multimodal_model
-from sglang.utils import get_available_gpu_memory
+from vllm.distributed import initialize_model_parallel
 from vllm.model_executor.layers.quantization.awq import AWQConfig
 from vllm.model_executor.layers.quantization.gptq import GPTQConfig
 from vllm.model_executor.layers.quantization.marlin import MarlinConfig
-from vllm.model_executor.model_loader import _set_default_torch_dtype
-from vllm.model_executor.parallel_utils.parallel_state import initialize_model_parallel
+from vllm.model_executor.model_loader.utils import set_default_torch_dtype
 
-QUANTIONCONFIG_MAPPING = {"awq": AWQConfig, "gptq": GPTQConfig, "marlin": MarlinConfig}
+from sglang.srt.managers.router.infer_batch import Batch, ForwardMode
+from sglang.srt.memory_pool import ReqToTokenPool, TokenToKVPool
+from sglang.srt.utils import get_available_gpu_memory, is_multimodal_model
+
+QUANTIZATION_CONFIG_MAPPING = {
+    "awq": AWQConfig,
+    "gptq": GPTQConfig,
+    "marlin": MarlinConfig,
+}
 
 logger = logging.getLogger("model_runner")
 
-
 # for server args in model endpoints
-global_server_args_dict: dict = None
+global_server_args_dict = {}
 
 
 @lru_cache()
@@ -83,6 +88,7 @@ class InputMetadata:
 
     other_kv_index: torch.Tensor = None
     return_logprob: bool = False
+    top_logprobs_nums: List[int] = None
 
     # for flashinfer
     qo_indptr: torch.Tensor = None
@@ -102,19 +108,20 @@ class InputMetadata:
             (self.batch_size + 1,), dtype=torch.int32, device="cuda"
         )
         self.kv_indptr[1:] = torch.cumsum(self.seq_lens, dim=0)
+        self.kv_last_page_len = torch.ones(
+            (self.batch_size,), dtype=torch.int32, device="cuda"
+        )
+        req_pool_indices_cpu = self.req_pool_indices.cpu().numpy()
+        seq_lens_cpu = self.seq_lens.cpu().numpy()
         self.kv_indices = torch.cat(
             [
                 self.req_to_token_pool.req_to_token[
-                    self.req_pool_indices[i].item(), : self.seq_lens[i].item()
+                    req_pool_indices_cpu[i], : seq_lens_cpu[i]
                 ]
                 for i in range(self.batch_size)
             ],
             dim=0,
         ).contiguous()
-        # logger.debug(f'received kv_indices: {self.kv_indices}')
-        self.kv_last_page_len = torch.ones(
-            (self.batch_size,), dtype=torch.int32, device="cuda"
-        )
 
         workspace_buffer = torch.empty(
             32 * 1024 * 1024, dtype=torch.int8, device="cuda"
@@ -137,15 +144,8 @@ class InputMetadata:
                 self.kv_last_page_len,
                 self.model_runner.model_config.num_attention_heads // tp_size,
                 self.model_runner.model_config.num_key_value_heads // tp_size,
+                self.model_runner.model_config.head_dim,
             ]
-
-            # flashinfer >= 0.0.3
-            # FIXME: Drop this when flashinfer updates to 0.0.4
-            if (
-                len(inspect.signature(self.prefill_wrapper.begin_forward).parameters)
-                == 7
-            ):
-                args.append(self.model_runner.model_config.head_dim)
 
             self.prefill_wrapper.begin_forward(*args)
         else:
@@ -183,6 +183,7 @@ class InputMetadata:
         out_cache_loc,
         out_cache_cont_start=None,
         out_cache_cont_end=None,
+        top_logprobs_nums=None,
         return_logprob=False,
     ):
         batch_size = len(req_pool_indices)
@@ -197,15 +198,15 @@ class InputMetadata:
                 req_pool_indices[0], seq_lens[0] - 1
             ].item()
         else:
-            seq_lens_np = seq_lens.cpu().numpy()
-            prefix_lens_np = prefix_lens.cpu().numpy()
-            position_ids_offsets_np = position_ids_offsets.cpu().numpy()
+            seq_lens_cpu = seq_lens.cpu().numpy()
+            prefix_lens_cpu = prefix_lens.cpu().numpy()
+            position_ids_offsets_cpu = position_ids_offsets.cpu().numpy()
             positions = torch.tensor(
                 np.concatenate(
                     [
                         np.arange(
-                            prefix_lens_np[i] + position_ids_offsets_np[i],
-                            seq_lens_np[i] + position_ids_offsets_np[i],
+                            prefix_lens_cpu[i] + position_ids_offsets_cpu[i],
+                            seq_lens_cpu[i] + position_ids_offsets_cpu[i],
                         )
                         for i in range(batch_size)
                     ],
@@ -231,8 +232,9 @@ class InputMetadata:
             out_cache_loc=out_cache_loc,
             out_cache_cont_start=out_cache_cont_start,
             out_cache_cont_end=out_cache_cont_end,
-            return_logprob=return_logprob,
             other_kv_index=other_kv_index,
+            return_logprob=return_logprob,
+            top_logprobs_nums=top_logprobs_nums,
         )
 
         if forward_mode == ForwardMode.EXTEND:
@@ -314,17 +316,14 @@ class ModelRunner:
 
         if not self.simulate:
             # Init torch distributed
-            torch.cuda.set_device(self.tp_rank)
+            logger.info(f'model {self.gpu_config.gpu_id}, Rank {self.tp_rank} setup')
+            torch.cuda.set_device(self.gpu_config.gpu_id + self.tp_rank)
             torch.distributed.init_process_group(
                 backend="nccl",
                 world_size=self.tp_size,
                 rank=self.tp_rank,
                 init_method=f"tcp://127.0.0.1:{self.nccl_port}",
             )
-
-            # A small all_reduce for warmup.
-            if self.tp_size > 1:
-                torch.distributed.all_reduce(torch.zeros(1).cuda())
             initialize_model_parallel(tensor_model_parallel_size=self.tp_size)
 
             total_gpu_memory = get_available_gpu_memory(
@@ -346,33 +345,33 @@ class ModelRunner:
         logger.info(f"Rank {self.tp_rank}: load weight begin.")
 
         # Load weights
-        linear_method = None
-        with _set_default_torch_dtype(torch.float16):
+        quant_config = None
+
+        quant_cfg = getattr(self.model_config.hf_config, "quantization_config", None)
+        if quant_cfg is not None:
+            quant_method = quant_cfg.get("quant_method", "").lower()
+            # compat: autogptq >=0.8.0 use checkpoint_format: str
+            # compat: autogptq <=0.7.1 is_marlin_format: bool
+            is_format_marlin = quant_cfg.get(
+                "checkpoint_format"
+            ) == "marlin" or quant_cfg.get("is_marlin_format", False)
+
+            # Use marlin if the GPTQ model is serialized in marlin format.
+            if quant_method == "gptq" and is_format_marlin:
+                quant_method = "marlin"
+
+            quant_config_class = QUANTIZATION_CONFIG_MAPPING.get(quant_method)
+
+            if quant_config_class is None:
+                raise ValueError(f"Unsupported quantization method: {quant_method}")
+
+            quant_config = quant_config_class.from_config(quant_cfg)
+            logger.info(f"quant_config: {quant_config}")
+
+        with set_default_torch_dtype(torch.float16):
             with torch.device("cuda"):
-                hf_quant_config = getattr(
-                    self.model_config.hf_config, "quantization_config", None
-                )
-                if hf_quant_config is not None:
-                    hf_quant_method = hf_quant_config["quant_method"]
-
-                    # compat: autogptq uses is_marlin_format within quant config
-                    if (
-                        hf_quant_method == "gptq"
-                        and "is_marlin_format" in hf_quant_config
-                        and hf_quant_config["is_marlin_format"]
-                    ):
-                        hf_quant_method = "marlin"
-                    quant_config_class = QUANTIONCONFIG_MAPPING.get(hf_quant_method)
-
-                    if quant_config_class is None:
-                        raise ValueError(
-                            f"Unsupported quantization method: {hf_quant_config['quant_method']}"
-                        )
-                    quant_config = quant_config_class.from_config(hf_quant_config)
-                    logger.info(f"quant_config: {quant_config}")
-                    linear_method = quant_config.get_linear_method()
                 model = model_class(
-                    config=self.model_config.hf_config, linear_method=linear_method
+                    config=self.model_config.hf_config, quant_config=quant_config
                 )
             if self.load_format == 'dummy':
                 initialize_dummy_weights(model)
@@ -441,6 +440,7 @@ class ModelRunner:
             prefix_lens=batch.prefix_lens,
             position_ids_offsets=batch.position_ids_offsets,
             out_cache_loc=batch.out_cache_loc,
+            top_logprobs_nums=batch.top_logprobs_nums,
             return_logprob=batch.return_logprob,
         )
         return self.model.forward(
@@ -458,6 +458,7 @@ class ModelRunner:
             prefix_lens=batch.prefix_lens,
             position_ids_offsets=batch.position_ids_offsets,
             out_cache_loc=batch.out_cache_loc,
+            top_logprobs_nums=batch.top_logprobs_nums,
             return_logprob=batch.return_logprob,
         )
         return self.model.forward(
@@ -477,6 +478,7 @@ class ModelRunner:
             out_cache_loc=batch.out_cache_loc,
             out_cache_cont_start=batch.out_cache_cont_start,
             out_cache_cont_end=batch.out_cache_cont_end,
+            top_logprobs_nums=batch.top_logprobs_nums,
             return_logprob=batch.return_logprob,
         )
         return self.model.forward(
@@ -494,6 +496,7 @@ class ModelRunner:
             prefix_lens=batch.prefix_lens,
             position_ids_offsets=batch.position_ids_offsets,
             out_cache_loc=batch.out_cache_loc,
+            top_logprobs_nums=batch.top_logprobs_nums,
             return_logprob=batch.return_logprob,
         )
         return self.model.forward(

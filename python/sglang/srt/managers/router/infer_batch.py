@@ -1,26 +1,39 @@
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import IntEnum, auto
 from typing import List
 import logging
 
 import numpy as np
 import torch
+
 from sglang.srt.managers.router.radix_cache import RadixCache
 from sglang.srt.memory_pool import ReqToTokenPool, TokenToKVPool
 
 logger = logging.getLogger(__name__)
 
 
-class ForwardMode(Enum):
+class ForwardMode(IntEnum):
     PREFILL = auto()
     EXTEND = auto()
     DECODE = auto()
 
 
-class FinishReason(Enum):
-    LENGTH = auto()
+class FinishReason(IntEnum):
     EOS_TOKEN = auto()
+    LENGTH = auto()
     STOP_STR = auto()
+
+    @staticmethod
+    def to_str(reason):
+        if reason == FinishReason.EOS_TOKEN:
+            return None
+        elif reason == FinishReason.LENGTH:
+            return "length"
+        elif reason == FinishReason.STOP_STR:
+            return "stop"
+        else:
+            return None
+
 
 class Req:
     def __init__(self, rid, input_text, input_ids, arrival_time, append_to_queue_time):
@@ -34,6 +47,7 @@ class Req:
         # Since jump forward may retokenize the prompt with partial outputs,
         # we maintain the original prompt length to report the correct usage.
         self.prompt_tokens = len(input_ids)
+
         # The number of decoded tokens for token usage report. Note that
         # this does not include the jump forward tokens.
         self.completion_tokens_wo_jump_forward = 0
@@ -44,11 +58,11 @@ class Req:
         self.image_offset = 0
         self.pad_value = None
 
+        # Sampling parameters
         self.sampling_params = None
-        self.return_logprob = False
-        self.logprob_start_len = 0
         self.stream = False
 
+        # Check finish
         self.tokenizer = None
         self.finished = False
         self.finish_reason = None
@@ -58,11 +72,17 @@ class Req:
         self.prefix_indices = []
         self.last_node = None
 
-        self.logprob = None
-        self.token_logprob = None
-        self.normalized_logprob = None
+        # Logprobs
+        self.return_logprob = False
+        self.logprob_start_len = 0
+        self.top_logprobs_num = 0
+        self.normalized_prompt_logprob = None
+        self.prefill_token_logprobs = None
+        self.decode_token_logprobs = None
+        self.prefill_top_logprobs = None
+        self.decode_top_logprobs = None
 
-        # For constrained decoding
+        # Constrained decoding
         self.regex_fsm = None
         self.regex_fsm_state = 0
         self.jump_forward_map = None
@@ -85,6 +105,9 @@ class Req:
         )
         if first_token.startswith("▁"):
             old_output_str = " " + old_output_str
+        if self.input_text is None:
+            # TODO(lmzheng): This can be wrong. Check with Liangsheng.
+            self.input_text = self.tokenizer.decode(self.input_ids)
         new_input_string = (
             self.input_text
             + self.output_and_jump_forward_str
@@ -170,9 +193,6 @@ class Req:
     def update_after_step(self):
         self.num_cached_tokens += self.num_inflight_tokens
         self.num_inflight_tokens = 0
-        # after one prefill step this is no longer needed
-        # set to None for logging purpose
-        self.prefix_indices = None
     
     def reset_state(self):
         self.prefix_indices = None
@@ -217,9 +237,12 @@ class Batch:
     out_cache_loc: torch.Tensor = None
     out_cache_cont_start: torch.Tensor = None
     out_cache_cont_end: torch.Tensor = None
+
+    # for processing logprobs
     return_logprob: bool = False
     num_decoding_inputs: int = 0
     multiplex_extend_decode: bool = False
+    top_logprobs_nums: List[int] = None
 
     # for multimodal
     pixel_values: List[torch.Tensor] = None
@@ -304,12 +327,11 @@ class Batch:
         extend_num_tokens = seq_lens.sum() - prefix_lens.sum()
         out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
         if out_cache_loc is None:
-            if not self.tree_cache.disable:
-                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free, enable_iterative_eviction)
-                out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
+            self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.dec_refs, enable_iterative_eviction)
+            out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
 
             if out_cache_loc is None:
-                print("Prefill out of memory. This should nerver happen.")
+                print("Prefill out of memory. This should never happen.")
                 self.tree_cache.pretty_print()
                 exit()
 
@@ -320,10 +342,14 @@ class Batch:
             ] = out_cache_loc[pt : pt + extend_lens[i]]
             pt += extend_lens[i]
 
-        # Handle logit bias
-        logit_bias = torch.zeros((bs, vocab_size), dtype=torch.float32, device=device)
+        # Handle logit bias but only allocate when needed
+        logit_bias = None
         for i in range(bs):
             if reqs[i].sampling_params.dtype == "int":
+                if logit_bias is None:
+                    logit_bias = torch.zeros(
+                        (bs, vocab_size), dtype=torch.float32, device=device
+                    )
                 logit_bias[i] = int_token_logit_bias
 
         # Set fields
@@ -341,6 +367,7 @@ class Batch:
         self.position_ids_offsets = position_ids_offsets
         self.extend_num_tokens = extend_num_tokens
         self.out_cache_loc = out_cache_loc
+        self.top_logprobs_nums = [r.top_logprobs_num for r in reqs]
 
         self.temperatures = torch.tensor(
             [r.sampling_params.temperature for r in reqs],
@@ -370,8 +397,8 @@ class Batch:
         if self.token_to_kv_pool.available_size() >= bs:
             return True
 
-        if not self.tree_cache.disable:
-            self.tree_cache.evict(bs, self.token_to_kv_pool.free, enable_iterative_eviction)
+        self.tree_cache.evict(bs, self.token_to_kv_pool.dec_refs, enable_iterative_eviction)
+
         if self.token_to_kv_pool.available_size() >= bs:
             return True
 
@@ -391,22 +418,22 @@ class Batch:
         # )
 
         retracted_reqs = []
-        seq_lens_np = self.seq_lens.cpu().numpy()
-        req_pool_indices_np = self.req_pool_indices.cpu().numpy()
+        seq_lens_cpu = self.seq_lens.cpu().numpy()
+        req_pool_indices_cpu = self.req_pool_indices.cpu().numpy()
         while self.token_to_kv_pool.available_size() < len(self.reqs):
             idx = sorted_indices.pop()
             req = self.reqs[idx]
             retracted_reqs.append(req)
 
-            self.tree_cache.dec_ref_counter(req.last_node)
-            req.reset_state()
-
             # TODO: apply more fine-grained retraction
-
+            last_uncached_pos = len(req.prefix_indices)
             token_indices = self.req_to_token_pool.req_to_token[
-                req_pool_indices_np[idx]
-            ][: seq_lens_np[idx]]
-            self.token_to_kv_pool.free(token_indices)
+                req_pool_indices_cpu[idx]
+            ][last_uncached_pos : seq_lens_cpu[idx]]
+            self.token_to_kv_pool.dec_refs(token_indices)
+
+            self.tree_cache.dec_lock_ref(req.last_node)
+            req.reset_state()
 
         self.filter_batch(sorted_indices)
 
@@ -427,20 +454,18 @@ class Batch:
                     if len(jump_forward_str) <= 1:
                         continue
 
-                    # insert the old request into tree_cache
-                    token_ids_in_memory = tuple(req.input_ids + req.output_ids)[:-1]
                     if req_pool_indices_cpu is None:
-                        req_pool_indices_cpu = self.req_pool_indices.cpu().tolist()
-                    req_pool_idx = req_pool_indices_cpu[i]
-                    indices = self.req_to_token_pool.req_to_token[
-                        req_pool_idx, : len(token_ids_in_memory)
-                    ]
-                    prefix_len = self.tree_cache.insert(
-                        token_ids_in_memory, indices.clone()
+                        req_pool_indices_cpu = self.req_pool_indices.tolist()
+
+                    # insert the old request into tree_cache
+                    self.tree_cache.cache_req(
+                        token_ids=tuple(req.input_ids + req.output_ids)[:-1],
+                        last_uncached_pos=len(req.prefix_indices),
+                        req_pool_idx=req_pool_indices_cpu[i],
                     )
-                    self.token_to_kv_pool.free(indices[:prefix_len])
-                    self.req_to_token_pool.free(req_pool_idx)
-                    self.tree_cache.dec_ref_counter(req.last_node)
+
+                    # unlock the last node
+                    self.tree_cache.dec_lock_ref(req.last_node)
 
                     # jump-forward
                     req.jump_forward_and_retokenize(jump_forward_str, next_state)
@@ -472,7 +497,7 @@ class Batch:
             self.out_cache_loc = self.token_to_kv_pool.alloc(bs)
 
             if self.out_cache_loc is None:
-                print("Decode out of memory. This should nerver happen.")
+                print("Decode out of memory. This should never happen.")
                 self.tree_cache.pretty_print()
                 exit()
 
@@ -501,6 +526,7 @@ class Batch:
         self.prefix_lens = None
         self.position_ids_offsets = self.position_ids_offsets[new_indices]
         self.out_cache_loc = self.out_cache_cont_start = self.out_cache_cont_end = None
+        self.top_logprobs_nums = [self.top_logprobs_nums[i] for i in unfinished_indices]
         self.return_logprob = any(req.return_logprob for req in self.reqs)
 
         for item in [
@@ -521,6 +547,7 @@ class Batch:
         new_batch.req_pool_indices = self.req_pool_indices[new_indices]
         new_batch.position_ids_offsets = self.position_ids_offsets[new_indices]
         new_batch.return_logprob = any(req.return_logprob for req in reqs)
+        new_batch.top_logprobs_nums = [self.top_logprobs_nums[i] for i in selected_indices]
         for item in [
             "temperatures",
             "top_ps",
@@ -592,6 +619,7 @@ class Batch:
             [self.position_ids_offsets, other.position_ids_offsets]
         )
         self.out_cache_loc = self.out_cache_cont_start = self.out_cache_cont_end = None
+        self.top_logprobs_nums.extend(other.top_logprobs_nums)
         self.return_logprob = any(req.return_logprob for req in self.reqs)
 
         for item in [
@@ -600,11 +628,27 @@ class Batch:
             "top_ks",
             "frequency_penalties",
             "presence_penalties",
-            "logit_bias",
         ]:
-            setattr(
-                self, item, torch.concat([getattr(self, item), getattr(other, item)])
+            self_val = getattr(self, item, None)
+            other_val = getattr(other, item, None)
+            setattr(self, item, torch.concat([self_val, other_val]))
+
+        # logit_bias can be None
+        if self.logit_bias is not None or other.logit_bias is not None:
+            vocab_size = (
+                self.logit_bias.shape[1]
+                if self.logit_bias is not None
+                else other.logit_bias.shape[1]
             )
+            if self.logit_bias is None:
+                self.logit_bias = torch.zeros(
+                    (len(self.reqs), vocab_size), dtype=torch.float32, device="cuda"
+                )
+            if other.logit_bias is None:
+                other.logit_bias = torch.zeros(
+                    (len(other.reqs), vocab_size), dtype=torch.float32, device="cuda"
+                )
+            self.logit_bias = torch.concat([self.logit_bias, other.logit_bias])
 
     def concat(self, other):
         self.reqs.extend(other.reqs)
@@ -612,6 +656,7 @@ class Batch:
         self.out_cache_cont_start = self.out_cache_cont_end = None
         self.return_logprob = any(req.return_logprob for req in self.reqs)
         self.extend_num_tokens = other.extend_num_tokens
+        self.top_logprobs_nums.extend(other.top_logprobs_nums)
         
         def cat_or_set(attr):
             s, t = getattr(self, attr), getattr(other, attr)
@@ -621,7 +666,7 @@ class Batch:
                 setattr(self, attr, t)
             else:
                 setattr(
-                    self, attr, torch.cat([getattr(self, attr), getattr(other, attr)])
+                    self, attr, torch.cat([s, t])
                 )
         
         for item in [
@@ -691,7 +736,7 @@ class Batch:
         out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
         if out_cache_loc is None:
             if not self.tree_cache.disable:
-                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free, enable_iterative_eviction)
+                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.dec_refs, enable_iterative_eviction)
                 out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
 
             if out_cache_loc is None:
@@ -728,6 +773,7 @@ class Batch:
         self.position_ids_offsets = position_ids_offsets
         self.extend_num_tokens = extend_num_tokens
         self.out_cache_loc = out_cache_loc
+        self.top_logprobs_nums = [r.top_logprobs_num for r in reqs]
 
         self.temperatures = torch.tensor(
             [r.sampling_params.temperature for r in reqs],
@@ -756,7 +802,8 @@ class Batch:
         # Post process logits
         logits = logits.contiguous()
         logits.div_(self.temperatures)
-        logits.add_(self.logit_bias)
+        if self.logit_bias is not None:
+            logits.add_(self.logit_bias)
 
         has_regex = any(req.regex_fsm is not None for req in self.reqs)
         if has_regex:
