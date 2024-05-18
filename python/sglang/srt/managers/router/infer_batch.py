@@ -543,15 +543,12 @@ class Batch:
         reqs = [self.reqs[i] for i in selected_indices]
         new_indices = torch.tensor(selected_indices, dtype=torch.int32, device="cuda")
         new_batch = Batch.init_new(reqs, self.req_to_token_pool, self.token_to_kv_pool, self.tree_cache)
-        # new_batch.seq_lens = self.seq_lens[new_indices]
-        # new_batch.req_pool_indices = self.req_pool_indices[new_indices]
-        # new_batch.position_ids_offsets = self.position_ids_offsets[new_indices]
+        new_batch.seq_lens = self.seq_lens[new_indices]
+        new_batch.req_pool_indices = self.req_pool_indices[new_indices]
+        new_batch.position_ids_offsets = self.position_ids_offsets[new_indices]
         new_batch.return_logprob = any(req.return_logprob for req in reqs)
+        new_batch.top_logprobs_nums = [self.top_logprobs_nums[i] for i in selected_indices]
         for item in [
-            "seq_lens",
-            "req_pool_indices",
-            "position_ids_offsets",
-            "top_logprobs_nums",
             "temperatures",
             "top_ps",
             "top_ks",
@@ -659,6 +656,7 @@ class Batch:
         self.out_cache_cont_start = self.out_cache_cont_end = None
         self.return_logprob = any(req.return_logprob for req in self.reqs)
         self.extend_num_tokens = other.extend_num_tokens
+        self.top_logprobs_nums.extend(other.top_logprobs_nums)
         
         def cat_or_set(attr):
             s, t = getattr(self, attr), getattr(other, attr)
@@ -668,7 +666,7 @@ class Batch:
                 setattr(self, attr, t)
             else:
                 setattr(
-                    self, attr, torch.cat([getattr(self, attr), getattr(other, attr)])
+                    self, attr, torch.cat([s, t])
                 )
         
         for item in [
@@ -684,7 +682,6 @@ class Batch:
             "frequency_penalties",
             "presence_penalties",
             "logit_bias",
-            "top_logprobs_nums",
         ]:
             cat_or_set(item)
     
@@ -739,7 +736,7 @@ class Batch:
         out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
         if out_cache_loc is None:
             if not self.tree_cache.disable:
-                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.free, enable_iterative_eviction)
+                self.tree_cache.evict(extend_num_tokens, self.token_to_kv_pool.dec_refs, enable_iterative_eviction)
                 out_cache_loc = self.token_to_kv_pool.alloc(extend_num_tokens)
 
             if out_cache_loc is None:

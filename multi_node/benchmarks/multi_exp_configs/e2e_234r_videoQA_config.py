@@ -34,16 +34,16 @@ sglang_server_args = {
     "enable_flashinfer": True,
     'schedule_heuristic': 'lpm',
     # "chunk_prefill_budget": 512,
-    'tp_sze': 4,
+    'tp_size': 1,
     'load_format': 'dummy'
 }
 
 # GPU Configuration
 baseline_gpu_configs = [
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
-    # GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    # GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
+    # GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
 ]
 add_simulation_to_gpu_config(baseline_gpu_configs)
 
@@ -55,19 +55,19 @@ ours_server_args = {
     'context_length': 32768,
     "enable_flashinfer": True,
     'schedule_heuristic': 'fcfs-mpq',
-    "chunk_prefill_budget": 1024,
+    "chunk_prefill_budget": 512,
     'report_hit_ratio': True ,
     'enable_iterative_eviction': False,
-    'enable_partial_eviction': True,
-    'tp_sze': 4,
+    'enable_partial_eviction': False,
+    'tp_size': 1,
     'load_format': 'dummy'
 }
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    # GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
+    # GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args, ssh_config=ssh_config_06),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args, ssh_config=ssh_config_06),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
@@ -113,12 +113,12 @@ exp_time = float('inf')
 exp_list = []
 for i in [2]:
     configuration_to_test = [
-        scale_to_gpu([240, 150, 0.5], i / 2),
-        scale_to_gpu([240, 300, 1], i / 2),
-        scale_to_gpu([240, 600, 2], i / 2),
-        scale_to_gpu([240, 900, 3], i / 2),
-        scale_to_gpu([240, 1200, 4], i / 2),
-        scale_to_gpu([240, 1500, 5], i / 2),
+        # scale_to_gpu([240, 150, 0.5], i / 2),
+        # scale_to_gpu([240, 300, 1], i / 2),
+        # scale_to_gpu([240, 600, 2], i / 2),
+        scale_to_gpu([150, 900, 3], i / 2),
+        # scale_to_gpu([150, 1200, 4], i / 2),
+        # scale_to_gpu([150, 1500, 5], i / 2),
         
         # scale_to_gpu([240, 1800, 6], i / 2),
         # scale_to_gpu([240, 2100, 7], i / 2),
@@ -132,10 +132,10 @@ for i in [2]:
     ]
     workloads = gen_workloads_for_videoQA(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"real_ckpt_all_in_one/{i}r_videoQA_H100/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/{i}r_videoQA_H100/exp.csv",
-        # log_file_path="logs/debug_loogle/exp.log",
-        # csv_log_path="logs/debug_loogle/exp.csv",
+        # log_file_path=f"after_merge_upstream/{i}r_videoQA/exp.log",
+        # csv_log_path=f"after_merge_upstream/{i}r_videoQA/exp.csv",
+        log_file_path="logs/debug_loogle/exp.log",
+        csv_log_path="logs/debug_loogle/exp.csv",
         simulate=False,
         model_path=model_name,
         workload_configs=workloads,

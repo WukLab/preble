@@ -1,4 +1,3 @@
-from transformers import AutoTokenizer
 import random
 import sys, os
 

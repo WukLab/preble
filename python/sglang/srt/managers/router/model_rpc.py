@@ -194,7 +194,7 @@ class ModelRpcServer:
         if not self.gpu_config:
             self.current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[torch.cuda.current_device()]
         else:
-            self.current_gpu = self.gpu_config.gpu_id
+            self.current_gpu = self.gpu_config.gpu_id + self.tp_rank
         self.total_scheduling_overhead = 0
         self.schedule_waiting_overhead = 0
         self.recomputed_tokens = 0
@@ -352,7 +352,7 @@ class ModelRpcServer:
             new_tokens = min(target_to_schedule.get_num_unfinished_tokens(), budget.get_remaining_token_budget())
             if (batch.token_to_kv_pool.available_size() < new_tokens 
                 and not batch.tree_cache.disable):
-                batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.free, self.enable_iterative_eviction)
+                batch.tree_cache.evict(new_tokens, batch.token_to_kv_pool.dec_refs, self.enable_iterative_eviction)
             # 2. if not enough, evict running requests
             while batch.token_to_kv_pool.available_size() < new_tokens:
                 if not current_running_idx:
@@ -362,11 +362,11 @@ class ModelRpcServer:
                     evict_idx = current_running_idx.pop()
                     evict_req = batch.reqs[evict_idx]
                     
-                batch.tree_cache.dec_ref_counter(evict_req.last_node)
+                batch.tree_cache.dec_lock_ref(evict_req.last_node)
                 token_indices = batch.req_to_token_pool.req_to_token[
                     req_pool_indices_cpu[evict_idx]
                 ][: evict_req.num_cached_tokens]
-                batch.token_to_kv_pool.free(token_indices)
+                batch.token_to_kv_pool.dec_refs(token_indices)
                 batch.req_to_token_pool.free(req_pool_indices_cpu[evict_idx])
                 self.recomputed_tokens += len(evict_req.input_ids)
                 
@@ -542,7 +542,7 @@ class ModelRpcServer:
                     start_event = torch.cuda.Event(enable_timing=True)
                     end_event = torch.cuda.Event(enable_timing=True)
                     start_event.record()
-                    logits, (_, _, last_logprobs) = self.model_runner.forward(
+                    logits, (_, _, _, _, last_logprobs) = self.model_runner.forward(
                         batch, ForwardMode.EXTEND
                     )
                     end_event.record()
@@ -585,14 +585,17 @@ class ModelRpcServer:
             logits = last_logprobs = None
             start_event, end_event = None, None
             
+        prefill_token_logprobs, normalized_prompt_logprobs, prefill_top_logprobs, decode_top_logprobs = None, None, None, None
         # Only batch transfer the selected logprobs of the next token to CPU to reduce overhead.
         reqs = batch.reqs
         if last_logprobs is not None:
-            last_logprobs = last_logprobs[
-                torch.arange(len(reqs)), next_token_ids
+            last_token_logprobs = last_logprobs[
+                torch.arange(len(batch.reqs), device=next_token_ids.device),
+                next_token_ids,
             ].tolist()
 
         # Check finish condition
+        pt = 0
         for i, (req, next_tok_id) in enumerate(zip(reqs, next_token_ids)):
             req.update_after_step()
             if req.get_num_unfinished_tokens() == 0:
@@ -600,8 +603,31 @@ class ModelRpcServer:
                 req.output_ids.append(next_tok_id)
                 req.check_finished()
 
-                if last_logprobs is not None:
-                    req.token_logprob.append((next_tok_id, last_logprobs[i]))
+                if req.return_logprob:
+                    req.normalized_prompt_logprob = normalized_prompt_logprobs[i]
+
+                    # If logprob_start_len > 0, then first logprob_start_len prompt tokens will be ignored.
+                    req.prefill_token_logprobs = list(
+                        zip(
+                            prefill_token_logprobs[pt : pt + req.extend_input_len - 1],
+                            req.input_ids[-req.extend_input_len + 1 :],
+                        )
+                    )
+                    if req.logprob_start_len == 0:
+                        req.prefill_token_logprobs = [
+                            (None, req.input_ids[0])
+                        ] + req.prefill_token_logprobs
+                    req.decode_token_logprobs = [
+                        (last_token_logprobs[i], next_token_ids[i])
+                    ]
+
+                if req.top_logprobs_num > 0:
+                    req.prefill_top_logprobs = prefill_top_logprobs[i]
+                    if req.logprob_start_len == 0:
+                        req.prefill_top_logprobs = [None] + req.prefill_top_logprobs
+                    req.decode_top_logprobs = [decode_top_logprobs[i]]
+
+            pt += req.extend_input_len
 
         self.handle_finished_requests(batch)
         if batch.is_empty():
@@ -1469,7 +1495,7 @@ class ModelRpcService(rpyc.Service):
 
 class ModelRpcClient:
     def __init__(
-        self, server_args: ServerArgs, port_args: PortArgs, model_overide_args, gpu_config: GPUConfig = None,
+        self, server_args: ServerArgs, port_args: PortArgs, model_overide_args, gpu_config: GPUConfig,
     ):
         tp_size = server_args.tp_size
         self.gpu_config = gpu_config

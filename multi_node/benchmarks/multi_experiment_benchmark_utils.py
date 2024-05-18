@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 from typing import List, Optional, Iterator, Tuple, Dict
-from transformers import AutoTokenizer
-AutoTokenizer.from_pretrained("gpt2")
 import sys, os
 
 # Add the parent directory of the 'src' directory to the Python path

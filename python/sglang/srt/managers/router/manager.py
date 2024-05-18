@@ -176,7 +176,7 @@ class RouterManager:
             self.model_client.model_server.forward_queue.extend(mreq.requets)
 
 def start_router_process(
-    server_args: ServerArgs, port_args: PortArgs, pipe_writer, model_overide_args, gpu_config: GPUConfig = None,
+    server_args: ServerArgs, port_args: PortArgs, pipe_writer, model_overide_args, gpu_config: GPUConfig,
 ):
     logging.basicConfig(
         level=getattr(logging, server_args.log_level.upper()),

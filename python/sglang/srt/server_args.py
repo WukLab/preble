@@ -268,12 +268,6 @@ class ServerArgs:
             help="Whether the server should log prefix hit",
         )
         parser.add_argument(
-            "--api-key",
-            type=str,
-            default=ServerArgs.api_key,
-            help="Set API Key",
-        )
-        parser.add_argument(
             '--chunk-prefill-budget',
             type=int,
             default=ServerArgs.chunk_prefill_budget,

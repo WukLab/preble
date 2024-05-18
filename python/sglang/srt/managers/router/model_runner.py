@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import inspect
 from typing import List
+import os
 
 import numpy as np
 import torch
@@ -315,7 +316,8 @@ class ModelRunner:
 
         if not self.simulate:
             # Init torch distributed
-            torch.cuda.set_device(self.tp_rank)
+            logger.info(f'model {self.gpu_config.gpu_id}, Rank {self.tp_rank} setup')
+            torch.cuda.set_device(self.gpu_config.gpu_id + self.tp_rank)
             torch.distributed.init_process_group(
                 backend="nccl",
                 world_size=self.tp_size,

@@ -208,8 +208,9 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer, gpu_config, model
         level=os.environ.get('LOGLEVEL', 'INFO').upper()
     )
 
-    if server_args.cuda_devices:
-       os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in server_args.cuda_devices)
+    # if server_args.cuda_devices:
+    #     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in server_args.cuda_devices)
+    #     logger.info(f"Set CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']}")
 
     logging.basicConfig(
         level=getattr(logging, server_args.log_level.upper()),
@@ -253,8 +254,8 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer, gpu_config, model
             server_args,
             port_args,
             pipe_router_writer,
-            gpu_config,
             model_overide_args,
+            gpu_config,
         ),
     )
     proc_router.start()
@@ -347,14 +348,72 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer, gpu_config, model
 class Runtime:
     def __init__(
         self,
-        log_evel: str = "error",
-        gpu_config: Optional[GPUConfig] = None,
+        model_path: str,
+        gpu_config: GPUConfig,
+        tokenizer_path: Optional[str] = None,
+        load_format: str = "auto",
+        tokenizer_mode: str = "auto",
+        trust_remote_code: bool = True,
+        mem_fraction_static: float = ServerArgs.mem_fraction_static,
+        max_prefill_num_token: int = ServerArgs.max_prefill_num_token,
+        context_length: int = ServerArgs.context_length,
+        host: str = '0.0.0.0',
+        tp_size: int = 1,
+        schedule_heuristic: str = "lpm",
+        attention_reduce_in_fp32: bool = False,
+        random_seed: int = 42,
+        log_level: str = "error",
+        disable_radix_cache: bool = False,
+        enable_flashinfer: bool = False,
+        disable_regex_jump_forward: bool = False,
+        disable_disk_cache: bool = False,
+        api_key: str = "",
+        port: Optional[int] = None,
+        additional_ports: Optional[Union[List[int], int]] = None,
+        cuda_devices: Optional[List[int]] = None,
+        freeze: bool = False,
+        log_prefix_hit: bool = False,
+        chunk_prefill_budget: int = 0,
+        hit_trace_window_size: int = 30,
+        report_hit_ratio: bool = True,
+        enable_iterative_eviction: bool = False,
+        enable_partial_eviction: bool = False,
         model_overide_args: Optional[dict] = None,
-        *args,
-        **kwargs,
+        **kwargs,   # additional args not specific to sglang
     ):
         """See the arguments in server_args.py::ServerArgs"""
-        self.server_args = ServerArgs(*args, log_level=log_evel, **kwargs)
+        self.server_args = ServerArgs(
+            model_path=model_path,
+            tokenizer_path=tokenizer_path,
+            host=host,
+            port=port,
+            additional_ports=additional_ports,
+            load_format=load_format,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=trust_remote_code,
+            mem_fraction_static=mem_fraction_static,
+            max_prefill_num_token=max_prefill_num_token,
+            context_length=context_length,
+            tp_size=tp_size,
+            schedule_heuristic=schedule_heuristic,
+            attention_reduce_in_fp32=attention_reduce_in_fp32,
+            random_seed=random_seed,
+            log_level=log_level,
+            cuda_devices=cuda_devices,
+            freeze=freeze,
+            log_prefix_hit=log_prefix_hit,
+            disable_radix_cache=disable_radix_cache,
+            enable_flashinfer=enable_flashinfer,
+            disable_regex_jump_forward=disable_regex_jump_forward,
+            disable_disk_cache=disable_disk_cache,
+            api_key=api_key,
+            chunk_prefill_budget=chunk_prefill_budget,
+            hit_trace_window_size=hit_trace_window_size,
+            report_hit_ratio=report_hit_ratio,
+            enable_iterative_eviction=enable_iterative_eviction,
+            enable_partial_eviction=enable_partial_eviction,
+            **kwargs,
+        )
 
         # Pre-allocate ports
         self.server_args.port, self.server_args.additional_ports = allocate_init_ports(

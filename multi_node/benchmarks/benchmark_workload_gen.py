@@ -894,6 +894,7 @@ class LooGLEDataset(DataLoader):
         scale_factor = self.total_num_requests / num_raw_requests
         request_pre_prefix = [0] * len(sampled_dataset)
         for i, item in tqdm(enumerate(sampled_dataset)):
+            print(i)
             raw_inputs = item["input"]
             # if i == 0:
             #     print(raw_inputs)
