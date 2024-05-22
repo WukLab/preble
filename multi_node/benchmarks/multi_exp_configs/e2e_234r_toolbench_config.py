@@ -41,8 +41,10 @@ sglang_server_args = {
 baseline_gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=1,  use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=2,  use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=3,  use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
     # GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=sglang_server_args, ssh_config=ssh_config_06),
 ]
@@ -66,16 +68,10 @@ ours_server_args = {
 ours_gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
-    # GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args, ssh_config=ssh_config_06),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=7, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1,  use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=2,  use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3,  use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -111,29 +107,33 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 
 exp_time = float('inf')
-
 exp_list = []
-for i in [2]:
+for i in [4]:
     configuration_to_test = [
-        scale_to_gpu([320, 900, 3, 1.07], i / 2),
-        scale_to_gpu([320, 1800, 6, 1.07], i / 2),
-        scale_to_gpu([320, 2700, 9, 1.07], i / 2),
-        scale_to_gpu([320, 3600, 12, 1.07], i / 2),
-        scale_to_gpu([320, 4500, 15, 1.07], i / 2),
-        scale_to_gpu([320, 5400, 18, 1.07], i / 2),
+        # scale_to_gpu([320, 900, 3, 1.07], i / 2),
+        # scale_to_gpu([320, 1800, 6, 1.07], i / 2),
+        # scale_to_gpu([320, 2700, 9, 1.07], i / 2),
+        # scale_to_gpu([200, 3600, 12, 1.07], i / 2),
+        # scale_to_gpu([400, 3600, 12, 1.07], i / 2),
+        # scale_to_gpu([1600, 3600, 12, 1.07], i / 2),
+        scale_to_gpu([1000, 3600, 12, 1.1], i / 2),
+        # scale_to_gpu([320, 4500, 15, 1.07], i / 2),
+        # scale_to_gpu([320, 5400, 18, 1.07], i / 2),
     ]
     policies_to_test = [
         (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs[:i], 'oracle'),  
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs[:i], 'oracle'),  
         # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs[:i], ''),
     ]
+
     workloads = gen_workloads_for_toolbench(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"real_ckpt_all_in_one/{i}r_toolbench_H100_final/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/{i}r_toolbench_H100_final/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/rebalancer/rebalancer.log",
+        csv_log_path=f"real_ckpt_all_in_one/rebalancer/rebalancer.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=False,
+        simulate=True,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,

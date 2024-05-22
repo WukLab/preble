@@ -1,4 +1,3 @@
-from gpu_stats_profiling import get_gpu_profile
 from model_runtime_manager import ModelDetails
 from typing import DefaultDict, List
 from collections import defaultdict

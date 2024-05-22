@@ -440,6 +440,7 @@ class GenerateRequestEvent(SimulationEvent):
                 return_logprob=obj.return_logprob,
                 logprob_start_len=obj.logprob_start_len,
                 stream=obj.stream,
+                top_logprobs_num=obj.top_logprobs_num,
                 arrival_time=self.time,
             )
             overhead = time.time() - start

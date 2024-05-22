@@ -290,14 +290,11 @@ class RadixCache:
     #NOTE: tree node should not be deleted if partial eviction
     def _delete_leaf(self, node, num_evict_token):
         assert num_evict_token > 0, "num_evict_token should be greater than 0"
-        for k, v in node.parent.children.items():
-            if v == node:
-                break
-        
-        del node.parent.children[k]
+        del node.parent.children[node.key[0]]
         if num_evict_token < len(node.value):
             node.value = node.value[:-num_evict_token]
-            node.parent.children[k[:-num_evict_token]] = node
+            node.key = node.key[:-num_evict_token]
+            node.parent.children[node.key[0]] = node
         self.evictable_size_ -= num_evict_token
 
     def _total_size_helper(self, node):

@@ -36,7 +36,6 @@ from multi_node_loader import MultiNodeLoader
 
 from benchmark_utils import BenchmarkMetrics
 from benchmark_workload_gen import *
-from multi_node.global_scheduler import GlobalScheduler
 from multi_node.global_scheduler_with_time import GlobalSchedulerWithTime
 from multi_experiment_benchmark_utils import DefaultWorkload, ConfigurableMajorExperimentArgs, AllExperiments, ExperimentType, Workload
 
@@ -91,21 +90,11 @@ def register_selector(
         )
         return
 
-    def handle_histogram_based_recomp():
-        return GlobalScheduler(
-            num_nodes=len(model_details.runtimes), enable_eviction=False, enable_miss_rate=True
-        )
-
-    def handle_histogram_based_recomp_without_miss_rate():
-        return GlobalScheduler(
-            num_nodes=len(model_details.runtimes), enable_eviction=False, enable_miss_rate=False
-        )
     
     selector_creators = {
-        CustomPolicyType.GlobalScheduler: handle_histogram_based_recomp,
-        CustomPolicyType.GlobalSchedulerWithoutMissRate: handle_histogram_based_recomp_without_miss_rate,
         CustomPolicyType.GlobalSchedulerTime: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes)),
         CustomPolicyType.GlobalSchedulerTimeWithEviction: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes), enable_eviction=True),
+        CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance: lambda: GlobalSchedulerWithTime(num_nodes=len(model_details.runtimes), enable_eviction=True, enable_rebalancing=False),
     }
 
     if custom_policy not in selector_creators:
@@ -211,17 +200,16 @@ if __name__ == "__main__":
     # from multi_node.benchmarks.multi_exp_configs.e2e_4r_videoQA_config import videoQA_experiment as vqa_4r_config
     # exp_args = AllExperiments([vqa_2r_config, vqa_4r_config]) 
     
-    
     # from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_programming import exp_args
-#     from benchmarks.multi_exp_configs.e2e_programming import exp_args
-#     from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
+    #     from benchmarks.multi_exp_configs.e2e_programming import exp_args
+    #     from benchmarks.multi_exp_configs.e2e_loogle_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_mix_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_videoQA_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
-    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_loogle_config import exp_args
-    from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
+    # from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_common_share_micro_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_zipf import exp_args

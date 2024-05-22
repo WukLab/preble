@@ -60,10 +60,10 @@ ssh_config_08 = {
 }
 # GPU Configuration
 ours_gpu_configs = [
-    GPUConfig(gpu_id=0, url=None, use_ssh=True, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url=None, use_ssh=True, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=2, url=None, use_ssh=True, runtime_args=ours_server_args),
-    # GPUConfig(gpu_id=3, url=None, use_ssh=True, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=True, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=True, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=True, runtime_args=ours_server_args),
@@ -81,18 +81,13 @@ configuration_to_test = [
     # scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
     # [200, 7200, 24],
     {
-        'toolbench': scale_to_gpu([100, 2000, 15], len(ours_gpu_configs) // 2),
-        'chameleon': scale_to_gpu([7, 70, 15], len(ours_gpu_configs) // 2),
+        'toolbench': scale_to_gpu([200, 3600], len(ours_gpu_configs) // 2),
+        'videoqa': scale_to_gpu([150, 900], len(ours_gpu_configs) // 2),
     }
 ]
 
 policies_to_test = [
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without_miss_rate'),
-    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalScheduler, ours_gpu_configs, 'global_scheduler'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTime, ours_gpu_configs, 'global_scheduler_with_time'),
-    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerWithoutMissRate, ours_gpu_configs, 'global_scheduler_without'),
-    # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, ''),
 ]
 
 def gen_workloads_for_mix(configuration_to_test, policies_to_test):
@@ -104,25 +99,24 @@ def gen_workloads_for_mix(configuration_to_test, policies_to_test):
             # assert request_rate is None or request_rate == config[2], "Request rate should be the same for all datasets"
             num_prefix_patters += config[0] if config[0] is not None else 0
             # request_rate = config[2]
+            req_groups = []
             if dataset == 'toolbench':
-                dataloader, requests_toolbench, _ = create_toolbench_dataset(
+                dataloader, requests, send_out_times = create_toolbench_dataset_trace(
                     config,
                     model_name, 
                     exp_time, 
                     data_path="/mnt/data/ssd/dongming/stateful_llm_serving/multi_node/benchmarks/datasets/G1_workload_updated_input_output_lengths_4096.json",
                     load_dist=LoadDistribution.EVEN,
                 )
-                requests += requests_toolbench
-            elif dataset == 'chameleon':
-                dataloader, requests_chameleon, _ = create_chameleon_dataset(
+            elif dataset == 'videoqa':
+                dataloader, requests, send_out_times = create_videoQA_dataset_trace(
                     config,
                     model_name,
                     exp_time,
-                    data_path='/mnt/data/ssd/dongming/stateful_llm_serving/chameleon-llm/results/tabmwp/chameleon_gpt4_test_cache.jsonl',
-                    load_dist=LoadDistribution.EVEN,
+                    data_path="datasets/VideoQA.csv",
+                    max_shared_prompt_length=8192,
                 )
-                requests += requests_chameleon
-                breakpoint()
+            req_groups.append((requests, send_out_times))
 
         random.shuffle(requests)
         send_out_times = calc_send_out_times(requests, request_rate, exp_time)
@@ -135,10 +129,10 @@ def gen_workloads_for_mix(configuration_to_test, policies_to_test):
                     custom_policy_msg = custom_policy_msg,
                     request_groups=[
                         RequestGroup(requests=requests,
-                                                 request_rate=request_rate,
-                                                 send_out_times=send_out_times,
-                                                 request_type=ExperimentType.default)
-                                        ],
+                                    request_rate=request_rate,
+                                    send_out_times=send_out_times,
+                                    request_type=ExperimentType.default)
+                        for requests, send_out_times in req_groups],
                     # send_out_times=send_out_times,
                     num_prefix_patterns=num_prefix_patters,
                     random_ratio=0.0,
