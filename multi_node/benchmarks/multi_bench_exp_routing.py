@@ -69,12 +69,12 @@ def register_selector(
         CustomPolicyType.PROGRAMMING_ORACLE: ProgrammingOracle,
         CustomPolicyType.VIDEO_ORACLE: VideoOracle,
         CustomPolicyType.TB_DOMAIN_ORACLE: TBMultiDomainOracle,
-        CustomPolicyType.VIRTUALENV_ORACLE: VirtualenvOracle
+        CustomPolicyType.VirtualenvOracle: VirtualenvOracle
     }
 
     def handle_oracle(oracle_type):
         """Generic handler for oracle types."""
-        if oracle_type in (CustomPolicyType.ORACLE, CustomPolicyType.ORACLE_HOT_COLD):
+        if oracle_type in (CustomPolicyType.ORACLE, CustomPolicyType.ORACLE_HOT_COLD, CustomPolicyType.VirtualenvOracle):
             return oracle_creators[oracle_type](
                 num_nodes=len(model_details.runtimes),
                 num_workloads=workload_config.num_prefix_patterns,
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     # from benchmarks.multi_exp_configs.e2e_videoQA_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_toolbench_config import exp_args
     # from benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
-    from multi_node.benchmarks.multi_exp_configs.e2e_virtualenv_config import exp_args
+    from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_videoQA_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_common_share_micro_config import exp_args
     # from multi_node.benchmarks.multi_exp_configs.e2e_234r_toolbench_config import exp_args

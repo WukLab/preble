@@ -110,7 +110,7 @@ class RequestRateManager:
                             workloads_to_finish.remove(next_workload_id)
                             self.workload_finished += 1
                 await asyncio.sleep(0.001)
-            # random.shuffle(requests_to_run)
+            random.shuffle(requests_to_run)
             i += 1
 
     async def send_requests_default(self, 

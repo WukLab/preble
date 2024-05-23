@@ -35,6 +35,7 @@ class TreeNode:
         self.is_leaf = False
         self.decode_length = deque()
         self.context_length = 0
+        self.depth = 0
 
     def has_cached_gpu(self, gpu):
         return gpu in self.cached_gpus and gpu not in self.evicted_gpus
@@ -242,6 +243,7 @@ class LPRadixCache:
         new_node.key = child.key[:split_len]
         new_node.parent = child.parent
         new_node.load = child.load
+        new_node.depth = child.depth
 
         new_node.cached_gpus = copy.deepcopy(child.cached_gpus)
         new_node.evicted_gpus = copy.deepcopy(child.evicted_gpus)
@@ -253,6 +255,8 @@ class LPRadixCache:
         child.parent = new_node
         child.key = child.key[split_len:]
         child.value = child.value[split_len:]
+        child.depth = new_node.depth + 1
+
         new_node.parent.children[key[:split_len][0]] = new_node
         self.all_nodes.add(new_node)
         return new_node
@@ -263,7 +267,8 @@ class LPRadixCache:
         key,
         value,
         split_nodes,
-        parent_context_length = 0
+        parent_context_length = 0,
+        depth=0,
     ):
         node.last_access_time = time.time()
         node.load += 1
@@ -279,12 +284,12 @@ class LPRadixCache:
                 else:
                     key = key[prefix_len:]
                     value = value[prefix_len:]
-                    return self._insert_helper(child, key, value, split_nodes, parent_context_length + prefix_len)
+                    return self._insert_helper(child, key, value, split_nodes, parent_context_length + prefix_len, depth=depth + 1)
 
             new_node = self._split_node(child.key, child, prefix_len)
             split_nodes[child] = new_node
             return self._insert_helper(
-                new_node, key[prefix_len:], value[prefix_len:], split_nodes, parent_context_length + prefix_len
+                new_node, key[prefix_len:], value[prefix_len:], split_nodes, parent_context_length + prefix_len, depth=depth + 2
             )
 
         if len(key):
@@ -295,6 +300,7 @@ class LPRadixCache:
             new_node.value = value
             new_node.key = copy.deepcopy(key)
             new_node.load = 1
+            new_node.depth = depth + 1
             new_node.context_length = parent_context_length + len(key)
 
             node.children[key[0]] = new_node

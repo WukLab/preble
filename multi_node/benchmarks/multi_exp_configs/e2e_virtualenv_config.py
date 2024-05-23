@@ -31,8 +31,8 @@ sglang_server_args = {
 baseline_gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=1, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -91,7 +91,7 @@ configuration_to_test = [
     
     # scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
     # scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
-    scale_to_gpu([200, 200, 15], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 3600, 15], len(ours_gpu_configs) // 2),
     # scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
 
     # scale_to_gpu([230, 1000, 9], len(ours_gpu_configs) // 2),
@@ -106,9 +106,9 @@ configuration_to_test = [
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VirtualenvOracle, baseline_gpu_configs, 'oracle'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'all_stuff'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs, 'all_stuff'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs, 'all_stuff'),
 ]
 
 def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):

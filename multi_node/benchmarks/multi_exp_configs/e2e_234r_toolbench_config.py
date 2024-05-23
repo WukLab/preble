@@ -72,6 +72,11 @@ ours_gpu_configs = [
     GPUConfig(gpu_id=1,  use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=2,  use_ssh=False, runtime_args=ours_server_args),
     GPUConfig(gpu_id=3,  use_ssh=False, runtime_args=ours_server_args),
+
+    GPUConfig(gpu_id=4, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=5,  use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=6,  use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=7,  use_ssh=False, runtime_args=ours_server_args),
 ]
 add_simulation_to_gpu_config(ours_gpu_configs)
 
@@ -108,7 +113,7 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 
 exp_time = float('inf')
 exp_list = []
-for i in [4]:
+for i in [8]:
     configuration_to_test = [
         # scale_to_gpu([320, 900, 3, 1.07], i / 2),
         # scale_to_gpu([320, 1800, 6, 1.07], i / 2),
@@ -116,14 +121,14 @@ for i in [4]:
         # scale_to_gpu([200, 3600, 12, 1.07], i / 2),
         # scale_to_gpu([400, 3600, 12, 1.07], i / 2),
         # scale_to_gpu([1600, 3600, 12, 1.07], i / 2),
-        scale_to_gpu([1000, 3600, 12, 1.1], i / 2),
+        scale_to_gpu([1000, 3600, 18, 1.1], i / 2),
         # scale_to_gpu([320, 4500, 15, 1.07], i / 2),
         # scale_to_gpu([320, 5400, 18, 1.07], i / 2),
     ]
     policies_to_test = [
-        (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
         # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs[:i], 'oracle'),  
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
         # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs[:i], ''),
     ]
 

@@ -206,6 +206,8 @@ class GlobalSchedulerWithTime:
         self.cache = LPRadixCache(histogram=self.histogram, num_gpus=self.num_gpus, lock=self.lock)
         self.max_tokens_gpu = [198516 for _ in range(num_nodes)]
         self.HIGH_LOAD_THRESHOLD = 1.5
+        self.REBALANCING_CHAIN_LENGTH = 3 # Max rebalancing length for chain. For long chains, don't rebalance to allow infercept to take over
+
         self.overload_detector = TTFTWindowedOverloadedDetector(window_duration=timedelta(minutes=3))
         self.enable_rebalancing = enable_rebalancing
         self.last_rebalancing_time = datetime.now()
@@ -341,8 +343,8 @@ class GlobalSchedulerWithTime:
             if self.enable_eviction:
                 self.handle_eviction(runtime_idx)
             if self.enable_rebalancing:
-                self.handle_important_node_stealing(runtime_idx)
-
+                if leaf_node.depth - important_node.depth < self.REBALANCING_CHAIN_LENGTH: # Ignore longer chains for Infercept optimizations
+                    self.handle_important_node_stealing(runtime_idx)
         self.metrics_dict.append(
             {
                 "text": text,
