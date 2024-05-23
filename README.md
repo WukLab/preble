@@ -10,7 +10,7 @@ To install the repository, run the following command:
 ```
 pip install -e "python[all]"
 pip3 install scipy matplotlib datasets paramiko gurobipy
-pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.1
+pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3/
 ```
 
 ## Benchmarks

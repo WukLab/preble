@@ -899,19 +899,19 @@ class ModelRpcServer:
                 self.tree_cache_metrics["hit"] / self.tree_cache_metrics["total"]
             )
             self.update_hit_trace(self.current_time, hit_tokens, total_batched_prompt_len)
-            # logger.info(
-            #     f"GPU: {self.current_gpu} "
-            #     f"new fill batch. #seq: {len(can_run_list)}. "
-            #     f"#cached_token: {hit_tokens}. "
-            #     f"#new_token: {new_batch_input_tokens}. "
-            #     f"#remaining_req: {self.num_waiting_reqs() - len(can_run_list)}. "
-            #     f"#running_req: {running_req}. "
-            #     f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
-            #     f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
-            #     f"hit_tokens: {hit_tokens}. "
-            #     f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
-            #     f"evictable mem: {self.tree_cache.evictable_size() / self.max_total_num_token:.2f}"
-            # )
+            logger.info(
+                f"GPU: {self.current_gpu} "
+                f"new fill batch. #seq: {len(can_run_list)}. "
+                f"#cached_token: {hit_tokens}. "
+                f"#new_token: {new_batch_input_tokens}. "
+                f"#remaining_req: {self.num_waiting_reqs() - len(can_run_list)}. "
+                f"#running_req: {running_req}. "
+                f"tree_cache_hit_rate: {100.0 * tree_cache_hit_rate:.2f}%. "
+                f"windowed_cache_hit_rate: {100.0 * self.get_hit_ratio():.2f}%. "
+                f"hit_tokens: {hit_tokens}. "
+                f"free_gpu_mem: {self.token_to_kv_pool.available_size() / self.max_total_num_token:.2f}. "
+                f"evictable mem: {self.tree_cache.evictable_size() / self.max_total_num_token:.2f}"
+            )
             # logger.debug(
             #     f"fsm_cache_hit_rate: {100.0 * self.regex_fsm_cache.get_cache_hit_rate():.2f}%. "
             #     f"fsm_cache_avg_init_time: {self.regex_fsm_cache.get_avg_init_time():.2f}s. "

@@ -208,9 +208,9 @@ def launch_server(server_args: ServerArgs, pipe_finish_writer, gpu_config, model
         level=os.environ.get('LOGLEVEL', 'INFO').upper()
     )
 
-    # if server_args.cuda_devices:
-    #     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in server_args.cuda_devices)
-    #     logger.info(f"Set CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']}")
+    if server_args.cuda_devices:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in server_args.cuda_devices)
+        logger.info(f"Set CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']}")
 
     logging.basicConfig(
         level=getattr(logging, server_args.log_level.upper()),

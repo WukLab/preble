@@ -439,8 +439,7 @@ class ModelDetails:
         output.runtime_selected = runtime_idx
         output.num_gpus = len(self.runtimes)
 
-
-
+        breakpoint()
         # runtime = await self.async_select_runtime_with_identifiers(text, sampling_params)
         timeout = aiohttp.ClientTimeout(total=3 * 3600)
         async with aiohttp.ClientSession(timeout=timeout) as session:
