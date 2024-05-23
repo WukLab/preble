@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Iterator, Tuple, Dict
 import sys, os
+import copy
 
 # Add the parent directory of the 'src' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -12,7 +13,7 @@ from benchmarks.benchmark_utils import WorkloadConfig, ExperimentType, RequestGr
 from collections import deque
 import numpy as np
 import asyncio
-
+import random
 
 class RequestRateManager:
     """Send requests based on the policy of each group of requests."""
@@ -26,16 +27,23 @@ class RequestRateManager:
         self.n_workloads = len(self.workloads)
         self.workload_loops: List[asyncio.Task] = []
 
-    def cleanup(self):
+    async def cleanup(self):
         """Cancel all running workload loops"""
         for task in self.workload_loops:
             task.cancel()
+        await asyncio.gather(*self.workload_loops, return_exceptions=True)
 
     async def get_request(self):
         self.workload_loops = []
-        for i, workload in enumerate(self.workloads):
-            task = asyncio.create_task(self.run_req_loop(i, workload))
+        assert len(self.workloads) != 0
+        if self.workloads[0].request_type != ExperimentType.advanced_sequential:
+            for i, workload in enumerate(self.workloads):
+                task = asyncio.create_task(self.run_req_loop(i, workload))
+                self.workload_loops.append(task)
+        else:
+            task = asyncio.create_task(self.run_advanced_req_loop(self.workloads))
             self.workload_loops.append(task)
+
         while self.workload_finished < self.n_workloads or len(self.ready_requests) > 0:
             while len(self.ready_requests) > 0:
                 yield self.ready_requests.popleft()
@@ -58,7 +66,53 @@ class RequestRateManager:
         else:
             raise NotImplementedError(f"Request policy {workload.request_type} not implemented")
         self.workload_finished += 1
+
+    async def run_advanced_req_loop(self, workloads):
+        requests_to_run = [(i, request_group.requests[0]) for i, request_group in enumerate(workloads)]
+        num_workloads = len(workloads)
+        request_group = workloads[0]
+        send_times = request_group.send_out_times
+        request_rate = request_group.request_rate
+        for i in range(num_workloads):
+            self.current_req_done_events[i] = None
+        workloads_to_finish = set(list(range(num_workloads)))
+        workloads_seen = set()
+        i = 0
+        while requests_to_run:
+            workload_id, request = requests_to_run.pop(0)
+            workloads[workload_id].requests.pop(0)
+            workloads_seen.add(workload_id)
             
+            self.ready_requests.append((workload_id, request))
+            self.new_ready_req_event.set()
+            self.current_req_done_events[workload_id] = asyncio.Event()
+            
+            if request_rate == float("inf") and not send_times:
+                continue
+            if send_times:
+                interval = send_times[i + 1] - send_times[i] if i + 1 < len(send_times) else 0
+            else:
+                interval = np.random.exponential(1.0 / request_rate)
+            await asyncio.sleep(interval)
+
+            while len(requests_to_run) == 0 and self.workload_finished != len(workloads):
+                workloads_to_finish_current = copy.deepcopy(workloads_to_finish)
+                for next_workload_id in workloads_to_finish_current:
+                    is_valid_event = self.current_req_done_events[next_workload_id]
+                    if is_valid_event and self.current_req_done_events[next_workload_id].is_set(): 
+                        if workloads[next_workload_id].requests:
+                            # if len(workloads_seen) != len(workloads):
+                            #     requests_to_run.insert(0, (next_workload_id, workloads[next_workload_id].requests[0]))
+                            # else:
+                            requests_to_run.append((next_workload_id, workloads[next_workload_id].requests[0])) 
+                            self.current_req_done_events[next_workload_id].clear()
+                        else:
+                            workloads_to_finish.remove(next_workload_id)
+                            self.workload_finished += 1
+                await asyncio.sleep(0.001)
+            # random.shuffle(requests_to_run)
+            i += 1
+
     async def send_requests_default(self, 
                                     workload_id: int, 
                                     requests: List[dict], 
@@ -104,7 +158,8 @@ class RequestRateManager:
         This is useful for sequential setting.
         """
         if workload_id in self.current_req_done_events:
-            self.current_req_done_events[workload_id].set()
+            if self.current_req_done_events[workload_id]:
+                self.current_req_done_events[workload_id].set()
 
 @dataclass
 class Workload(WorkloadConfig):
