@@ -12,7 +12,12 @@ import sys
 import aiohttp
 import random
 import os
+import fire
 import uuid
+from transformers import AutoTokenizer
+from typing import List, Optional
+import uvicorn
+from sglang.srt.managers.router.model_runner import GPUConfig
 
 random.seed(10)
 np.random.seed(10)
@@ -22,11 +27,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from data_parallel_request_cache import DataParallelRequestRouter, CustomPolicyType, DataParallelRuntimeSelectionPolicy
+
 from model_runtime_manager import remove_prefix
 from benchmarks.benchmark_utils import RequestFuncOutput
+from global_scheduler_with_time import GlobalSchedulerWithTime
+from multi_node_loader import MultiNodeLoader
 
-logger = logging.getLogger("fastapi")
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class SamplingParams(BaseModel):
     max_new_tokens: int = 16
@@ -43,7 +50,7 @@ class SamplingParams(BaseModel):
 
 class GenerateReqInput(BaseModel):
     text: str
-    input_ids: List[int]
+    input_ids: Optional[List[int]]
     sampling_params: SamplingParams
     stream: bool = True
 
@@ -129,7 +136,7 @@ async def generate_request_helper(obj: GenerateReqInput):
     rid = str(uuid.uuid4())
     payload = {
         "text": obj.text,
-        # "input_ids": obj.input_ids,
+        # "input_ids": obj.input_ids, TODO some systems support directly sending input ids
         "sampling_params": obj.sampling_params.dict(),
         "rid": rid,
         "stream": True
@@ -142,7 +149,7 @@ async def generate_request_helper(obj: GenerateReqInput):
                 break
             yield chunk
         output = chunk
-        await finished_requests_queue.put(output)
+        await finished_requests_queue.put((output, text, input_ids))
 
     return StreamingResponse(get_requests(), media_type="text/event-stream")
 
@@ -150,6 +157,9 @@ async def process_req(request: Request):
     try:
         obj = await request.json()
         generate_req_input = GenerateReqInput(**obj)
+        # if text doesn't have tokenization/tokenize the input here
+        if not generate_req_input.input_ids:
+            generate_req_input.input_ids = tokenizer.encode(generate_req_input.text)
         return await generate_request_helper(generate_req_input)
     except Exception as e:
         logger.error(f"Error processing request: {e}")
@@ -157,17 +167,19 @@ async def process_req(request: Request):
 
 async def process_runtime_selection():
     while True:
+        obj: GenerateReqInput
         obj, request_id = await runtime_request_queue.get()
         text, input_ids, sampling_params = obj.text, obj.input_ids, obj.sampling_params
         sampling_params = sampling_params.dict()
         # hit_rates = [r.hit_ratio for r in runtimes] # 
-        hit_rates = [0 for _ in runtimes] # TODO handle hitrates
-        highest_idx = int(np.argmax(hit_rates))
-        if (highest_idx is not None) and (hit_rates[highest_idx] < 0.7):
-            highest_idx = None
-        
+        # hit_rates = [0 for _ in runtimes] # TODO handle hitrates
+        # highest_idx = int(np.argmax(hit_rates))
+        # if (highest_idx is not None) and (hit_rates[highest_idx] < 0.7):
+        #     highest_idx = None
+        highest_idx = None
+        hit_rates = [0 for _ in runtimes] # TODO add hot/cold support
         try:
-            runtime_id = request_router.select_runtime(text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates)
+            runtime_id = request_router.select_runtime(text=text, experiment_id="1", input_ids=input_ids, request_id=request_id, sampling_params=sampling_params, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates)
             runtime_events[request_id] = (runtime_events[request_id][0], runtime_id)
         except Exception as e:
             logger.error(f"Error selecting runtime: {e}")
@@ -178,43 +190,88 @@ async def process_runtime_selection():
 
 async def process_cleanup_selection():
     while True:
-        output_obj = await finished_requests_queue.get()
-        request_router.finish_request(output_obj, experiment_id="exp_id", request_id="rid")
+        output_obj, text, input_ids = await finished_requests_queue.get()
+        request_router.finish_request(text=text, input_ids=input_ids, func_output=output_obj, experiment_id="exp_id", request_id="rid")
 
 app = FastAPI()
 
-@app.post("/process")
-async def process(request: Request):
+@app.post("/generate")
+async def generate(request: Request):
     return await process_req(request)
 
-if __name__ == "__main__":
-    import uvicorn
-    from uvicorn import Config, Server
-    # Define your runtime selection policy here
-    runtime_selection_policy = DataParallelRuntimeSelectionPolicy.ROUND_ROBIN # Placeholder for the actual policy
 
-    runtime_events = {}
-    runtime_request_queue = asyncio.Queue()
-    finished_requests_queue = asyncio.Queue()
+def start_server(runtime_selection_policy="custom", runtime_urls="http://127.0.0.1:30000/generate", host='127.0.0.1', port=8000, model="mistralai/Mistral-7B-v0.1"):
+    global request_router
+    global tokenizer
+    global runtimes
+    # TODO check that these urls are valid
 
-    gpu_config_count = 1  # Number of GPU configs
+    tokenizer = AutoTokenizer.from_pretrained(model)
 
-    # Example runtime nodes
-    runtimes = ["http://127.0.0.1:30000/generate"]
-    num_nodes = gpu_config_count
+    runtimes = runtime_urls.split(',')
+    num_nodes = len(runtimes)
+    
+    if runtime_selection_policy == "round_robin":
+        runtime_selection_policy = DataParallelRuntimeSelectionPolicy.ROUND_ROBIN
+    elif runtime_selection_policy == "custom":
+        runtime_selection_policy = DataParallelRuntimeSelectionPolicy.CUSTOM
+    else:
+        raise ValueError("Invalid runtime selection policy")
 
+    global_scheduler = GlobalSchedulerWithTime(num_nodes=num_nodes, enable_eviction=True)
     request_router = DataParallelRequestRouter(
-        runtime_selection_policy, total_nodes=gpu_config_count
+        runtime_selection_policy, total_nodes=num_nodes
     )
-
+    request_router.custom_selector = global_scheduler
     async def main():
         loop.create_task(process_runtime_selection())
         loop.create_task(process_cleanup_selection())
-        config = uvicorn.Config(app=app, loop="asyncio", host="127.0.0.1", port=8000)
+        config = uvicorn.Config(app=app, loop="asyncio", host=host, port=port)
         server = uvicorn.Server(config)
         await server.serve()
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
-    # uvicorn.run(app, host="0.0.0.0", loop='asyncio', port=8000)
+def start_server_and_load_models(model_name="mistralai/Mistral-7B-v0.1", devices=[0, 1], host="127.0.0.1", port=8000):
+    server_args = {
+        'log_prefix_hit': True,
+        'mem_fraction_static': 0.8,
+        'context_length': 32768,
+        "enable_flashinfer": True,
+        'schedule_heuristic': 'fcfs-mpq',
+        "chunk_prefill_budget": 512,
+        'report_hit_ratio': True ,
+        'enable_iterative_eviction': True,
+    }
+    # GPU Configuration
+    gpu_configs = [
+        GPUConfig(gpu_id=device, url=None, use_ssh=False, runtime_args=server_args)
+        for device in devices
+    ]
+
+    loader = MultiNodeLoader()
+    model_details = loader.load_model(
+        model_path=model_name,
+        gpu_configs=gpu_configs,
+    )
+    runtimes = []
+    for runtime in model_details.runtimes:
+        runtimes.append(runtime.generate_url)
+    logger.info(f"Loading runtimes at {runtimes}")
+    try:
+        start_server(runtime_selection_policy="custom", runtime_urls=",".join(runtimes), model=model_name, host=host, port=port)
+    except KeyboardInterrupt:
+        logger.info("Unloading model")
+        loader.unload_model(model_details)
+
+if __name__ == "__main__":
+    runtime_events = {}
+    runtime_request_queue = asyncio.Queue()
+    finished_requests_queue = asyncio.Queue()
+    request_router = None
+
+    fire.Fire({
+        "run": start_server,
+        "deploy_and_run": start_server_and_load_models
+    })

@@ -11,7 +11,7 @@ payload = {
 import requests
 from typing import Iterable, List
 
-url = "http://127.0.0.1:8000/process"  # Replace with your URL
+url = "http://127.0.0.1:8000/generate"  # Replace with your URL
 
 headers = {
     'Accept': 'text/event-stream',

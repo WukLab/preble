@@ -407,14 +407,14 @@ class ModelRpcServer:
         num_batched_tokens = batch.input_ids.shape[0]
         num_attention_tokens = batch.seq_lens.cpu().numpy().sum()
         unique_kvs = self.tree_cache.total_unique_kv_tokens(batch.reqs)
-        detail_batch_logger(
-            f"GPU: {self.current_gpu} "
-            f"schedule running: "
-            f"batch.num_reqs: {len(batch.reqs)}, "
-            f"input ids: {num_batched_tokens}, "
-            f"attention tokens: {num_attention_tokens}, "
-            f"unique kv tokens: {unique_kvs}"
-        )
+        # detail_batch_logger(
+        #     f"GPU: {self.current_gpu} "
+        #     f"schedule running: "
+        #     f"batch.num_reqs: {len(batch.reqs)}, "
+        #     f"input ids: {num_batched_tokens}, "
+        #     f"attention tokens: {num_attention_tokens}, "
+        #     f"unique kv tokens: {unique_kvs}"
+        # )
         return preempted, delayed_batch
 
     # TODO: add log prob
