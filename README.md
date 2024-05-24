@@ -70,6 +70,14 @@ CLI Configuration
 ## Citation And Acknowledgment
 The code is forked of sglang
 
+# pypi build and install instructions
+Currently uploaded at:
+```python setup.py bdist_wheel```
+``` twine upload --repository testpypi dist/* --verbose```
+```python3 -m pip install --index-url https://test.pypi.org/simple/ preble```
+
+ 
+
 License
 
 This project is licensed under the Apache 2.0 License. See the LICENSE file for details.
