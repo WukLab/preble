@@ -201,6 +201,21 @@ async def generate(request: Request):
 
 
 def start_server(runtime_selection_policy="custom", runtime_urls="http://127.0.0.1:30000/generate", host='127.0.0.1', port=8000, model="mistralai/Mistral-7B-v0.1"):
+    """
+    Starts the server with the specified runtime selection policy, runtime URLs, and model.
+
+    Args:
+        runtime_selection_policy (str): The policy for selecting runtimes. Can be "round_robin", "lor", or "custom". Defaults to "custom".
+        runtime_urls (str): A comma-separated list of runtime URLs. Defaults to "http://127.0.0.1:30000/generate".
+        host (str): The host address for the server. Defaults to '127.0.0.1'.
+        port (int): The port number for the server. Defaults to 8000.
+        model (str): The model name or path to be used by the server. Defaults to "mistralai/Mistral-7B-v0.1".
+
+    Example:
+        preble start_server --runtime_urls="http://127.0.0.1:30000/generate,"http://127.0.0.1:30001/generate" 
+    Raises:
+        ValueError: If the runtime selection policy is not valid.
+    """
     global request_router
     global tokenizer
     global runtimes
@@ -213,6 +228,8 @@ def start_server(runtime_selection_policy="custom", runtime_urls="http://127.0.0
     
     if runtime_selection_policy == "round_robin":
         runtime_selection_policy = DataParallelRuntimeSelectionPolicy.ROUND_ROBIN
+    elif runtime_selection_policy == "lor":
+        runtime_selection_policy = DataParallelRuntimeSelectionPolicy.LEAST_OUTSTANDING_REQUESTS
     elif runtime_selection_policy == "custom":
         runtime_selection_policy = DataParallelRuntimeSelectionPolicy.CUSTOM
     else:
@@ -234,6 +251,20 @@ def start_server(runtime_selection_policy="custom", runtime_urls="http://127.0.0
     loop.run_until_complete(main())
 
 def start_server_and_load_models(model_name="mistralai/Mistral-7B-v0.1", devices=[0, 1], host="127.0.0.1", port=8000):
+    """
+    Loads the specified model onto the given devices and starts the server.
+
+    Args:
+        model_name (str): The name or path of the model to be loaded. Defaults to "mistralai/Mistral-7B-v0.1".
+        devices (list): A list of GPU device IDs to load the model onto. Defaults to [0, 1].
+        host (str): The host address for the server. Defaults to '127.0.0.1'.
+        port (int): The port number for the server. Defaults to 8000.
+    
+    Example: preble deploy_and_run
+    
+    Raises:
+        KeyboardInterrupt: If the server is interrupted, it unloads the model.
+    """
     server_args = {
         'log_prefix_hit': True,
         'mem_fraction_static': 0.8,
@@ -258,20 +289,23 @@ def start_server_and_load_models(model_name="mistralai/Mistral-7B-v0.1", devices
     runtimes = []
     for runtime in model_details.runtimes:
         runtimes.append(runtime.generate_url)
-    logger.info(f"Loading runtimes at {runtimes}")
+    print(f"Loading runtimes at {runtimes}")
     try:
         start_server(runtime_selection_policy="custom", runtime_urls=",".join(runtimes), model=model_name, host=host, port=port)
     except KeyboardInterrupt:
-        logger.info("Unloading model")
+        print("Unloading model")
         loader.unload_model(model_details)
 
-if __name__ == "__main__":
-    runtime_events = {}
-    runtime_request_queue = asyncio.Queue()
-    finished_requests_queue = asyncio.Queue()
-    request_router = None
+runtime_events = {}
+runtime_request_queue = asyncio.Queue()
+finished_requests_queue = asyncio.Queue()
+request_router = None
 
+def main():
     fire.Fire({
         "run": start_server,
         "deploy_and_run": start_server_and_load_models
     })
+
+if __name__ == "__main__":
+    main()

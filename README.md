@@ -8,19 +8,27 @@ You can install the package using pip:
 # Code Structure
 The `multi_node` directory contains the code for running as a separate abstraction layer to SGLang/vLLM in a distributed setting. This code is responsible for coordinating and managing the execution of the distributed system.
 
-Current installation
+Editable Installation
 ```
+pip3 install -e .
 pip install -e "python[all]"
-pip3 install scipy matplotlib datasets paramiko gurobipy fire
 pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3/
 ```
+
+Regular Pip Installation:
+```
+pip3 install preble
+pip install git+https://github.com/wuklab/preble.git#egg=preble[all]
+pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3/
+```
+
 
 We release a custom version of sglang that supports chunked prefill
 
 ## Programatically starting the server
 We can support providing a list of runtime urls
 ```
-from multi_node.main import start_server
+from preble.main import start_server
 
 start_server(
     runtime_selection_policy="custom",
@@ -33,7 +41,7 @@ start_server(
 
 We can also support dynamically loading the models to seperate cuda devices
 ```
-from multi_node.main import start_server_and_load_models
+from preble.main import start_server_and_load_models
 
 start_server_and_load_models(
     model_name="mistralai/Mistral-7B-v0.1",
