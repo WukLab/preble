@@ -316,7 +316,7 @@ class ModelRunner:
 
         if not self.simulate:
             # Init torch distributed
-            logger.info(f'model {self.gpu_config.gpu_id}, Rank {self.tp_rank} setup')
+            # logger.info(f'model {self.gpu_config.gpu_id}, Rank {self.tp_rank} setup')
             torch.cuda.set_device(self.tp_rank)
             torch.distributed.init_process_group(
                 backend="nccl",
