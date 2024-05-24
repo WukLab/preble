@@ -31,8 +31,8 @@ sglang_server_args = {
 baseline_gpu_configs = [
     # GPUConfig(gpu_id=0, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=0, use_ssh=False, runtime_args=sglang_server_args),
+    GPUConfig(gpu_id=1, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -60,8 +60,8 @@ ours_gpu_configs = [
     # GPUConfig(gpu_id=1, url=None, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=2, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=3, url=None, use_ssh=False, runtime_args=sglang_server_args),
-    GPUConfig(gpu_id=0, url='http://0.0.0.0:2333', use_ssh=False, runtime_args=ours_server_args),
-    GPUConfig(gpu_id=1, url='http://0.0.0.0:2334', use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=0, use_ssh=False, runtime_args=ours_server_args),
+    GPUConfig(gpu_id=1, use_ssh=False, runtime_args=ours_server_args),
     # GPUConfig(gpu_id=4, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=5, url=None, use_ssh=False, runtime_args=sglang_server_args),
     # GPUConfig(gpu_id=6, url=None, use_ssh=False, runtime_args=sglang_server_args),
@@ -91,7 +91,7 @@ configuration_to_test = [
     
     # scale_to_gpu([200, 2700, 9], len(ours_gpu_configs) // 2),
     # scale_to_gpu([200, 3600, 12], len(ours_gpu_configs) // 2),
-    # scale_to_gpu([200, 4500, 15], len(ours_gpu_configs) // 2),
+    scale_to_gpu([200, 3600, 15], len(ours_gpu_configs) // 2),
     # scale_to_gpu([200, 5400, 18], len(ours_gpu_configs) // 2),
 
     # scale_to_gpu([230, 1000, 9], len(ours_gpu_configs) // 2),
@@ -106,9 +106,9 @@ configuration_to_test = [
 
 policies_to_test = [
     # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.VirtualenvOracle, baseline_gpu_configs, 'oracle'),
-    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs, 'all_stuff'),
+    (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs, 'all_stuff'),
     # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs, 'baseline'),
-
+    # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs, 'all_stuff'),
 ]
 
 def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
@@ -118,7 +118,7 @@ def gen_workloads_for_virtualenv(configuration_to_test, policies_to_test):
             configuration,
             model_name, 
             exp_time, 
-            data_path='/home/exx/nsdi_zijian/stateful_llm_serving/datasets/results_trace_updated_v2.json',
+            data_path='/mnt/data/ssd/sglang_multi_model/multi_node/benchmarks/datasets/results_trace_updated_v2.json',
             load_dist=LoadDistribution.EVEN,  # this have no effect on virtualenv
         )
         for policy, custom_policy, server_configs, custom_policy_msg in policies_to_test: 

@@ -56,7 +56,7 @@ class SlidingWindowHistogram:
         self.current_allocation_cost_per_gpu[runtime_idx] += new_cost
         self.per_node_per_gpu_allocation_cost[node][runtime_idx] = new_cost
 
-    def remove_allocation_cost_for_node(node, runtime_idx):
+    def remove_allocation_cost_for_node(self, node, runtime_idx):
         old_cost = self.per_node_per_gpu_allocation_cost[node][runtime_idx]
         self.current_allocation_cost_per_gpu[runtime_idx] -= old_cost
     

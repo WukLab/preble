@@ -1681,7 +1681,7 @@ class ProgrammingDataset(DataLoader):
 
 
 
-def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration"):
+def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name_conv="Conversation"):
     TRACE_NAMES = [
         "Coding",
         "Conversation",
@@ -1694,7 +1694,7 @@ def load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset
     df_traces = {}
     for trace_name, trace_filename in zip(TRACE_NAMES, TRACE_FILENAMES):
         df_traces[trace_name] = pd.read_csv(os.path.join(azure_llm_infernce_trace_dir, trace_filename), parse_dates=["TIMESTAMP"])
-    convo_trace = df_traces["Conversation"]
+    convo_trace = df_traces[trace_name_conv]
     first_timestamp = convo_trace['TIMESTAMP'].iloc[0]
     convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'] - first_timestamp
     convo_trace['TIMESTAMP'] = convo_trace['TIMESTAMP'].dt.total_seconds()

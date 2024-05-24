@@ -107,29 +107,29 @@ exp_time = float('inf')
 exp_list = []
 for i in [2]:
     configuration_to_test = [
-        scale_to_gpu([2, 4, 0.7], i / 2),
+        # scale_to_gpu([2, 4, 0.7], i / 2),
         # scale_to_gpu([30, 168, 0.1], i / 2),
         # scale_to_gpu([30, 168, 0.2], i / 2),
         # scale_to_gpu([30, 168, 0.3], i / 2),
         # scale_to_gpu([30, 281, 0.5], i / 2),
-        # scale_to_gpu([24, 393, 0.7], i / 2),
+        scale_to_gpu([24, 393, 0.7], i / 2),
         # scale_to_gpu([30, 449, 0.8], i / 2),
         # scale_to_gpu([30, 505, 0.9], i / 2),
         # scale_to_gpu([30, 561, 1.0], i / 2),
         # scale_to_gpu([30, 1122, 2.0], i / 2),
     ]
     policies_to_test = [
-        (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.LOOGLE_ORACLE, baseline_gpu_configs[:i], ''),
         (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], ''),
     ]
     workloads = gen_workloads_for_loogle(configuration_to_test, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
-        log_file_path=f"after_merge_upstream/{i}r_loogle/exp.log",
-        csv_log_path=f"after_merge_upstream/{i}r_loogle/exp.csv",
+        log_file_path=f"debug_real/{i}r_loogle/loogle.log",
+        csv_log_path=f"debug_real/{i}r_loogle/loogle.csv",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
-        simulate=False,
+        simulate=True,
         model_path=model_name,
         workload_configs=workloads,
         experiment_type=ExperimentType.default,

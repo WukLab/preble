@@ -1,5 +1,6 @@
 from sglang.srt.managers.router.infer_batch import Batch
 import torch
+from functools import lru_cache
 
 """Principles
 Linear layer consider batching only
@@ -131,6 +132,7 @@ def LP_Llama3_70B_H100_sglang_extend_flashinfer(num_extend_tokens, total_context
     total_time /= 1e3
     return total_time
 
+@lru_cache(maxsize=None)
 def LP_mistral_7b_A6000_sglang_extend_flashinfer(num_extend_tokens, total_context):
     # if num_extend_tokens < 192:
     #     print("Warning: identify short node and not is_leaf, this node might add too much recompute cost")

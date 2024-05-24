@@ -108,7 +108,7 @@ def gen_workloads_for_toolbench(configuration_to_test, policies_to_test):
 exp_time = float('inf')
 
 exp_list = []
-for i in [2]:
+for i in [4]:
     configuration_to_test = [
         # scale_to_gpu([200, 900, 3], i / 2),
         # scale_to_gpu([200, 1800, 6], i / 2),
@@ -124,17 +124,17 @@ for i in [2]:
             all_configs.append(new_configuration_to_test)
     
     policies_to_test = [
-        (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
-        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs[:i], 'oracle'),  
-        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEviction, ours_gpu_configs[:i], 'ours'),
+        # (DataParallelRuntimeSelectionPolicy.ROUND_ROBIN, "", baseline_gpu_configs[:i], ''),
+        # (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.TBORACLE_B, baseline_gpu_configs[:i], 'oracle'),  
+        (DataParallelRuntimeSelectionPolicy.CUSTOM, CustomPolicyType.GlobalSchedulerTimeWithEvictionNoRebalance, ours_gpu_configs[:i], 'ours'),
     ]
 
     workloads = gen_workloads_for_toolbench(all_configs, policies_to_test)
     loogle_experiment = ConfigurableMajorExperimentArgs(
         # log_file_path=f"ablation/toolbench_{k}/{i}r_toolbench/exp.log",
         # csv_log_path=f"ablation/toolbench_{k}/{i}r_toolbench/exp.csv",
-        log_file_path=f"real_ckpt_all_in_one/toolbench_{k}/{i}r_toolbench/exp.log",
-        csv_log_path=f"real_ckpt_all_in_one/toolbench_{k}/{i}r_toolbench/exp.csv",
+        log_file_path=f"real_ckpt_all_in_one/toolbench_{k}/load_threshold.log",
+        csv_log_path=f"real_ckpt_all_in_one/toolbench_{k}/load_threshold.log",
         # log_file_path="logs/debug_loogle/exp.log",
         # csv_log_path="logs/debug_loogle/exp.csv",
         simulate=False,

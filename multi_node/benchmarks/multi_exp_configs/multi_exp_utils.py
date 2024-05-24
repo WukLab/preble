@@ -117,7 +117,7 @@ def create_toolbench_dataset_trace(config, model_name, exp_time, data_path, load
     )
     requests = dataloader.generate_workload(k=None)
     random.shuffle(requests)
-    send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Coding")
+    send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name_conv="Coding")
     send_out_times = send_out_times[200:200+len(requests)]
     send_out_times = [item * 0.7 for item in send_out_times]
     print(f"Final send out time is {max(send_out_times)}")
@@ -185,7 +185,7 @@ def create_videoQA_dataset_trace(
     )
     requests = dataloader.generate_workload()
     random.shuffle(requests)
-    send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name="Conversation")
+    send_out_times = load_realistic_send_out_times(azure_llm_infernce_trace_dir="datasets/dataset_exploration", trace_name_conv="Conversation")
     send_out_times = send_out_times[200:200+len(requests)]
     send_out_times = [item * 0.7 for item in send_out_times]
 
