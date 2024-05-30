@@ -350,7 +350,7 @@ class SendRequestEvent(SimulationEvent):
                      if r.server_args.report_hit_ratio else 0.0
                      for r in simulator.runtimes]
         highest_idx = int(np.argmax(hit_rates))
-        if hit_rates[highest_idx] < 0.7:
+        if hit_rates[highest_idx] < 0.8:
             highest_idx = None
         # highest_idx = None
         runtime_id = simulator.router.select_runtime(

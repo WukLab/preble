@@ -828,8 +828,8 @@ class LooGLEDataset(DataLoader):
         request_pre_prefix = [0] * len(sampled_dataset)
         for i, item in tqdm(enumerate(sampled_dataset)):
             raw_inputs = item["input"]
-            if i == 0:
-                print(raw_inputs)
+            # if i == 0:
+            #     print(raw_inputs)
             num_qa_pairs = len(qa_pairs[i])
             for k in range(math.ceil(num_qa_pairs * scale_factor)):
                 request_pre_prefix[i] += 1

@@ -56,5 +56,5 @@ def read_e2e_csv_metrics(fpaths: List[str]):
 
     # print(combined_df[['experiment_id', 'rps']])
     combined_df = combined_df.sort_values(by='rps')
-    grouped = combined_df.groupby(['policy', 'custom_policy'])
+    grouped = combined_df.groupby(['policy', 'custom_policy', 'custom_policy_msg'])
     return grouped

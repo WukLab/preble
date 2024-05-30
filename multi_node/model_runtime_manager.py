@@ -414,7 +414,7 @@ class ModelDetails:
         # print(end-st)
         hit_rates = [r.hit_ratio for r in self.runtimes]
         highest_idx = int(np.argmax(hit_rates))
-        if hit_rates[highest_idx] < 0.7:
+        if hit_rates[highest_idx] < 0.8:
             highest_idx = None
         runtime_idx, request_id = await asyncio.to_thread(
             self.select_runtime_with_identifiers, text, sampling_params, input_ids, runtime_id_with_highest_hit_rate=highest_idx, hit_rates=hit_rates
