@@ -304,7 +304,8 @@ request_router = None
 def main():
     fire.Fire({
         "run": start_server,
-        "deploy_and_run": start_server_and_load_models
+        "deploy_and_run": start_server_and_load_models,
+        "start_server": start_server
     })
 
 if __name__ == "__main__":
