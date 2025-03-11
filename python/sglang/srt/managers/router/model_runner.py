@@ -317,7 +317,6 @@ class ModelRunner:
         if not self.simulate:
             # Init torch distributed
             # print()
-            os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
             torch.cuda.set_device(self.tp_rank)
             init_distributed_environment(
                 backend="nccl",

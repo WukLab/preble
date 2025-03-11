@@ -1498,6 +1498,7 @@ class ModelRpcClient:
         self, server_args: ServerArgs, port_args: PortArgs, model_overide_args, gpu_config: GPUConfig,
     ):
         tp_size = server_args.tp_size
+        self.tp_size = tp_size
         self.gpu_config = gpu_config
         self.tokenizer = get_tokenizer(
             server_args.tokenizer_path,

@@ -250,7 +250,7 @@ def start_server(runtime_selection_policy="custom", runtime_urls="http://127.0.0
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 
-def start_server_and_load_models(model_name="mistralai/Mistral-7B-v0.1", devices=[0, 1], host="127.0.0.1", port=8000):
+def start_server_and_load_models(model_name="mistralai/Mistral-7B-v0.1", devices=[0, 1], host="127.0.0.1", port=8000, tp_size=1):
     """
     Loads the specified model onto the given devices and starts the server.
 
@@ -274,6 +274,7 @@ def start_server_and_load_models(model_name="mistralai/Mistral-7B-v0.1", devices
         "chunk_prefill_budget": 512,
         'report_hit_ratio': True ,
         'enable_iterative_eviction': True,
+        "tp_size": tp_size,
     }
     # GPU Configuration
     gpu_configs = [
