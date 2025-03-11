@@ -70,6 +70,15 @@ CLI Configuration
 
 ## Citation And Acknowledgment
 The code is forked of sglang
+```
+@inproceedings{
+srivatsa2025preble,
+title={Preble: Efficient Distributed Prompt Scheduling for {LLM} Serving},
+author={Vikranth Srivatsa and Zijian He and Reyna Abhyankar and Dongming Li and Yiying Zhang},
+booktitle={The Thirteenth International Conference on Learning Representations},
+year={2025},
+}
+```
 
 # pypi build and install instructions
 Currently uploaded at:
@@ -78,7 +87,13 @@ Currently uploaded at:
 ```python3 -m pip install --index-url https://test.pypi.org/simple/ preble```
 
  
+# Test running the server in isolation
+Launch the server in isolation to help debug issues
+```
+python -m sglang.launch_server --model-path mistralai/Mistral-7B-v0.1 --cuda-devices 0 --tp-size 2 
+```
 
-License
+# License
 
 This project is licensed under the Apache 2.0 License. See the LICENSE file for details.
+
