@@ -37,10 +37,14 @@ class RouterManager:
         self.send_to_migration_target = context.socket(zmq.PUSH)
         self.recv_from_migration_source = context.socket(zmq.PULL)
         self.recv_from_migration_source.bind(f'tcp://0.0.0.0:{port_args.migrate_port}')
-
-        if model_client.model_server.enable_iterative_eviction:
+        
+        if model_client.tp_size > 1:
+            if any(client.enable_iterative_eviction for client in model_client.model_servers):
+                self.send_to_sched = context.socket(zmq.PUSH)
+                self.send_to_sched.connect("tcp://127.0.0.1:10340")
+        elif model_client.model_server.enable_iterative_eviction:
             self.send_to_sched = context.socket(zmq.PUSH)
-            self.send_to_sched.connect(f"tcp://127.0.0.1:10340")
+            self.send_to_sched.connect("tcp://127.0.0.1:10340")
 
         # self.recv_from_sched = context.socket(zmq.PULL)
         # self.recv_from_sched.bind(f"tcp://127.0.0.1:10340")
